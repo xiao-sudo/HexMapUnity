@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f6478899aabbccddeeff03, type: 3}
+  m_Name: HexMapSampleConfig
+  m_EditorClassIdentifier:
+  minQ: -3
+  maxQ: 3
+  minR: -2
+  maxR: 2
+  excludedCoordinates: []

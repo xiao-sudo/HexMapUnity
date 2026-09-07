@@ -1,0 +1,16 @@
+{
+  "name": "HexMap.Runtime",
+  "rootNamespace": "HexMap.Runtime",
+  "references": [
+    "HexMap.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

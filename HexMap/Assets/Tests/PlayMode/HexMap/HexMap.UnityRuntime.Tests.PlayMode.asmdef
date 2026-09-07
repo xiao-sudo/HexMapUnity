@@ -1,0 +1,23 @@
+{
+  "name": "HexMap.UnityRuntime.Tests.PlayMode",
+  "rootNamespace": "HexMap.UnityRuntime.Tests",
+  "references": [
+    "HexMap.Core",
+    "HexMap.Runtime",
+    "HexMap.UnityRuntime",
+    "UnityEngine.TestRunner"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "testAssemblies": true
+}
