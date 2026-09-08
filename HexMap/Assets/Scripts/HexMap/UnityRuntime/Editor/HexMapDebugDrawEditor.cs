@@ -12,6 +12,7 @@ namespace HexMap.UnityRuntime.Editor
     internal static class HexMapDebugDrawEditor
     {
         private const GizmoType m_DrawTypes = GizmoType.NonSelected | GizmoType.Selected;
+        private static readonly GUIStyle m_LabelStyle = CreateLabelStyle();
 
         [DrawGizmo(m_DrawTypes)]
         private static void DrawLabels(HexMapView view, GizmoType gizmoType)
@@ -32,10 +33,22 @@ namespace HexMap.UnityRuntime.Editor
             {
                 var localCenter = layout.HexToWorld(cell.Coordinate);
                 var worldCenter = view.transform.TransformPoint(localCenter);
-                Handles.Label(
-                    worldCenter,
-                    string.Format("Cell #{0}\nAxial ({1}, {2})", cell.Id, cell.Coordinate.Q, cell.Coordinate.R));
+                Handles.Label(worldCenter, FormatLabel(cell, view.ShowDebugCoordinates), m_LabelStyle);
             }
+        }
+
+        private static GUIStyle CreateLabelStyle()
+        {
+            var style = new GUIStyle(EditorStyles.label);
+            style.alignment = TextAnchor.MiddleCenter;
+            return style;
+        }
+
+        private static string FormatLabel(HexCell cell, bool showCoordinates)
+        {
+            return showCoordinates
+                ? string.Format("Cell #{0}\nAxial ({1}, {2})", cell.Id, cell.Coordinate.Q, cell.Coordinate.R)
+                : string.Format("Cell #{0}", cell.Id);
         }
 
         private static bool TryGetPreviewData(

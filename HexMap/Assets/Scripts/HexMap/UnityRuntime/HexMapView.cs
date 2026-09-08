@@ -17,6 +17,7 @@ namespace HexMap.UnityRuntime
         [SerializeField] private int m_CellLayer;
 #if UNITY_EDITOR
         [SerializeField] private bool m_ShowDebugLabels = true;
+        [SerializeField] private bool m_ShowDebugCoordinates;
 #endif
 
         private RuntimeHexMap m_Map;
@@ -58,6 +59,12 @@ namespace HexMap.UnityRuntime
         {
             get { return m_ShowDebugLabels; }
             set { m_ShowDebugLabels = value; }
+        }
+
+        public bool ShowDebugCoordinates
+        {
+            get { return m_ShowDebugCoordinates; }
+            set { m_ShowDebugCoordinates = value; }
         }
 #endif
 

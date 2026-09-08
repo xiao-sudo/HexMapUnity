@@ -21,6 +21,19 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
+        public void DebugLabelsAreEnabledAndCoordinatesAreHiddenByDefault()
+        {
+            m_ViewObject = new GameObject("Hex Map View");
+            var mapView = m_ViewObject.AddComponent<HexMapView>();
+
+            Assert.That(mapView.ShowDebugLabels, Is.True);
+            Assert.That(mapView.ShowDebugCoordinates, Is.False);
+
+            mapView.ShowDebugCoordinates = true;
+            Assert.That(mapView.ShowDebugCoordinates, Is.True);
+        }
+
+        [Test]
         public void AppearanceEqualityUsesVisibleAndColor()
         {
             var first = new HexAppearance(true, Color.red);
