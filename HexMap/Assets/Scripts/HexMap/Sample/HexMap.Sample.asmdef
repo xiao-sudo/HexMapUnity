@@ -1,0 +1,16 @@
+{
+  "name": "HexMap.Sample",
+  "rootNamespace": "HexMap.Sample",
+  "references": [
+    "HexMap.UnityRuntime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

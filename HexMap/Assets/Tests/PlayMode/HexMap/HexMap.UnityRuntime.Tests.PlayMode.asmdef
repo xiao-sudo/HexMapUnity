@@ -5,6 +5,7 @@
     "HexMap.Core",
     "HexMap.Runtime",
     "HexMap.UnityRuntime",
+    "HexMap.Sample",
     "UnityEngine.TestRunner"
   ],
   "includePlatforms": [],

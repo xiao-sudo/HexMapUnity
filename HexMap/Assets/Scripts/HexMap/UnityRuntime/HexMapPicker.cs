@@ -1,132 +1,80 @@
 using System;
+using HexMap.Core;
 using HexMap.Runtime;
 using UnityEngine;
 
 namespace HexMap.UnityRuntime
 {
+    /// <summary>
+    /// Queries the active map from a world-space position.
+    /// Screen coordinates, cameras and input policy belong to an adapter layer.
+    /// </summary>
     public sealed class HexMapPicker : MonoBehaviour
     {
-        [SerializeField] private HexMapView mapView;
-        [SerializeField] private Camera targetCamera;
-        [SerializeField] private LayerMask mapLayer = -1;
-        [SerializeField] private float maxDistance = 1000f;
+        private const float PlaneTolerance = 0.0001f;
+
+        [SerializeField] private HexMapView m_MapView;
 
         public HexMapView MapView
         {
-            get { return mapView; }
-            set { mapView = value; }
+            get { return m_MapView; }
+            set { m_MapView = value; }
         }
 
-        public Camera TargetCamera
+        public HexPickResult PickWorldPosition(Vector3 worldPosition)
         {
-            get { return targetCamera; }
-            set { targetCamera = value; }
+            ValidateWorldPosition(worldPosition);
+
+            if (m_MapView == null || m_MapView.Map == null)
+            {
+                return HexPickResult.Create(HexPickStatus.NoMap);
+            }
+
+            var localPosition = m_MapView.WorldToMapLocal(worldPosition);
+            var planeAxis = m_MapView.Layout.Plane == HexPlane.XY
+                ? localPosition.z - m_MapView.Layout.Origin.z
+                : localPosition.y - m_MapView.Layout.Origin.y;
+
+            if (Mathf.Abs(planeAxis) > PlaneTolerance)
+            {
+                return HexPickResult.Create(HexPickStatus.NotOnMapPlane);
+            }
+
+            var coordinate = m_MapView.Layout.WorldToHex(localPosition);
+            var query = m_MapView.Map.Query(coordinate);
+            if (query.Status == HexCellQueryStatus.OutsideMap)
+            {
+                return HexPickResult.Create(HexPickStatus.OutsideMap);
+            }
+
+            HexView view;
+            if (query.Status == HexCellQueryStatus.Found &&
+                m_MapView.TryGetHexView(coordinate, out view))
+            {
+                return HexPickResult.Found(view);
+            }
+
+            return HexPickResult.Create(HexPickStatus.Missing);
         }
 
-        public LayerMask MapLayer
+        public bool TryPickWorldPosition(Vector3 worldPosition, out HexView view)
         {
-            get { return mapLayer; }
-            set { mapLayer = value; }
-        }
-
-        public float MaxDistance
-        {
-            get { return maxDistance; }
-            set { maxDistance = value; }
-        }
-
-        public HexPickResult LastResult { get; private set; }
-        public event Action<HexPickResult> Picked;
-
-        public void Awake()
-        {
-            if (mapView == null)
-            {
-                mapView = GetComponent<HexMapView>();
-            }
-
-            if (targetCamera == null)
-            {
-                targetCamera = Camera.main;
-            }
-        }
-
-        public void Update()
-        {
-            if (!Input.GetMouseButtonDown(0))
-            {
-                return;
-            }
-
-            Pick(Input.mousePosition);
-            if (LastResult.HasCell)
-            {
-                Debug.Log(string.Format("Picked {0}.", LastResult.Cell.Coordinate));
-            }
-            else
-            {
-                Debug.Log(string.Format("Hex pick result: {0}.", LastResult.Status));
-            }
-
-            var handler = Picked;
-            if (handler != null)
-            {
-                handler(LastResult);
-            }
-        }
-
-        public HexPickResult Pick(Vector2 screenPoint)
-        {
-            if (mapView == null || mapView.Map == null)
-            {
-                return Store(HexPickResult.Create(HexPickStatus.NoMap));
-            }
-
-            if (targetCamera == null)
-            {
-                return Store(HexPickResult.Create(HexPickStatus.NoCamera));
-            }
-
-            var ray = targetCamera.ScreenPointToRay(screenPoint);
-            RaycastHit hit;
-            if (!Physics.Raycast(ray, out hit, maxDistance, mapLayer))
-            {
-                return Store(HexPickResult.Create(HexPickStatus.NoHit));
-            }
-
-            if (!mapView.OwnsCollider(hit.collider))
-            {
-                return Store(HexPickResult.Create(HexPickStatus.NonMapHit));
-            }
-
-            var localPoint = mapView.transform.InverseTransformPoint(hit.point);
-            var coordinate = mapView.Layout.WorldToHex(localPoint);
-            var query = mapView.Map.Query(coordinate);
-
-            switch (query.Status)
-            {
-                case HexCellQueryStatus.Found:
-                    return Store(HexPickResult.Found(query.Cell));
-                case HexCellQueryStatus.OutsideMap:
-                    return Store(HexPickResult.Create(HexPickStatus.OutsideMap));
-                case HexCellQueryStatus.Missing:
-                    return Store(HexPickResult.Create(HexPickStatus.Missing));
-                default:
-                    return Store(HexPickResult.Create(HexPickStatus.NoHit));
-            }
-        }
-
-        public bool TryPickCell(Vector2 screenPoint, out HexCell cell)
-        {
-            var result = Pick(screenPoint);
-            cell = result.Cell;
+            var result = PickWorldPosition(worldPosition);
+            view = result.View;
             return result.HasCell;
         }
 
-        private HexPickResult Store(HexPickResult result)
+        private static void ValidateWorldPosition(Vector3 worldPosition)
         {
-            LastResult = result;
-            return result;
+            if (float.IsNaN(worldPosition.x) || float.IsInfinity(worldPosition.x) ||
+                float.IsNaN(worldPosition.y) || float.IsInfinity(worldPosition.y) ||
+                float.IsNaN(worldPosition.z) || float.IsInfinity(worldPosition.z))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(worldPosition),
+                    worldPosition,
+                    "World position must be finite.");
+            }
         }
     }
 }

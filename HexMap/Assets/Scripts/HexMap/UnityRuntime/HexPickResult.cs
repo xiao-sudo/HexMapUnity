@@ -1,3 +1,4 @@
+using System;
 using HexMap.Runtime;
 
 namespace HexMap.UnityRuntime
@@ -6,36 +7,54 @@ namespace HexMap.UnityRuntime
     {
         Found = 0,
         NoMap = 1,
-        NoCamera = 2,
-        NoHit = 3,
-        NonMapHit = 4,
-        OutsideMap = 5,
-        Missing = 6
+        NotOnMapPlane = 2,
+        OutsideMap = 3,
+        Missing = 4
     }
 
     public readonly struct HexPickResult
     {
-        private HexPickResult(HexPickStatus status, HexCell cell)
+        private HexPickResult(HexPickStatus status, HexView view)
         {
             Status = status;
-            Cell = cell;
+            View = view;
+            Cell = view.Cell;
+        }
+
+        private HexPickResult(HexPickStatus status)
+        {
+            Status = status;
+            View = null;
+            Cell = default(HexCell);
         }
 
         public HexPickStatus Status { get; }
+        public HexView View { get; }
         public HexCell Cell { get; }
+
         public bool HasCell
         {
-            get { return Status == HexPickStatus.Found; }
+            get { return Status == HexPickStatus.Found && View != null; }
         }
 
         public static HexPickResult Create(HexPickStatus status)
         {
-            return new HexPickResult(status, default(HexCell));
+            if (status == HexPickStatus.Found)
+            {
+                throw new ArgumentOutOfRangeException(nameof(status), status, "Found results require a HexView.");
+            }
+
+            return new HexPickResult(status);
         }
 
-        public static HexPickResult Found(HexCell cell)
+        public static HexPickResult Found(HexView view)
         {
-            return new HexPickResult(HexPickStatus.Found, cell);
+            if (view == null)
+            {
+                throw new ArgumentNullException(nameof(view));
+            }
+
+            return new HexPickResult(HexPickStatus.Found, view);
         }
     }
 }
