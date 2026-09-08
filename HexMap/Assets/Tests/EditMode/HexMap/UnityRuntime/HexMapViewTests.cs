@@ -28,6 +28,7 @@ namespace HexMap.UnityRuntime.Tests
 
             Assert.That(mapView.ShowDebugLabels, Is.True);
             Assert.That(mapView.ShowDebugCoordinates, Is.False);
+            Assert.That(mapView.ShowDebugBounds, Is.True);
 
             mapView.ShowDebugCoordinates = true;
             Assert.That(mapView.ShowDebugCoordinates, Is.True);
