@@ -15,6 +15,9 @@ namespace HexMap.UnityRuntime
         [SerializeField] private Vector3 m_Origin;
         [SerializeField] private Material m_CellMaterial;
         [SerializeField] private int m_CellLayer;
+#if UNITY_EDITOR
+        [SerializeField] private bool m_ShowDebugLabels = true;
+#endif
 
         private RuntimeHexMap m_Map;
         private HexLayout m_Layout;
@@ -49,6 +52,14 @@ namespace HexMap.UnityRuntime
             get { return m_Origin; }
             set { m_Origin = value; }
         }
+
+#if UNITY_EDITOR
+        public bool ShowDebugLabels
+        {
+            get { return m_ShowDebugLabels; }
+            set { m_ShowDebugLabels = value; }
+        }
+#endif
 
         public RuntimeHexMap Map
         {

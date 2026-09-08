@@ -33,6 +33,58 @@ namespace HexMap.Runtime.Tests
         }
 
         [Test]
+        public void CellIdsStartAtTheCenterAndExpandByDistance()
+        {
+            var map = new HexMap(new HexMapDefinition(1, Array.Empty<HexCoord>()));
+
+            Assert.That(map.Query(new HexCoord(0, 0)).Cell.Id, Is.EqualTo(0));
+            Assert.That(map.Query(new HexCoord(-1, 0)).Cell.Id, Is.EqualTo(1));
+            Assert.That(map.Query(new HexCoord(-1, 1)).Cell.Id, Is.EqualTo(2));
+            Assert.That(map.Query(new HexCoord(0, -1)).Cell.Id, Is.EqualTo(3));
+            Assert.That(map.Query(new HexCoord(0, 1)).Cell.Id, Is.EqualTo(4));
+            Assert.That(map.Query(new HexCoord(1, -1)).Cell.Id, Is.EqualTo(5));
+            Assert.That(map.Query(new HexCoord(1, 0)).Cell.Id, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void ExcludedCoordinatesReserveTheirIds()
+        {
+            var map = new HexMap(new HexMapDefinition(
+                1,
+                new[] { new HexCoord(-1, 1) }));
+
+            Assert.That(map.Query(new HexCoord(-1, 1)).Status, Is.EqualTo(HexCellQueryStatus.Missing));
+            Assert.That(map.Query(new HexCoord(0, -1)).Cell.Id, Is.EqualTo(3));
+            Assert.That(map.Query(new HexCoord(1, 0)).Cell.Id, Is.EqualTo(6));
+            Assert.That(map.Query(2).Status, Is.EqualTo(HexCellQueryStatus.Missing));
+        }
+
+        [Test]
+        public void CellIdsCanBeQueriedBackToTheirCoordinates()
+        {
+            var map = new HexMap(new HexMapDefinition(2, Array.Empty<HexCoord>()));
+
+            HexCell cell;
+            Assert.That(map.TryGetCell(0, out cell), Is.True);
+            Assert.That(cell.Coordinate, Is.EqualTo(new HexCoord(0, 0)));
+            Assert.That(map.Query(cell.Id).Cell.Coordinate, Is.EqualTo(cell.Coordinate));
+            Assert.That(map.TryGetCell(-1, out cell), Is.False);
+            Assert.That(map.Query(1000).Status, Is.EqualTo(HexCellQueryStatus.Missing));
+        }
+
+        [Test]
+        public void ExpandingTheRadiusPreservesExistingCellIds()
+        {
+            var smallerMap = new HexMap(new HexMapDefinition(1, Array.Empty<HexCoord>()));
+            var largerMap = new HexMap(new HexMapDefinition(2, Array.Empty<HexCoord>()));
+
+            foreach (var cell in smallerMap.Cells)
+            {
+                Assert.That(largerMap.Query(cell.Coordinate).Cell.Id, Is.EqualTo(cell.Id));
+            }
+        }
+
+        [Test]
         public void QueryDistinguishesFoundMissingAndOutsideMap()
         {
             var map = new HexMap(new HexMapDefinition(
