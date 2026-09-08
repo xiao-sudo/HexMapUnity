@@ -8,7 +8,7 @@ namespace HexMap.UnityRuntime
 {
     public sealed class HexMapView : MonoBehaviour
     {
-        [SerializeField] private HexMapConfigAsset m_Config;
+        [SerializeField] private int m_Radius = 3;
         [SerializeField] private HexOrientation m_Orientation = HexOrientation.Pointy;
         [SerializeField] private HexPlane m_Plane = HexPlane.XZ;
         [SerializeField] private float m_OuterRadius = 1f;
@@ -17,6 +17,7 @@ namespace HexMap.UnityRuntime
         [SerializeField] private int m_CellLayer;
 #if UNITY_EDITOR
         [SerializeField] private bool m_ShowDebugLabels = true;
+        [SerializeField] private Color m_LabelColor = Color.white;
         [SerializeField] private bool m_ShowDebugCoordinates;
         [SerializeField] private bool m_ShowDebugBounds = true;
 #endif
@@ -25,10 +26,10 @@ namespace HexMap.UnityRuntime
         private HexLayout m_Layout;
         private HexMapRenderer m_Renderer;
 
-        public HexMapConfigAsset Config
+        public int Radius
         {
-            get { return m_Config; }
-            set { m_Config = value; }
+            get { return m_Radius; }
+            set { m_Radius = value; }
         }
 
         public HexOrientation Orientation
@@ -59,7 +60,6 @@ namespace HexMap.UnityRuntime
         public bool ShowDebugLabels
         {
             get { return m_ShowDebugLabels; }
-            set { m_ShowDebugLabels = value; }
         }
 
         public bool ShowDebugCoordinates
@@ -71,7 +71,11 @@ namespace HexMap.UnityRuntime
         public bool ShowDebugBounds
         {
             get { return m_ShowDebugBounds; }
-            set { m_ShowDebugBounds = value; }
+        }
+
+        public Color LabelColor
+        {
+            get { return m_LabelColor; }
         }
 #endif
 
@@ -100,9 +104,7 @@ namespace HexMap.UnityRuntime
             ValidateTransformScale();
             DisposeRenderer();
 
-            var definition = m_Config == null
-                ? new HexMapDefinition(3, new HexCoord[0])
-                : m_Config.CreateDefinition();
+            var definition = new HexMapDefinition(m_Radius);
 
             m_Map = new RuntimeHexMap(definition);
             m_Layout = new HexLayout(m_Orientation, m_Plane, m_OuterRadius, m_Origin);

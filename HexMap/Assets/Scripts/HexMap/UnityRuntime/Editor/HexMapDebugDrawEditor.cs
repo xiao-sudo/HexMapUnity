@@ -41,12 +41,7 @@ namespace HexMap.UnityRuntime.Editor
                 return;
             }
 
-            foreach (var cell in map.Cells)
-            {
-                var localCenter = layout.HexToWorld(cell.Coordinate);
-                var worldCenter = view.transform.TransformPoint(localCenter);
-                Handles.Label(worldCenter, FormatLabel(cell, view.ShowDebugCoordinates), m_LabelStyle);
-            }
+            DrawLabels(view, map, layout);
         }
 
         private static void DrawBounds(HexMapView view, RuntimeHexMap map, HexLayout layout)
@@ -61,6 +56,18 @@ namespace HexMap.UnityRuntime.Editor
             }
 
             Handles.color = previousColor;
+        }
+
+        private static void DrawLabels(HexMapView view, RuntimeHexMap map, HexLayout layout)
+        {
+            m_LabelStyle.normal.textColor = view.LabelColor;
+
+            foreach (var cell in map.Cells)
+            {
+                var localCenter = layout.HexToWorld(cell.Coordinate);
+                var worldCenter = view.transform.TransformPoint(localCenter);
+                Handles.Label(worldCenter, FormatLabel(cell, view.ShowDebugCoordinates), m_LabelStyle);
+            }
         }
 
         private static Vector3[] CreateWorldCorners(
@@ -115,9 +122,7 @@ namespace HexMap.UnityRuntime.Editor
 
             try
             {
-                var definition = view.Config == null
-                    ? new HexMapDefinition(3, new HexCoord[0])
-                    : view.Config.CreateDefinition();
+                var definition = new HexMapDefinition(view.Radius);
                 map = new RuntimeHexMap(definition);
                 layout = new HexLayout(
                     view.Orientation,

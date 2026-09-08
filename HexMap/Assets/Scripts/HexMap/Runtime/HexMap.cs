@@ -19,7 +19,7 @@ namespace HexMap.Runtime
             }
 
             m_Radius = definition.Radius;
-            var generatedCellCount = m_Radius.CellCount - definition.ExcludedCoordinates.Count;
+            var generatedCellCount = m_Radius.CellCount;
             m_CellsByCoordinate = new Dictionary<HexCoord, HexCell>(generatedCellCount);
             m_CellsById = new Dictionary<int, HexCell>(generatedCellCount);
             var generatedCells = new List<HexCell>(generatedCellCount);
@@ -27,11 +27,6 @@ namespace HexMap.Runtime
 
             foreach (var coordinate in EnumerateCoordinates())
             {
-                if (definition.IsExcluded(coordinate))
-                {
-                    continue;
-                }
-
                 var cell = new HexCell(coordinatesById[coordinate], coordinate);
                 m_CellsByCoordinate.Add(coordinate, cell);
                 m_CellsById.Add(cell.Id, cell);

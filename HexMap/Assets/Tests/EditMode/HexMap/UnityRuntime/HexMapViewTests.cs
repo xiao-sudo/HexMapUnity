@@ -26,6 +26,7 @@ namespace HexMap.UnityRuntime.Tests
             m_ViewObject = new GameObject("Hex Map View");
             var mapView = m_ViewObject.AddComponent<HexMapView>();
 
+            Assert.That(mapView.Radius, Is.EqualTo(3));
             Assert.That(mapView.ShowDebugLabels, Is.True);
             Assert.That(mapView.ShowDebugCoordinates, Is.False);
             Assert.That(mapView.ShowDebugBounds, Is.True);
@@ -108,7 +109,7 @@ namespace HexMap.UnityRuntime.Tests
         [Test]
         public void RendererSharesMeshAndDoesNotCreateMeshColliders()
         {
-            var map = new Runtime.HexMap(new HexMapDefinition(1, Array.Empty<HexCoord>()));
+            var map = new Runtime.HexMap(new HexMapDefinition(1));
             var parent = new GameObject("Renderer Parent");
             var config = new HexMapRenderConfig(parent.transform, null, 0);
             var renderer = new HexMapRenderer(

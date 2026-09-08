@@ -9,7 +9,6 @@ namespace HexMap.UnityRuntime.Tests
     public sealed class HexMapPickerTests
     {
         private GameObject m_ViewObject;
-        private HexMapConfigAsset m_Config;
 
         [TearDown]
         public void TearDown()
@@ -19,10 +18,6 @@ namespace HexMap.UnityRuntime.Tests
                 UnityEngine.Object.DestroyImmediate(m_ViewObject);
             }
 
-            if (m_Config != null)
-            {
-                UnityEngine.Object.DestroyImmediate(m_Config);
-            }
         }
 
         [Test]
@@ -74,9 +69,9 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void PickWorldPositionDistinguishesOutsideMapAndMissingCell()
+        public void PickWorldPositionReportsOutsideMapForCoordinateOutsideRadius()
         {
-            var view = CreateView(HexPlane.XZ, Vector3.zero, new HexCoord(0, 0));
+            var view = CreateView(HexPlane.XZ, Vector3.zero);
             var picker = m_ViewObject.AddComponent<HexMapPicker>();
             picker.MapView = view;
 
@@ -84,13 +79,6 @@ namespace HexMap.UnityRuntime.Tests
                 view.Layout.HexToWorld(new HexCoord(100, 0)));
             Assert.That(picker.PickWorldPosition(outside).Status,
                 Is.EqualTo(HexPickStatus.OutsideMap));
-
-            var missing = m_ViewObject.transform.TransformPoint(
-                view.Layout.HexToWorld(new HexCoord(0, 0)));
-            var result = picker.PickWorldPosition(missing);
-            Assert.That(result.Status, Is.EqualTo(HexPickStatus.Missing));
-            Assert.That(result.View, Is.Null);
-            Assert.That(result.Cell, Is.EqualTo(default(HexMap.Runtime.HexCell)));
         }
 
         [Test]
@@ -139,20 +127,12 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(Mathf.Abs(view.WorldPlane.GetDistanceToPoint(worldPoint)), Is.LessThan(0.00001f));
         }
 
-        private HexMapView CreateView(HexPlane plane, Vector3 origin, params HexCoord[] excluded)
+        private HexMapView CreateView(HexPlane plane, Vector3 origin)
         {
             m_ViewObject = new GameObject("Hex Map View");
             var view = m_ViewObject.AddComponent<HexMapView>();
             view.Plane = plane;
             view.Origin = origin;
-            if (excluded.Length > 0)
-            {
-                m_Config = ScriptableObject.CreateInstance<HexMapConfigAsset>();
-                m_Config.Radius = 1;
-                m_Config.SetExcludedCoordinates(excluded);
-                view.Config = m_Config;
-            }
-
             view.Build();
             return view;
         }
