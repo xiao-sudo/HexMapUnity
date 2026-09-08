@@ -6,9 +6,9 @@ namespace HexMap.Runtime
 {
     public sealed class HexMap
     {
-        private readonly HexMapBounds bounds;
-        private readonly Dictionary<HexCoord, HexCell> cellsByCoordinate;
-        private readonly IReadOnlyList<HexCell> cells;
+        private readonly HexMapRadius m_Radius;
+        private readonly Dictionary<HexCoord, HexCell> m_CellsByCoordinate;
+        private readonly IReadOnlyList<HexCell> m_Cells;
 
         public HexMap(HexMapDefinition definition)
         {
@@ -17,53 +17,57 @@ namespace HexMap.Runtime
                 throw new ArgumentNullException(nameof(definition));
             }
 
-            bounds = definition.Bounds;
-            cellsByCoordinate = new Dictionary<HexCoord, HexCell>();
-            var generatedCells = new List<HexCell>();
+            m_Radius = definition.Radius;
+            var generatedCellCount = m_Radius.CellCount - definition.ExcludedCoordinates.Count;
+            m_CellsByCoordinate = new Dictionary<HexCoord, HexCell>(generatedCellCount);
+            var generatedCells = new List<HexCell>(generatedCellCount);
 
-            for (var q = (long)bounds.MinQ; q <= bounds.MaxQ; q++)
+            for (var q = -m_Radius.Radius; q <= m_Radius.Radius; q++)
             {
-                for (var r = (long)bounds.MinR; r <= bounds.MaxR; r++)
+                var minR = Math.Max(-m_Radius.Radius, -q - m_Radius.Radius);
+                var maxR = Math.Min(m_Radius.Radius, -q + m_Radius.Radius);
+
+                for (var r = minR; r <= maxR; r++)
                 {
-                    var coordinate = new HexCoord((int)q, (int)r);
+                    var coordinate = new HexCoord(q, r);
                     if (definition.IsExcluded(coordinate))
                     {
                         continue;
                     }
 
                     var cell = new HexCell(coordinate);
-                    cellsByCoordinate.Add(coordinate, cell);
+                    m_CellsByCoordinate.Add(coordinate, cell);
                     generatedCells.Add(cell);
                 }
             }
 
-            cells = generatedCells.AsReadOnly();
+            m_Cells = generatedCells.AsReadOnly();
         }
 
-        public HexMapBounds Bounds
+        public HexMapRadius Radius
         {
-            get { return bounds; }
+            get { return m_Radius; }
         }
 
         public int Count
         {
-            get { return cells.Count; }
+            get { return m_Cells.Count; }
         }
 
         public IReadOnlyList<HexCell> Cells
         {
-            get { return cells; }
+            get { return m_Cells; }
         }
 
         public HexCellQuery Query(HexCoord coordinate)
         {
-            if (!bounds.Contains(coordinate))
+            if (!m_Radius.Contains(coordinate))
             {
                 return HexCellQuery.OutsideMap();
             }
 
             HexCell cell;
-            return cellsByCoordinate.TryGetValue(coordinate, out cell)
+            return m_CellsByCoordinate.TryGetValue(coordinate, out cell)
                 ? HexCellQuery.Found(cell)
                 : HexCellQuery.Missing();
         }

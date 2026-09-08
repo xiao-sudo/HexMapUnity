@@ -9,29 +9,38 @@ namespace HexMap.Runtime.Tests
     public sealed class HexMapTests
     {
         [Test]
-        public void GeneratesCellsInStableAxialOrder()
+        public void RadiusOneGeneratesSevenCellsInStableAxialOrder()
         {
-            var definition = new HexMapDefinition(
-                new HexMapBounds(0, 1, 0, 1),
-                new[] { new HexCoord(1, 1) });
+            var map = new HexMap(new HexMapDefinition(1, Array.Empty<HexCoord>()));
 
-            var map = new HexMap(definition);
+            Assert.That(map.Count, Is.EqualTo(7));
+            Assert.That(map.Cells[0].Coordinate, Is.EqualTo(new HexCoord(-1, 0)));
+            Assert.That(map.Cells[3].Coordinate, Is.EqualTo(new HexCoord(0, 0)));
+            Assert.That(map.Cells[6].Coordinate, Is.EqualTo(new HexCoord(1, 0)));
+        }
 
-            Assert.That(map.Count, Is.EqualTo(3));
-            Assert.That(map.Cells[0].Coordinate, Is.EqualTo(new HexCoord(0, 0)));
-            Assert.That(map.Cells[1].Coordinate, Is.EqualTo(new HexCoord(0, 1)));
-            Assert.That(map.Cells[2].Coordinate, Is.EqualTo(new HexCoord(1, 0)));
+        [Test]
+        public void RadiusTwoGeneratesTheStandardNineteenCellHexagon()
+        {
+            var map = new HexMap(new HexMapDefinition(2, Array.Empty<HexCoord>()));
+
+            Assert.That(map.Count, Is.EqualTo(19));
+            foreach (var cell in map.Cells)
+            {
+                Assert.That(map.Radius.Contains(cell.Coordinate), Is.True);
+                Assert.That(HexCoord.Distance(new HexCoord(0, 0), cell.Coordinate), Is.LessThanOrEqualTo(2));
+            }
         }
 
         [Test]
         public void QueryDistinguishesFoundMissingAndOutsideMap()
         {
             var map = new HexMap(new HexMapDefinition(
-                new HexMapBounds(0, 1, 0, 1),
-                new[] { new HexCoord(1, 1) }));
+                1,
+                new[] { new HexCoord(1, 0) }));
 
             Assert.That(map.Query(new HexCoord(0, 0)).Status, Is.EqualTo(HexCellQueryStatus.Found));
-            Assert.That(map.Query(new HexCoord(1, 1)).Status, Is.EqualTo(HexCellQueryStatus.Missing));
+            Assert.That(map.Query(new HexCoord(1, 0)).Status, Is.EqualTo(HexCellQueryStatus.Missing));
             Assert.That(map.Query(new HexCoord(2, 0)).Status, Is.EqualTo(HexCellQueryStatus.OutsideMap));
         }
 
@@ -40,7 +49,7 @@ namespace HexMap.Runtime.Tests
         {
             var coordinate = new HexCoord(-2, 3);
             var map = new HexMap(new HexMapDefinition(
-                new HexMapBounds(-2, -2, 3, 3),
+                4,
                 Array.Empty<HexCoord>()));
 
             var result = map.Query(coordinate);
@@ -52,12 +61,14 @@ namespace HexMap.Runtime.Tests
         [Test]
         public void InvalidDefinitionsAreRejectedBeforeMapGeneration()
         {
-            Assert.Throws<ArgumentException>(() => new HexMapBounds(1, 0, 0, 1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new HexMapRadius(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new HexMapRadius(HexMapRadius.MaxSupportedRadius + 1));
             Assert.Throws<ArgumentException>(() => new HexMapDefinition(
-                new HexMapBounds(0, 1, 0, 1),
+                1,
                 new[] { new HexCoord(0, 0), new HexCoord(0, 0) }));
             Assert.Throws<ArgumentException>(() => new HexMapDefinition(
-                new HexMapBounds(0, 1, 0, 1),
+                1,
                 new[] { new HexCoord(2, 0) }));
         }
     }
