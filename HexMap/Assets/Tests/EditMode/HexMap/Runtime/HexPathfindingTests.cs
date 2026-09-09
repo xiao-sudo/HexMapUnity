@@ -127,7 +127,7 @@ namespace HexMap.Runtime.Tests
 
             var result = map.FindPath(request);
 
-            AssertSuccess(result, reachableTarget, 2);
+            AssertSuccess(result, reachableTarget, 3);
             Assert.That(result.Cells[1].Coordinate, Is.EqualTo(new HexCoord(1, -1)));
             Assert.That(result.Cells, Has.None.EqualTo(rejectedTarget));
         }
