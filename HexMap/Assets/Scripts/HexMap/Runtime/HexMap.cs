@@ -86,6 +86,11 @@ namespace HexMap.Runtime
             return query.HasCell;
         }
 
+        public PathResult FindPath(PathRequest request)
+        {
+            return HexPathfinder.FindPath(this, request);
+        }
+
         private Dictionary<HexCoord, int> CreateCoordinatesById()
         {
             var rings = new List<HexCoord>[m_Radius.Radius + 1];
