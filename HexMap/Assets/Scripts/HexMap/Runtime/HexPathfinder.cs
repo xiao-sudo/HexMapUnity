@@ -185,21 +185,9 @@ namespace HexMap.Runtime
             out HexCell root)
         {
             var current = target;
-            while (m_Workspace.Parents.ContainsKey(current))
+            while (m_Workspace.Parents.TryGetValue(current, out var parent))
             {
-                var hasParent = m_Workspace.Parents.ContainsKey(current);
-                if (!hasParent)
-                {
-                    HexCell mapRoot;
-                    if (m_Map.TryGetCell(current, out mapRoot))
-                    {
-                        root = mapRoot;
-                        return true;
-                    }
-                    break;
-                }
-
-                current = m_Workspace.Parents[current];
+                current = parent;
             }
 
             root = default(HexCell);
