@@ -5,12 +5,7 @@ using UnityEngine;
 
 namespace HexMap.Runtime
 {
-    public enum PathResultStatus
-    {
-        Success = 0,
-        InvalidInput = 1,
-        NoPath = 2
-    }
+    public enum PathResultStatus { Success = 0, InvalidInput = 1, NoPath = 2 }
 
     public enum PathFailureReason
     {
@@ -18,7 +13,8 @@ namespace HexMap.Runtime
         StartMissing = 1,
         NoValidTargets = 2,
         NoReachableTarget = 3,
-        ResultCapacityExceeded = 4
+        ResultCapacityExceeded = 4,
+        NoValidStarts = 5
     }
 
     public sealed class PathResult
@@ -31,68 +27,28 @@ namespace HexMap.Runtime
 
         public PathResult(List<HexCell> cells)
         {
-            if (cells == null)
-            {
-                throw new ArgumentNullException(nameof(cells));
-            }
-
+            if (cells == null) throw new ArgumentNullException(nameof(cells));
             m_Cells = cells;
             SetFailure(PathResultStatus.InvalidInput, PathFailureReason.None);
         }
 
-        public PathResultStatus Status
-        {
-            get { return m_Status; }
-        }
-
-        public IReadOnlyList<HexCell> Cells
-        {
-            get { return m_Cells; }
-        }
-
-        public int Count
-        {
-            get { return m_Cells.Count; }
-        }
-
-        public HexCell ReachedTarget
-        {
-            get { return m_ReachedTarget; }
-        }
-
-        public int Cost
-        {
-            get { return m_Cost; }
-        }
-
-        public PathFailureReason Reason
-        {
-            get { return m_Reason; }
-        }
-
-        public bool IsSuccess
-        {
-            get { return m_Status == PathResultStatus.Success; }
-        }
+        public PathResultStatus Status { get { return m_Status; } }
+        public IReadOnlyList<HexCell> Cells { get { return m_Cells; } }
+        public int Count { get { return m_Cells.Count; } }
+        public HexCell ReachedTarget { get { return m_ReachedTarget; } }
+        public int Cost { get { return m_Cost; } }
+        public PathFailureReason Reason { get { return m_Reason; } }
+        public bool IsSuccess { get { return m_Status == PathResultStatus.Success; } }
 
         public bool CopyWorldCentersTo(HexLayout layout, List<Vector3> output)
         {
-            if (output == null)
-            {
-                throw new ArgumentNullException(nameof(output));
-            }
-
+            if (output == null) throw new ArgumentNullException(nameof(output));
             output.Clear();
-            if (output.Capacity < m_Cells.Count)
-            {
-                return false;
-            }
-
+            if (output.Capacity < m_Cells.Count) return false;
             for (var index = 0; index < m_Cells.Count; index++)
             {
                 output.Add(layout.HexToWorld(m_Cells[index].Coordinate));
             }
-
             return true;
         }
 
@@ -107,19 +63,12 @@ namespace HexMap.Runtime
 
         internal bool TryAddCell(HexCell cell)
         {
-            if (m_Cells.Count >= m_Cells.Capacity)
-            {
-                return false;
-            }
-
+            if (m_Cells.Count >= m_Cells.Capacity) return false;
             m_Cells.Add(cell);
             return true;
         }
 
-        internal void ReverseCells()
-        {
-            m_Cells.Reverse();
-        }
+        internal void ReverseCells() { m_Cells.Reverse(); }
 
         internal void SetSuccess(HexCell reachedTarget)
         {
