@@ -25,12 +25,19 @@ namespace HexMap.Runtime
             var generatedCells = new List<HexCell>(generatedCellCount);
             var coordinatesById = CreateCoordinatesById();
 
-            foreach (var coordinate in EnumerateCoordinates())
+            for (var q = -m_Radius.Radius; q <= m_Radius.Radius; q++)
             {
-                var cell = new HexCell(coordinatesById[coordinate], coordinate);
-                m_CellsByCoordinate.Add(coordinate, cell);
-                m_CellsById.Add(cell.Id, cell);
-                generatedCells.Add(cell);
+                var minR = Math.Max(-m_Radius.Radius, -q - m_Radius.Radius);
+                var maxR = Math.Min(m_Radius.Radius, -q + m_Radius.Radius);
+
+                for (var r = minR; r <= maxR; r++)
+                {
+                    var coordinate = new HexCoord(q, r);
+                    var cell = new HexCell(coordinatesById[coordinate], coordinate);
+                    m_CellsByCoordinate.Add(coordinate, cell);
+                    m_CellsById.Add(cell.Id, cell);
+                    generatedCells.Add(cell);
+                }
             }
 
             m_Cells = generatedCells.AsReadOnly();
@@ -86,25 +93,27 @@ namespace HexMap.Runtime
             return query.HasCell;
         }
 
-        public PathResult FindPath(PathRequest request)
-        {
-            return HexPathfinder.FindPath(this, request);
-        }
-
         private Dictionary<HexCoord, int> CreateCoordinatesById()
         {
             var rings = new List<HexCoord>[m_Radius.Radius + 1];
             var center = new HexCoord(0, 0);
 
-            foreach (var coordinate in EnumerateCoordinates())
+            for (var q = -m_Radius.Radius; q <= m_Radius.Radius; q++)
             {
-                var distance = HexCoord.Distance(center, coordinate);
-                if (rings[distance] == null)
-                {
-                    rings[distance] = new List<HexCoord>();
-                }
+                var minR = Math.Max(-m_Radius.Radius, -q - m_Radius.Radius);
+                var maxR = Math.Min(m_Radius.Radius, -q + m_Radius.Radius);
 
-                rings[distance].Add(coordinate);
+                for (var r = minR; r <= maxR; r++)
+                {
+                    var coordinate = new HexCoord(q, r);
+                    var distance = HexCoord.Distance(center, coordinate);
+                    if (rings[distance] == null)
+                    {
+                        rings[distance] = new List<HexCoord>();
+                    }
+
+                    rings[distance].Add(coordinate);
+                }
             }
 
             var coordinatesById = new Dictionary<HexCoord, int>(m_Radius.CellCount);
@@ -119,20 +128,6 @@ namespace HexMap.Runtime
             }
 
             return coordinatesById;
-        }
-
-        private IEnumerable<HexCoord> EnumerateCoordinates()
-        {
-            for (var q = -m_Radius.Radius; q <= m_Radius.Radius; q++)
-            {
-                var minR = Math.Max(-m_Radius.Radius, -q - m_Radius.Radius);
-                var maxR = Math.Min(m_Radius.Radius, -q + m_Radius.Radius);
-
-                for (var r = minR; r <= maxR; r++)
-                {
-                    yield return new HexCoord(q, r);
-                }
-            }
         }
     }
 }

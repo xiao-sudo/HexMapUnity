@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using HexMap.Core;
 using HexMap.Runtime;
@@ -23,7 +24,7 @@ namespace HexMap.Runtime.Tests
                 (cell, callbackContext) => ReferenceEquals(callbackContext, context),
                 (cell, callbackContext) => ReferenceEquals(callbackContext, context));
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, target, 2);
             AssertCoordinates(result, new[]
@@ -56,7 +57,7 @@ namespace HexMap.Runtime.Tests
                     return false;
                 });
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, start, 0);
             Assert.That(canPassCalls, Is.EqualTo(0));
@@ -76,7 +77,7 @@ namespace HexMap.Runtime.Tests
                 (cell, context) => false,
                 (cell, context) => true);
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, target, 1);
         }
@@ -104,7 +105,7 @@ namespace HexMap.Runtime.Tests
                     return true;
                 });
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, target, 1);
             Assert.That(canPassSawTarget, Is.False);
@@ -125,7 +126,7 @@ namespace HexMap.Runtime.Tests
                 (cell, context) => true,
                 (cell, context) => cell.Coordinate != rejectedTarget.Coordinate);
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, reachableTarget, 3);
             Assert.That(result.Cells[1].Coordinate, Is.EqualTo(new HexCoord(1, -1)));
@@ -146,7 +147,7 @@ namespace HexMap.Runtime.Tests
                 (cell, context) => true,
                 (cell, context) => true);
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, nearTarget, 1);
         }
@@ -165,7 +166,7 @@ namespace HexMap.Runtime.Tests
                 (cell, context) => true,
                 (cell, context) => true);
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, qZeroTarget, 1);
         }
@@ -183,7 +184,7 @@ namespace HexMap.Runtime.Tests
                 (cell, context) => true,
                 (cell, context) => true);
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, target, 2);
             Assert.That(result.Cells[1].Coordinate, Is.EqualTo(new HexCoord(1, 0)));
@@ -201,7 +202,7 @@ namespace HexMap.Runtime.Tests
                 (cell, context) => true,
                 (cell, context) => true);
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertFailure(result, PathResultStatus.InvalidInput, PathFailureReason.StartMissing);
         }
@@ -220,7 +221,7 @@ namespace HexMap.Runtime.Tests
                 (cell, context) => true,
                 (cell, context) => true);
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertSuccess(result, target, 1);
         }
@@ -232,13 +233,13 @@ namespace HexMap.Runtime.Tests
             var start = CellAt(map, 0, 0);
             var invalidTarget = new HexCell(99, new HexCoord(0, 0));
 
-            var emptyResult = map.FindPath(CreateRequest(
+            var emptyResult = FindPath(map, CreateRequest(
                 start,
                 new HexCell[0],
                 new object(),
                 (cell, context) => true,
                 (cell, context) => true));
-            var invalidResult = map.FindPath(CreateRequest(
+            var invalidResult = FindPath(map, CreateRequest(
                 start,
                 new[] { invalidTarget },
                 new object(),
@@ -262,7 +263,7 @@ namespace HexMap.Runtime.Tests
                 (cell, context) => false,
                 (cell, context) => true);
 
-            var result = map.FindPath(request);
+            var result = FindPath(map, request);
 
             AssertFailure(result, PathResultStatus.NoPath, PathFailureReason.NoReachableTarget);
             Assert.That(result.Cells, Is.Empty);
@@ -294,7 +295,7 @@ namespace HexMap.Runtime.Tests
                     return true;
                 });
 
-            map.FindPath(request);
+            FindPath(map, request);
 
             Assert.That(canPassContext, Is.SameAs(context));
             Assert.That(canEnterContext, Is.SameAs(context));
@@ -306,7 +307,7 @@ namespace HexMap.Runtime.Tests
             var map = new HexMap(new HexMapDefinition(1));
             var start = CellAt(map, 0, 0);
             var target = CellAt(map, 1, 0);
-            var result = map.FindPath(CreateRequest(
+            var result = FindPath(map, CreateRequest(
                 start,
                 new[] { target },
                 new object(),
@@ -317,14 +318,94 @@ namespace HexMap.Runtime.Tests
                 HexPlane.XZ,
                 2f,
                 new Vector3(10f, 20f, 30f));
+            var worldCenters = new List<Vector3>(map.Count);
 
-            var worldCenters = result.ToWorldCenters(layout);
+            Assert.That(result.CopyWorldCentersTo(layout, worldCenters), Is.True);
 
             Assert.That(worldCenters.Count, Is.EqualTo(2));
             Assert.That(worldCenters[0], Is.EqualTo(new Vector3(10f, 20f, 30f)));
             Assert.That(worldCenters[1].x, Is.EqualTo(10f + Mathf.Sqrt(3f) * 2f).Within(0.0001f));
             Assert.That(worldCenters[1].y, Is.EqualTo(20f));
             Assert.That(worldCenters[1].z, Is.EqualTo(30f));
+        }
+
+        [Test]
+        public void ReusableRequestAndResultCanBeUsedForMultipleSearches()
+        {
+            var map = new HexMap(new HexMapDefinition(2));
+            var start = CellAt(map, 0, 0);
+            var firstTarget = CellAt(map, 1, 0);
+            var secondTarget = CellAt(map, 2, 0);
+            var targets = new List<HexCell> { firstTarget };
+            var request = new ReusablePathRequest(
+                start,
+                targets,
+                new DelegatePathPolicy(
+                    (cell, context) => true,
+                    (cell, context) => true,
+                    null));
+            var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
+            var result = new PathResult(new List<HexCell>(map.Count));
+
+            pathfinder.FindPath(request, result);
+            AssertSuccess(result, firstTarget, 1);
+
+            targets.Clear();
+            targets.Add(secondTarget);
+            pathfinder.FindPath(request, result);
+            AssertSuccess(result, secondTarget, 2);
+        }
+
+        [Test]
+        public void ResultCapacityFailureClearsTheOutputPath()
+        {
+            var map = new HexMap(new HexMapDefinition(1));
+            var start = CellAt(map, 0, 0);
+            var target = CellAt(map, 1, 0);
+            var request = new ReusablePathRequest(
+                start,
+                new[] { target },
+                new DelegatePathPolicy(
+                    (cell, context) => true,
+                    (cell, context) => true,
+                    null));
+            var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
+            var result = new PathResult(new List<HexCell>(0));
+
+            pathfinder.FindPath(request, result);
+
+            AssertFailure(
+                result,
+                PathResultStatus.InvalidInput,
+                PathFailureReason.ResultCapacityExceeded);
+            Assert.That(result.Cells, Is.Empty);
+            Assert.That(result.Cost, Is.EqualTo(0));
+            Assert.That(result.ReachedTarget, Is.EqualTo(default(HexCell)));
+        }
+
+        [Test]
+        public void WorldCenterOutputListCanBeReused()
+        {
+            var map = new HexMap(new HexMapDefinition(1));
+            var start = CellAt(map, 0, 0);
+            var target = CellAt(map, 1, 0);
+            var result = FindPath(map, CreateRequest(
+                start,
+                new[] { target },
+                new object(),
+                (cell, context) => true,
+                (cell, context) => true));
+            var layout = new HexLayout(
+                HexOrientation.Pointy,
+                HexPlane.XZ,
+                2f,
+                new Vector3(10f, 20f, 30f));
+            var worldCenters = new List<Vector3>(map.Count);
+            worldCenters.Add(Vector3.one);
+
+            Assert.That(result.CopyWorldCentersTo(layout, worldCenters), Is.True);
+            Assert.That(worldCenters.Count, Is.EqualTo(result.Count));
+            Assert.That(worldCenters[0], Is.EqualTo(new Vector3(10f, 20f, 30f)));
         }
 
         private static PathRequest CreateRequest(
@@ -334,7 +415,17 @@ namespace HexMap.Runtime.Tests
             Func<HexCell, object, bool> canPass,
             Func<HexCell, object, bool> canEnter)
         {
-            return new PathRequest(start, targets, context, canPass, canEnter);
+            return new PathRequest(
+                start,
+                targets,
+                new DelegatePathPolicy(canPass, canEnter, context));
+        }
+
+        private static PathResult FindPath(HexMap map, PathRequest request)
+        {
+            var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
+            var result = new PathResult(new List<HexCell>(map.Count));
+            return pathfinder.FindPath(request, result);
         }
 
         private static HexCell CellAt(HexMap map, int q, int r)
@@ -369,6 +460,33 @@ namespace HexMap.Runtime.Tests
             for (var index = 0; index < expected.Length; index++)
             {
                 Assert.That(result.Cells[index].Coordinate, Is.EqualTo(expected[index]));
+            }
+        }
+
+        private sealed class DelegatePathPolicy : IHexPathPolicy
+        {
+            private readonly Func<HexCell, object, bool> m_CanPass;
+            private readonly Func<HexCell, object, bool> m_CanEnter;
+            private readonly object m_Context;
+
+            public DelegatePathPolicy(
+                Func<HexCell, object, bool> canPass,
+                Func<HexCell, object, bool> canEnter,
+                object context)
+            {
+                m_CanPass = canPass;
+                m_CanEnter = canEnter;
+                m_Context = context;
+            }
+
+            public bool CanPass(HexCell cell)
+            {
+                return m_CanPass(cell, m_Context);
+            }
+
+            public bool CanEnter(HexCell cell)
+            {
+                return m_CanEnter(cell, m_Context);
             }
         }
     }

@@ -1,32 +1,102 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using HexMap.Core;
 
 namespace HexMap.Runtime
 {
-    internal static class HexPathfinder
+    public sealed class HexPathfinder
     {
-        public static PathResult FindPath(HexMap map, PathRequest request)
+        private readonly HexMap m_Map;
+        private readonly PathSearchWorkspace m_Workspace;
+
+        public HexPathfinder(HexMap map, PathSearchWorkspace workspace)
+        {
+            if (map == null)
+            {
+                throw new ArgumentNullException(nameof(map));
+            }
+
+            if (workspace == null)
+            {
+                throw new ArgumentNullException(nameof(workspace));
+            }
+
+            if (!workspace.IsFor(map))
+            {
+                throw new ArgumentException("The workspace belongs to a different map.", nameof(workspace));
+            }
+
+            m_Map = map;
+            m_Workspace = workspace;
+        }
+
+        public PathResult FindPath(PathRequest request, PathResult result)
         {
             if (request == null)
             {
                 throw new ArgumentNullException(nameof(request));
             }
 
-            HexCell mapStart;
-            if (!IsCellInMap(map, request.Start, out mapStart))
+            return FindPathCore(request.Start, request.Targets, request.Policy, result);
+        }
+
+        public PathResult FindPath(ReusablePathRequest request, PathResult result)
+        {
+            if (request == null)
             {
-                return PathResult.CreateFailure(
-                    PathResultStatus.InvalidInput,
-                    PathFailureReason.StartMissing);
+                throw new ArgumentNullException(nameof(request));
             }
 
-            var targetCoordinates = new HashSet<HexCoord>();
-            foreach (var target in request.Targets)
+            return FindPathCore(request.Start, request.Targets, request.Policy, result);
+        }
+
+        private PathResult FindPathCore(
+            HexCell start,
+            IReadOnlyList<HexCell> targets,
+            IHexPathPolicy policy,
+            PathResult result)
+        {
+            if (targets == null)
+            {
+                throw new ArgumentNullException(nameof(targets));
+            }
+
+            if (policy == null)
+            {
+                throw new ArgumentNullException(nameof(policy));
+            }
+
+            if (result == null)
+            {
+                throw new ArgumentNullException(nameof(result));
+            }
+
+            result.BeginSearch();
+            var targetCoordinates = m_Workspace.TargetCoordinates;
+            var parents = m_Workspace.Parents;
+            var distances = m_Workspace.Distances;
+            var pending = m_Workspace.Pending;
+            var evaluatedTargets = m_Workspace.EvaluatedTargets;
+
+            targetCoordinates.Clear();
+            parents.Clear();
+            distances.Clear();
+            pending.Clear();
+            evaluatedTargets.Clear();
+
+            HexCell mapStart;
+            if (!IsCellInMap(start, out mapStart))
+            {
+                result.SetFailure(
+                    PathResultStatus.InvalidInput,
+                    PathFailureReason.StartMissing);
+                return result;
+            }
+
+            for (var targetIndex = 0; targetIndex < targets.Count; targetIndex++)
             {
                 HexCell mapTarget;
-                if (IsCellInMap(map, target, out mapTarget))
+                if (IsCellInMap(targets[targetIndex], out mapTarget))
                 {
                     targetCoordinates.Add(mapTarget.Coordinate);
                 }
@@ -34,25 +104,27 @@ namespace HexMap.Runtime
 
             if (targetCoordinates.Count == 0)
             {
-                return PathResult.CreateFailure(
+                result.SetFailure(
                     PathResultStatus.InvalidInput,
                     PathFailureReason.NoValidTargets);
+                return result;
             }
 
             if (targetCoordinates.Contains(mapStart.Coordinate))
             {
-                return PathResult.CreateSuccess(
-                    new ReadOnlyCollection<HexCell>(new[] { mapStart }),
-                    mapStart);
+                if (!result.TryAddCell(mapStart))
+                {
+                    result.SetFailure(
+                        PathResultStatus.InvalidInput,
+                        PathFailureReason.ResultCapacityExceeded);
+                    return result;
+                }
+
+                result.SetSuccess(mapStart);
+                return result;
             }
 
-            var parents = new Dictionary<HexCoord, HexCoord>();
-            var distances = new Dictionary<HexCoord, int>
-            {
-                { mapStart.Coordinate, 0 }
-            };
-            var pending = new Queue<HexCoord>();
-            var evaluatedTargets = new HashSet<HexCoord>();
+            distances.Add(mapStart.Coordinate, 0);
             pending.Enqueue(mapStart.Coordinate);
 
             var bestTarget = default(HexCoord);
@@ -72,14 +144,14 @@ namespace HexMap.Runtime
                 {
                     var neighbor = current.GetNeighbor((HexDirection)directionIndex);
                     HexCell neighborCell;
-                    if (!map.TryGetCell(neighbor, out neighborCell))
+                    if (!m_Map.TryGetCell(neighbor, out neighborCell))
                     {
                         continue;
                     }
 
                     if (targetCoordinates.Contains(neighbor))
                     {
-                        if (evaluatedTargets.Add(neighbor) && request.CanEnter(neighborCell, request.Context))
+                        if (evaluatedTargets.Add(neighbor) && policy.CanEnter(neighborCell))
                         {
                             var candidateDistance = currentDistance + 1;
                             if (!hasBestTarget ||
@@ -96,7 +168,7 @@ namespace HexMap.Runtime
                         continue;
                     }
 
-                    if (distances.ContainsKey(neighbor) || !request.CanPass(neighborCell, request.Context))
+                    if (distances.ContainsKey(neighbor) || !policy.CanPass(neighborCell))
                     {
                         continue;
                     }
@@ -109,19 +181,27 @@ namespace HexMap.Runtime
 
             if (!hasBestTarget)
             {
-                return PathResult.CreateFailure(
+                result.SetFailure(
                     PathResultStatus.NoPath,
                     PathFailureReason.NoReachableTarget);
+                return result;
             }
 
-            return PathResult.CreateSuccess(
-                BuildPath(map, mapStart, bestTarget, parents),
-                map.Query(bestTarget).Cell);
+            if (!BuildPath(mapStart, bestTarget, result))
+            {
+                result.SetFailure(
+                    PathResultStatus.InvalidInput,
+                    PathFailureReason.ResultCapacityExceeded);
+                return result;
+            }
+
+            result.SetSuccess(m_Map.Query(bestTarget).Cell);
+            return result;
         }
 
-        private static bool IsCellInMap(HexMap map, HexCell cell, out HexCell mapCell)
+        private bool IsCellInMap(HexCell cell, out HexCell mapCell)
         {
-            if (!map.TryGetCell(cell.Coordinate, out mapCell))
+            if (!m_Map.TryGetCell(cell.Coordinate, out mapCell))
             {
                 return false;
             }
@@ -134,29 +214,27 @@ namespace HexMap.Runtime
             return first.Q < second.Q || (first.Q == second.Q && first.R < second.R);
         }
 
-        private static IReadOnlyList<HexCell> BuildPath(
-            HexMap map,
-            HexCell start,
-            HexCoord target,
-            IReadOnlyDictionary<HexCoord, HexCoord> parents)
+        private bool BuildPath(HexCell start, HexCoord target, PathResult result)
         {
-            var coordinates = new List<HexCoord>();
             var current = target;
-            coordinates.Add(current);
-            while (current != start.Coordinate)
+            while (true)
             {
-                current = parents[current];
-                coordinates.Add(current);
+                HexCell cell;
+                if (!m_Map.TryGetCell(current, out cell) || !result.TryAddCell(cell))
+                {
+                    return false;
+                }
+
+                if (current == start.Coordinate)
+                {
+                    break;
+                }
+
+                current = m_Workspace.Parents[current];
             }
 
-            coordinates.Reverse();
-            var cells = new List<HexCell>(coordinates.Count);
-            foreach (var coordinate in coordinates)
-            {
-                cells.Add(map.Query(coordinate).Cell);
-            }
-
-            return new ReadOnlyCollection<HexCell>(cells);
+            result.ReverseCells();
+            return true;
         }
     }
 }

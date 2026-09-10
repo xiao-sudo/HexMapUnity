@@ -1,5 +1,5 @@
+using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using HexMap.Core;
 using UnityEngine;
 
@@ -17,64 +17,125 @@ namespace HexMap.Runtime
         None = 0,
         StartMissing = 1,
         NoValidTargets = 2,
-        NoReachableTarget = 3
+        NoReachableTarget = 3,
+        ResultCapacityExceeded = 4
     }
 
     public sealed class PathResult
     {
-        private PathResult(
-            PathResultStatus status,
-            PathFailureReason reason,
-            IReadOnlyList<HexCell> cells,
-            HexCell reachedTarget,
-            int cost)
-        {
-            Status = status;
-            Reason = reason;
-            Cells = cells;
-            ReachedTarget = reachedTarget;
-            Cost = cost;
-        }
+        private readonly List<HexCell> m_Cells;
+        private PathResultStatus m_Status;
+        private PathFailureReason m_Reason;
+        private HexCell m_ReachedTarget;
+        private int m_Cost;
 
-        public PathResultStatus Status { get; }
-        public IReadOnlyList<HexCell> Cells { get; }
-        public HexCell ReachedTarget { get; }
-        public int Cost { get; }
-        public PathFailureReason Reason { get; }
-        public bool IsSuccess
+        public PathResult(List<HexCell> cells)
         {
-            get { return Status == PathResultStatus.Success; }
-        }
-
-        public IReadOnlyList<Vector3> ToWorldCenters(HexLayout layout)
-        {
-            var worldCenters = new List<Vector3>(Cells.Count);
-            foreach (var cell in Cells)
+            if (cells == null)
             {
-                worldCenters.Add(layout.HexToWorld(cell.Coordinate));
+                throw new ArgumentNullException(nameof(cells));
             }
 
-            return new ReadOnlyCollection<Vector3>(worldCenters);
+            m_Cells = cells;
+            SetFailure(PathResultStatus.InvalidInput, PathFailureReason.None);
         }
 
-        internal static PathResult CreateSuccess(IReadOnlyList<HexCell> cells, HexCell reachedTarget)
+        public PathResultStatus Status
         {
-            return new PathResult(
-                PathResultStatus.Success,
-                PathFailureReason.None,
-                cells,
-                reachedTarget,
-                cells.Count - 1);
+            get { return m_Status; }
         }
 
-        internal static PathResult CreateFailure(PathResultStatus status, PathFailureReason reason)
+        public IReadOnlyList<HexCell> Cells
         {
-            return new PathResult(
-                status,
-                reason,
-                new ReadOnlyCollection<HexCell>(new List<HexCell>()),
-                default(HexCell),
-                0);
+            get { return m_Cells; }
+        }
+
+        public int Count
+        {
+            get { return m_Cells.Count; }
+        }
+
+        public HexCell ReachedTarget
+        {
+            get { return m_ReachedTarget; }
+        }
+
+        public int Cost
+        {
+            get { return m_Cost; }
+        }
+
+        public PathFailureReason Reason
+        {
+            get { return m_Reason; }
+        }
+
+        public bool IsSuccess
+        {
+            get { return m_Status == PathResultStatus.Success; }
+        }
+
+        public bool CopyWorldCentersTo(HexLayout layout, List<Vector3> output)
+        {
+            if (output == null)
+            {
+                throw new ArgumentNullException(nameof(output));
+            }
+
+            output.Clear();
+            if (output.Capacity < m_Cells.Count)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < m_Cells.Count; index++)
+            {
+                output.Add(layout.HexToWorld(m_Cells[index].Coordinate));
+            }
+
+            return true;
+        }
+
+        internal void BeginSearch()
+        {
+            m_Cells.Clear();
+            m_Status = PathResultStatus.InvalidInput;
+            m_Reason = PathFailureReason.None;
+            m_ReachedTarget = default(HexCell);
+            m_Cost = 0;
+        }
+
+        internal bool TryAddCell(HexCell cell)
+        {
+            if (m_Cells.Count >= m_Cells.Capacity)
+            {
+                return false;
+            }
+
+            m_Cells.Add(cell);
+            return true;
+        }
+
+        internal void ReverseCells()
+        {
+            m_Cells.Reverse();
+        }
+
+        internal void SetSuccess(HexCell reachedTarget)
+        {
+            m_Status = PathResultStatus.Success;
+            m_Reason = PathFailureReason.None;
+            m_ReachedTarget = reachedTarget;
+            m_Cost = m_Cells.Count - 1;
+        }
+
+        internal void SetFailure(PathResultStatus status, PathFailureReason reason)
+        {
+            m_Cells.Clear();
+            m_Status = status;
+            m_Reason = reason;
+            m_ReachedTarget = default(HexCell);
+            m_Cost = 0;
         }
     }
 }
