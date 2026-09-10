@@ -47,7 +47,6 @@ namespace HexMap.Gvg
     {
         private readonly int m_PlotId;
         private readonly IReadOnlyList<HexCell> m_Cells;
-        private readonly HexCell m_RepresentativeCell;
         private readonly PlotType m_PlotType;
         private readonly PlotState m_PlotState;
         private readonly FactionId m_OwnerFaction;
@@ -57,21 +56,18 @@ namespace HexMap.Gvg
         public Plot(
             int plotId,
             IReadOnlyList<HexCell> cells,
-            HexCell representativeCell,
             PlotType plotType,
             PlotState plotState,
             FactionId ownerFaction,
             OwnershipMode ownershipMode,
             BlockingState blockingState)
         {
-            if (plotId < 0) throw new ArgumentOutOfRangeException(nameof(plotId));
             if (cells == null) throw new ArgumentNullException(nameof(cells));
             if (cells.Count == 0) throw new ArgumentException("A Plot must contain at least one cell.", nameof(cells));
 
             var copiedCells = new List<HexCell>(cells.Count);
             var cellIds = new HashSet<int>();
             var coordinates = new HashSet<HexMap.Core.HexCoord>();
-            var containsRepresentative = false;
 
             for (var index = 0; index < cells.Count; index++)
             {
@@ -82,15 +78,6 @@ namespace HexMap.Gvg
                 }
 
                 copiedCells.Add(cell);
-                if (cell.Id == representativeCell.Id && cell.Coordinate == representativeCell.Coordinate)
-                {
-                    containsRepresentative = true;
-                }
-            }
-
-            if (!containsRepresentative)
-            {
-                throw new ArgumentException("The representative cell must belong to the Plot.", nameof(representativeCell));
             }
 
             if (plotType == PlotType.Obstacle && blockingState != BlockingState.Blocked)
@@ -99,8 +86,7 @@ namespace HexMap.Gvg
             }
 
             m_PlotId = plotId;
-            m_Cells = copiedCells.AsReadOnly();
-            m_RepresentativeCell = representativeCell;
+            m_Cells = new ReadOnlyCollection<HexCell>(copiedCells);
             m_PlotType = plotType;
             m_PlotState = plotState;
             m_OwnerFaction = ownerFaction;
@@ -110,7 +96,6 @@ namespace HexMap.Gvg
 
         public int PlotId { get { return m_PlotId; } }
         public IReadOnlyList<HexCell> Cells { get { return m_Cells; } }
-        public HexCell RepresentativeCell { get { return m_RepresentativeCell; } }
         public PlotType PlotType { get { return m_PlotType; } }
         public PlotState PlotState { get { return m_PlotState; } }
         public FactionId OwnerFaction { get { return m_OwnerFaction; } }

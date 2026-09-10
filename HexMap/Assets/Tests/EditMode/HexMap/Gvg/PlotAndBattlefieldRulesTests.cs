@@ -17,7 +17,7 @@ namespace HexMap.Gvg.Tests
             var map = new RuntimeHexMap(new HexMapDefinition(1));
             var firstCell = CellAt(map, 0, 0);
             var secondCell = CellAt(map, 1, 0);
-            var plot = CreatePlot(1, new[] { firstCell, secondCell }, firstCell);
+            var plot = CreatePlot(1, new[] { firstCell, secondCell });
             var registry = new PlotRegistry(map, new[] { plot });
 
             Plot found;
@@ -31,24 +31,22 @@ namespace HexMap.Gvg.Tests
         {
             var map = new RuntimeHexMap(new HexMapDefinition(1));
             var cell = CellAt(map, 0, 0);
-            var first = CreatePlot(1, new[] { cell }, cell);
-            var second = CreatePlot(2, new[] { cell }, cell);
+            var first = CreatePlot(1, new[] { cell });
+            var second = CreatePlot(2, new[] { cell });
             var registry = new PlotRegistry(map, new[] { first });
 
             Assert.Throws<ArgumentException>(() => registry.Add(second));
         }
 
         [Test]
-        public void PlotRejectsInvalidRepresentativeAndPassableObstacle()
+        public void PlotRejectsDuplicateCellsAndPassableObstacle()
         {
             var map = new RuntimeHexMap(new HexMapDefinition(1));
             var cell = CellAt(map, 0, 0);
-            var otherCell = CellAt(map, 1, 0);
 
             Assert.Throws<ArgumentException>(() => new Plot(
                 1,
-                new[] { cell },
-                otherCell,
+                new[] { cell, cell },
                 PlotType.Normal,
                 PlotState.Open,
                 FactionId.Neutral,
@@ -58,12 +56,20 @@ namespace HexMap.Gvg.Tests
             Assert.Throws<ArgumentException>(() => new Plot(
                 2,
                 new[] { cell },
-                cell,
                 PlotType.Obstacle,
                 PlotState.Open,
                 FactionId.Neutral,
                 OwnershipMode.Capturable,
                 BlockingState.Passable));
+        }
+
+        [Test]
+        public void PlotAllowsNegativePlotIdsForAuthoringGeneratedMultiCellPlots()
+        {
+            var map = new RuntimeHexMap(new HexMapDefinition(1));
+            var plot = CreatePlot(-1, new[] { CellAt(map, 0, 0), CellAt(map, 1, 0) });
+
+            Assert.That(plot.PlotId, Is.EqualTo(-1));
         }
 
         [Test]
@@ -77,11 +83,11 @@ namespace HexMap.Gvg.Tests
             var closed = CellAt(map, -1, 1);
             var plots = new[]
             {
-                CreatePlot(1, new[] { own }, own, FactionId.Red),
-                CreatePlot(2, new[] { enemy }, enemy, FactionId.Blue),
-                CreatePlot(3, new[] { fixedEnemy }, fixedEnemy, FactionId.Blue, OwnershipMode.Fixed),
-                CreatePlot(4, new[] { blocked }, blocked, FactionId.Red, OwnershipMode.Capturable, BlockingState.Blocked),
-                CreatePlot(5, new[] { closed }, closed, FactionId.Red, OwnershipMode.Capturable, BlockingState.Passable, PlotState.NotOpened)
+                CreatePlot(1, new[] { own }, FactionId.Red),
+                CreatePlot(2, new[] { enemy }, FactionId.Blue),
+                CreatePlot(3, new[] { fixedEnemy }, FactionId.Blue, OwnershipMode.Fixed),
+                CreatePlot(4, new[] { blocked }, FactionId.Red, OwnershipMode.Capturable, BlockingState.Blocked),
+                CreatePlot(5, new[] { closed }, FactionId.Red, OwnershipMode.Capturable, BlockingState.Passable, PlotState.NotOpened)
             };
             var policy = new PlotPathPolicy(new PlotRegistry(map, plots), FactionId.Red);
 
@@ -106,7 +112,7 @@ namespace HexMap.Gvg.Tests
             var targetCellB = CellAt(map, 1, -1);
             var plots = new List<Plot>
             {
-                CreatePlot(1, new[] { startCell }, startCell, FactionId.Red)
+                CreatePlot(1, new[] { startCell }, FactionId.Red)
             };
             var nextId = 2;
             for (var index = 0; index < map.Cells.Count; index++)
@@ -114,13 +120,12 @@ namespace HexMap.Gvg.Tests
                 var cell = map.Cells[index];
                 if (cell.Id == startCell.Id || cell.Id == targetCellA.Id || cell.Id == targetCellB.Id)
                     continue;
-                plots.Add(CreatePlot(nextId++, new[] { cell }, cell, FactionId.Red));
+                plots.Add(CreatePlot(nextId++, new[] { cell }, FactionId.Red));
             }
 
             plots.Add(CreatePlot(
                 99,
                 new[] { targetCellA, targetCellB },
-                targetCellA,
                 FactionId.Blue));
 
             var registry = new PlotRegistry(map, plots);
@@ -141,7 +146,6 @@ namespace HexMap.Gvg.Tests
             var plot = CreatePlot(
                 1,
                 new[] { cell },
-                cell,
                 FactionId.Blue,
                 OwnershipMode.Fixed,
                 BlockingState.Passable,
@@ -159,7 +163,6 @@ namespace HexMap.Gvg.Tests
         private static Plot CreatePlot(
             int id,
             IReadOnlyList<HexCell> cells,
-            HexCell representative,
             FactionId owner = FactionId.Neutral,
             OwnershipMode ownershipMode = OwnershipMode.Capturable,
             BlockingState blockingState = BlockingState.Passable,
@@ -168,7 +171,6 @@ namespace HexMap.Gvg.Tests
             return new Plot(
                 id,
                 cells,
-                representative,
                 PlotType.Normal,
                 state,
                 owner,

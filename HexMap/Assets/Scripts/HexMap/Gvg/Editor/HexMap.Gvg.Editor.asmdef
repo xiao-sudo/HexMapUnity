@@ -1,0 +1,20 @@
+{
+  "name": "HexMap.Gvg.Editor",
+  "rootNamespace": "HexMap.Gvg.Editor",
+  "references": [
+    "HexMap.Core",
+    "HexMap.Runtime",
+    "HexMap.Gvg"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
