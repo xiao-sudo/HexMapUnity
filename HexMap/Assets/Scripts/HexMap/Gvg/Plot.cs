@@ -99,7 +99,7 @@ namespace HexMap.Gvg
             }
 
             m_PlotId = plotId;
-            m_Cells = new ReadOnlyCollection<HexCell>(copiedCells);
+            m_Cells = copiedCells.AsReadOnly();
             m_RepresentativeCell = representativeCell;
             m_PlotType = plotType;
             m_PlotState = plotState;

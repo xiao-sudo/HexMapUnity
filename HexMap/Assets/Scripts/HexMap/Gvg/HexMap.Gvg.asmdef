@@ -1,16 +1,17 @@
 {
-  "name": "HexMap.Gvg",
-  "rootNamespace": "HexMap.Gvg",
-  "references": [
-    "HexMap.Runtime"
-  ],
-  "includePlatforms": [],
-  "excludePlatforms": [],
-  "allowUnsafeCode": false,
-  "overrideReferences": false,
-  "precompiledReferences": [],
-  "autoReferenced": true,
-  "defineConstraints": [],
-  "versionDefines": [],
-  "noEngineReferences": false
+    "name": "HexMap.Gvg",
+    "rootNamespace": "HexMap.Gvg",
+    "references": [
+        "HexMap.Runtime",
+        "HexMap.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }
