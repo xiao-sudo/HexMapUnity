@@ -136,3 +136,25 @@ CanEnter(cell)
 - Plot 级阻挡、Obstacle、未生成和未开放 Plot 均不能生成路径。
 - Battle 不产生独立寻路分支；起点 Plot 与目标 Plot 相同返回零步路径。
 - Plot 配置错误在进入通用 HexPathfinder 前被拒绝。
+
+## Amendment from issue 10 authoring design
+
+Issue 10 的地图编辑与导出方案对本 issue 的运行时模型做出以下修正。后续实现应以本 amendment 为准：
+
+- 删除 `RepresentativeCell` 概念。多格 Plot 的所有 Hex 都代表该 Plot 的一部分；路径目标仍然使用 Plot 内全部 Cell。
+- 如果表现层需要 Plot 锚点，应从 Plot 内所有 Hex 的世界中心派生，例如几何平均点或包围中心，而不是配置代表格。
+- `Plot` 构造函数不再接收 representative cell，改为：
+
+```text
+Plot(
+    int plotId,
+    IReadOnlyList<HexCell> cells,
+    PlotType plotType,
+    PlotState plotState,
+    FactionId ownerFaction,
+    OwnershipMode ownershipMode,
+    BlockingState blockingState)
+```
+
+- 运行时 `Plot` 允许负数 `PlotId`，唯一性仍由 `PlotRegistry` 保证。
+- Authoring 层采用编号约定：单格 Plot 的 `PlotId` 等于唯一 Cell 的 `HexId`；多格 Plot 使用负数 `PlotId`，从 `-1` 开始递减。该编号约定由 authoring/export validator 强制，不要求通用运行时 `Plot` 构造函数理解 authoring 规则。
