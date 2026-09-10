@@ -394,3 +394,215 @@ public bool CanEnter(HexCell cell)
 6. 将策略回调内部的分配与寻路器自身分配分开。
 
 预热后的核心寻路和使用预分配输出 List 的世界坐标转换应当不产生托管内存分配。首次构造、泛型初始化和容量准备不属于稳定热路径测量。
+
+## FindPathCore 核心算法示例
+
+FindPathCore 是一个多起点、多目标的 BFS。Hex 地图中每次移动到相邻 Cell 的代价都是 1，因此 BFS 按距离逐层扩展，可以得到步数最少的可进入目标。
+
+### 参数与职责
+
+~~~csharp
+FindPathCore(
+    IReadOnlyList<HexCell> starts,
+    IReadOnlyList<HexCell> targets,
+    IHexPathPolicy policy,
+    PathResult result)
+~~~
+
+- starts：一个或多个 BFS 根节点；合法起点的距离都初始化为 0。
+- targets：候选目标坐标集合；地图外或 Cell Id 不匹配的目标会被过滤。
+- policy.CanPass(cell)：判断非目标 Cell 是否可以作为中间节点。
+- policy.CanEnter(cell)：判断目标 Cell 是否可以作为最终终点。
+- result：调用方提供并复用的输出对象。
+- PathSearchWorkspace：复用 Parents、Distances、Pending 等搜索容器，不在热路径中反复创建集合。
+
+### 执行流程
+
+1. 清空上一次搜索的结果和工作区内容。
+2. 校验起点，去重后将所有合法起点以距离 0 入队。
+3. 校验目标并按坐标去重。
+4. 如果合法起点已经是目标，直接返回一条只包含该 Cell 的零成本路径。
+5. 从队列中取出当前 Cell，按固定的六邻居方向顺序展开。
+6. 地图外邻居直接跳过。
+7. 目标邻居只调用 CanEnter，记录父节点，但不进入队列。
+8. 非目标邻居调用 CanPass；通过后记录距离和父节点并入队。
+9. 在所有可进入目标中选择距离最短者；距离相同则按 Q、R 词典序选择。
+10. 从选中的目标沿 Parents 反向回溯到起点，最后反转结果列表。
+
+核心伪代码：
+
+~~~text
+把所有合法起点加入队列，距离均为 0
+
+while 队列不为空:
+    current = 出队
+    currentDistance = distance[current]
+
+    如果 currentDistance >= 当前最佳目标距离:
+        跳过展开
+
+    对 current 的六个邻居:
+        地图外 -> 跳过
+
+        如果邻居是目标:
+            只调用 CanEnter
+            允许进入 -> 更新最佳目标和 Parents
+            不把目标加入队列
+            continue
+
+        已访问 -> 跳过
+        CanPass=false -> 跳过
+
+        distance[neighbor] = currentDistance + 1
+        Parents[neighbor] = current
+        邻居入队
+~~~
+
+### 具体例子
+
+假设关键 Cell 如下：
+
+~~~text
+起点 S      = (-1, 0)
+中间 Cell M = ( 0, 0)
+目标 T1     = ( 1, 0)
+目标 T2     = ( 1,-1)
+~~~
+
+并且：
+
+~~~text
+CanPass(M)   = true
+CanEnter(T1) = true
+CanEnter(T2) = true
+~~~
+
+相邻关系可以画成：
+
+~~~text
+                         T2 (1,-1)
+                        /
+                       /
+S (-1,0) ───────── M (0,0) ───────── T1 (1,0)
+~~~
+
+BFS 分层：
+
+~~~text
+距离 0：
+    S (-1,0)
+
+距离 1：
+    M (0,0)
+
+距离 2：
+    T1 (1,0)
+    T2 (1,-1)
+~~~
+
+因此两个目标的路径长度相同：
+
+~~~text
+S -> M -> T1    cost = 2
+S -> M -> T2    cost = 2
+~~~
+
+目标裁决比较坐标：
+
+~~~text
+T1 = (1,  0)
+T2 = (1, -1)
+~~~
+
+两者 Q 都是 1，继续比较 R：
+
+~~~text
+-1 < 0
+~~~
+
+所以最终选择：
+
+~~~text
+T2 (1,-1)
+~~~
+
+结果路径为：
+
+~~~text
+(-1,0) -> (0,0) -> (1,-1)
+~~~
+
+~~~text
+PathResult.Cells = [S, M, T2]
+PathResult.Cost = 2
+PathResult.ReachedTarget = T2
+~~~
+
+### CanPass 和 CanEnter 的边界
+
+目标 Cell 与普通中间 Cell 的处理是有意分开的：
+
+~~~text
+起点：
+    不调用 CanPass
+
+普通中间 Cell：
+    调用 CanPass
+
+目标 Cell：
+    只调用 CanEnter
+    不调用 CanPass
+    不进入 BFS 队列
+~~~
+
+因此，一个目标被 CanEnter 拒绝后，不能退化为普通中间 Cell 继续穿过；它既不能作为终点，也不能作为路径中转点。
+
+### 父节点回溯
+
+搜索过程中保存的是“当前节点从哪里来”：
+
+~~~text
+Parents[M]  = S
+Parents[T2] = M
+~~~
+
+选中 T2 后，BuildPath 先得到逆序链：
+
+~~~text
+T2 -> M -> S
+~~~
+
+再反转为正常移动顺序：
+
+~~~text
+S -> M -> T2
+~~~
+
+目标不会写入 Distances，因为目标是终点，不需要继续展开；目标的父节点链接已经足够重建路径。FindRootFor 通过 Parents 链回溯到没有父节点的根，再确认该根属于传入的合法起点集合。
+
+### 多起点行为
+
+如果存在多个合法起点：
+
+~~~text
+S1、S2、S3
+~~~
+
+它们都会以距离 0 入队：
+
+~~~text
+Distances[S1] = 0
+Distances[S2] = 0
+Distances[S3] = 0
+~~~
+
+搜索等价于从多个根同时扩散，最终选择距离任意起点最近的可进入目标。目标距离相同的情况下，仍然使用目标坐标的 Q、R 顺序裁决。
+
+### 维护者约束
+
+- 保持每条邻接边的代价为 1；如果未来加入地形代价，当前 BFS 不再适用，需要重新设计带权搜索。
+- 普通 Cell 的通行规则放在 IHexPathPolicy.CanPass 中，不要把 GVG、阵营或单位类型硬编码进 HexPathfinder。
+- 目标的最终进入规则放在 IHexPathPolicy.CanEnter 中。
+- 不要把目标加入 Pending，否则目标会被当作中间 Cell 继续扩展。
+- PathSearchWorkspace 和 PathResult 属于调用方；同一个工作区和结果对象不能被并发搜索或重入使用。
+- 修改目标裁决、父节点或结果生命周期后，应同步更新 HexMap.Runtime.Tests.EditMode 中对应的 EditMode 测试。
