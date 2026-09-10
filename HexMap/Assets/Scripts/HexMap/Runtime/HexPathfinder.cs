@@ -157,7 +157,7 @@ namespace HexMap.Runtime
             }
 
             HexCell chosenStart;
-            if (!FindRootFor(bestTarget, starts, distances, out chosenStart))
+            if (!FindRootFor(bestTarget, starts, out chosenStart))
             {
                 result.SetFailure(PathResultStatus.NoPath, PathFailureReason.NoReachableTarget);
                 return result;
@@ -182,11 +182,10 @@ namespace HexMap.Runtime
         private bool FindRootFor(
             HexCoord target,
             IReadOnlyList<HexCell> starts,
-            Dictionary<HexCoord, int> distances,
             out HexCell root)
         {
             var current = target;
-            while (distances.ContainsKey(current))
+            while (m_Workspace.Parents.ContainsKey(current))
             {
                 var hasParent = m_Workspace.Parents.ContainsKey(current);
                 if (!hasParent)
