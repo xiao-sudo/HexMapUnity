@@ -49,17 +49,48 @@ namespace HexMap.Runtime
     public sealed class ReusablePathRequest
     {
         private HexCell m_Start;
-        private IReadOnlyList<HexCell> m_Targets;
+        private readonly List<HexCell> m_Targets;
         private IHexPathPolicy m_Policy;
 
         public ReusablePathRequest(
             HexCell start,
-            IReadOnlyList<HexCell> targets,
+            int targetCapacity,
             IHexPathPolicy policy)
         {
-            Start = start;
-            Targets = targets;
-            Policy = policy;
+            if (targetCapacity < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(targetCapacity));
+            }
+
+            if (policy == null)
+            {
+                throw new ArgumentNullException(nameof(policy));
+            }
+
+            m_Start = start;
+            m_Targets = new List<HexCell>(targetCapacity);
+            m_Policy = policy;
+        }
+
+        public ReusablePathRequest(
+            HexCell start,
+            List<HexCell> targetBuffer,
+            IHexPathPolicy policy)
+        {
+            if (targetBuffer == null)
+            {
+                throw new ArgumentNullException(nameof(targetBuffer));
+            }
+
+            if (policy == null)
+            {
+                throw new ArgumentNullException(nameof(policy));
+            }
+
+            m_Start = start;
+            m_Targets = targetBuffer;
+            m_Targets.Clear();
+            m_Policy = policy;
         }
 
         public HexCell Start
@@ -71,15 +102,16 @@ namespace HexMap.Runtime
         public IReadOnlyList<HexCell> Targets
         {
             get { return m_Targets; }
-            set
-            {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+        }
 
-                m_Targets = value;
-            }
+        public int TargetCount
+        {
+            get { return m_Targets.Count; }
+        }
+
+        public int TargetCapacity
+        {
+            get { return m_Targets.Capacity; }
         }
 
         public IHexPathPolicy Policy
@@ -94,6 +126,22 @@ namespace HexMap.Runtime
 
                 m_Policy = value;
             }
+        }
+
+        public void ClearTargets()
+        {
+            m_Targets.Clear();
+        }
+
+        public bool TryAddTarget(HexCell target)
+        {
+            if (m_Targets.Count >= m_Targets.Capacity)
+            {
+                return false;
+            }
+
+            m_Targets.Add(target);
+            return true;
         }
     }
 }

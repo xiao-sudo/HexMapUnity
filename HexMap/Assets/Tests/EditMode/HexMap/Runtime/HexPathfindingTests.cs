@@ -336,22 +336,23 @@ namespace HexMap.Runtime.Tests
             var start = CellAt(map, 0, 0);
             var firstTarget = CellAt(map, 1, 0);
             var secondTarget = CellAt(map, 2, 0);
-            var targets = new List<HexCell> { firstTarget };
             var request = new ReusablePathRequest(
                 start,
-                targets,
+                1,
                 new DelegatePathPolicy(
                     (cell, context) => true,
                     (cell, context) => true,
                     null));
+            Assert.That(request.TryAddTarget(firstTarget), Is.True);
+
             var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
             var result = new PathResult(new List<HexCell>(map.Count));
 
             pathfinder.FindPath(request, result);
             AssertSuccess(result, firstTarget, 1);
 
-            targets.Clear();
-            targets.Add(secondTarget);
+            request.ClearTargets();
+            Assert.That(request.TryAddTarget(secondTarget), Is.True);
             pathfinder.FindPath(request, result);
             AssertSuccess(result, secondTarget, 2);
         }
@@ -364,11 +365,13 @@ namespace HexMap.Runtime.Tests
             var target = CellAt(map, 1, 0);
             var request = new ReusablePathRequest(
                 start,
-                new[] { target },
+                1,
                 new DelegatePathPolicy(
                     (cell, context) => true,
                     (cell, context) => true,
                     null));
+            Assert.That(request.TryAddTarget(target), Is.True);
+
             var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
             var result = new PathResult(new List<HexCell>(0));
 

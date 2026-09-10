@@ -22,7 +22,7 @@
 - Assets/Scripts/HexMap/Runtime/HexCell.cs：定义 Cell 的稳定身份。目前 Cell 只有 Id 和 Coordinate，不包含阵营或阻挡等玩法状态。
 - Assets/Scripts/HexMap/Runtime/HexPathfinder.cs：绑定一张 HexMap 和一个 PathSearchWorkspace，执行同步 BFS 寻路并填充 PathResult。
 - Assets/Scripts/HexMap/Runtime/PathSearchWorkspace.cs：持有一次性创建、跨搜索复用的 Dictionary、HashSet 和 Queue。
-- Assets/Scripts/HexMap/Runtime/PathRequest.cs：包含防御性复制目标列表的 PathRequest，以及直接引用调用者目标列表的 ReusablePathRequest。
+- Assets/Scripts/HexMap/Runtime/PathRequest.cs：包含防御性复制目标列表的 PathRequest，以及内部拥有并复用目标 List 的 ReusablePathRequest。
 - Assets/Scripts/HexMap/Runtime/IHexPathPolicy.cs：寻路规则扩展 seam，提供 CanPass 和 CanEnter。
 - Assets/Scripts/HexMap/Runtime/PathResult.cs：持有调用者提供的路径 List，保存当前搜索状态，并提供世界中心点输出。
 - Assets/Tests/EditMode/HexMap/Runtime/HexPathfindingTests.cs：验证通用寻路语义、结果复用、输出容量和世界坐标 List 复用。
@@ -55,7 +55,7 @@ PathSearchWorkspace 和 PathResult 都由调用者持有。它们不能在同一
 HexPathfinder 提供两个入口：
 
 - FindPath(PathRequest, PathResult)：请求构造时复制目标列表，适合需要快照语义的调用；
-- FindPath(ReusablePathRequest, PathResult)：直接读取调用者的目标列表，适合重复搜索。
+- FindPath(ReusablePathRequest, PathResult)：读取 request 内部复用的目标 List，适合重复搜索。目标通过 ClearTargets 和 TryAddTarget 更新，不需要外围每次创建数组或 List。
 
 两个入口最终进入同一个搜索核心。寻路器不创建新的 PathResult，而是清空并填充调用者传入的结果对象。
 
@@ -192,7 +192,7 @@ HexMap 构造阶段使用直接 q/r 嵌套循环，不使用 yield return 迭代
 
 PathRequest 在构造时复制目标列表，适合快照语义。
 
-ReusablePathRequest 直接引用调用者目标列表，适合动态重算。它只能在两次搜索之间更新；搜索期间必须保持 Start、Targets 和 Policy 稳定。
+ReusablePathRequest 内部持有可复用的 List<HexCell>。初始化时指定目标容量，之后通过 ClearTargets 和 TryAddTarget 更新目标；TryAddTarget 在容量不足时返回 false，不允许自动扩容。它只能在两次搜索之间更新；搜索期间必须保持 Start、Targets 和 Policy 稳定。若业务已经持有长期复用的 List，也可以通过接收 List<HexCell> 的构造入口把该缓冲区交给 request。
 
 PathResult 和内部路径 List 由调用者创建并复用，下一次搜索会覆盖上一次结果。需要持久路线时必须显式复制。
 
@@ -335,7 +335,7 @@ public bool CanEnter(HexCell cell)
 - 不要在 CanPass 或 CanEnter 中修改地图、修改影响后续判断的策略状态，或重入同一个寻路器。
 - 不要把 GVG、阵营、公会、地块或战斗分支硬编码进 HexPathfinder。
 - 不要把 HexCell 的稳定身份与动态玩法状态混为一谈。
-- ReusablePathRequest 的输入只能在两次搜索之间更新。
+- ReusablePathRequest 的 Start、目标 List 和 Policy 只能在两次搜索之间更新；目标应通过 ClearTargets 和 TryAddTarget 管理，不要在每次搜索外围创建新的数组或 List。
 - PathResult 会被下一次搜索覆盖，需要持久数据时必须显式复制。
 - 世界坐标属于派生表现数据，不要缓存到寻路核心结果。
 - 新增 HexMap Runtime 私有和实例字段时使用 m_ 前缀。
