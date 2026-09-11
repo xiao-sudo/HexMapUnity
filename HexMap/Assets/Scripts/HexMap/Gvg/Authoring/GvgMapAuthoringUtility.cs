@@ -350,6 +350,8 @@ namespace HexMap.Gvg.Authoring
         {
             if (plots == null) throw new ArgumentNullException(nameof(plots));
             var usedIds = new HashSet<int>();
+            var preservedMultiPlots = new HashSet<GvgPlotAuthoringData>();
+            var preservedMultiPlotIds = new HashSet<int>();
             for (var index = 0; index < plots.Count; index++)
             {
                 var plot = plots[index];
@@ -361,12 +363,21 @@ namespace HexMap.Gvg.Authoring
             for (var index = 0; index < plots.Count; index++)
             {
                 var plot = plots[index];
+                if (plot == null || plot.HexIds == null || plot.HexIds.Count <= 1 || plot.PlotId >= 0) continue;
+                if (!preservedMultiPlotIds.Add(plot.PlotId)) continue;
+                preservedMultiPlots.Add(plot);
+            }
+
+            foreach (var plotId in preservedMultiPlotIds)
+            {
+                usedIds.Add(plotId);
+            }
+
+            for (var index = 0; index < plots.Count; index++)
+            {
+                var plot = plots[index];
                 if (plot == null || plot.HexIds == null || plot.HexIds.Count <= 1) continue;
-                if (plot.PlotId < 0 && !usedIds.Contains(plot.PlotId))
-                {
-                    usedIds.Add(plot.PlotId);
-                    continue;
-                }
+                if (preservedMultiPlots.Contains(plot)) continue;
 
                 plot.PlotId = AllocateNegativePlotId(usedIds);
                 usedIds.Add(plot.PlotId);

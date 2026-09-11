@@ -96,6 +96,29 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
+        public void MergingAnotherPlotDoesNotRenumberExistingMultiCellPlot()
+        {
+            var asset = CreateAsset(1);
+            try
+            {
+                GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
+                Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, 5, new[] { 6 }), Is.True);
+                var existingMultiPlotId = FindPlotContainingHex(asset, 5).PlotId;
+
+                Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, 0, new[] { 1 }), Is.True);
+
+                Assert.That(FindPlotContainingHex(asset, 5).PlotId, Is.EqualTo(existingMultiPlotId));
+                Assert.That(FindPlotContainingHex(asset, 6).PlotId, Is.EqualTo(existingMultiPlotId));
+                Assert.That(FindPlotContainingHex(asset, 0).PlotId, Is.Not.EqualTo(existingMultiPlotId));
+                Assert.That(GvgMapAuthoringUtility.Validate(asset).IsValid, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+        [Test]
         public void RebuildRadiusExpandsAndShrinksCoverage()
         {
             var asset = CreateAsset(1);
@@ -223,6 +246,13 @@ namespace HexMap.Gvg.Tests
         private static GvgPlotAuthoringData FindPlot(GvgMapAuthoringAsset asset, int plotId)
         {
             var plot = asset.Plots.FirstOrDefault(candidate => candidate.PlotId == plotId);
+            Assert.That(plot, Is.Not.Null);
+            return plot;
+        }
+
+        private static GvgPlotAuthoringData FindPlotContainingHex(GvgMapAuthoringAsset asset, int hexId)
+        {
+            var plot = asset.Plots.FirstOrDefault(candidate => candidate.HexIds.Contains(hexId));
             Assert.That(plot, Is.Not.Null);
             return plot;
         }

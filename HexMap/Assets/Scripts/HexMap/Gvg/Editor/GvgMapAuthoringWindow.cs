@@ -18,7 +18,7 @@ namespace HexMap.Gvg.Editor
             PaintRemove
         }
 
-        private static readonly GUIStyle m_LabelStyle = CreateLabelStyle();
+        private GUIStyle m_LabelStyle;
         private readonly List<int> m_SelectedHexIds = new List<int>();
         private GvgMapAuthoringAsset m_Asset;
         private ToolMode m_Mode;
@@ -38,6 +38,7 @@ namespace HexMap.Gvg.Editor
 
         private void OnEnable()
         {
+            m_LabelStyle = CreateLabelStyle();
             SceneView.duringSceneGui += OnSceneGui;
         }
 
@@ -363,7 +364,7 @@ namespace HexMap.Gvg.Editor
 
         private static GUIStyle CreateLabelStyle()
         {
-            var style = new GUIStyle(EditorStyles.boldLabel);
+            var style = new GUIStyle();
             style.alignment = TextAnchor.MiddleCenter;
             style.normal.textColor = Color.white;
             return style;
