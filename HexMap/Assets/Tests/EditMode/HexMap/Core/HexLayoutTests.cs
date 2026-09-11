@@ -104,6 +104,79 @@ namespace HexMap.Core.Tests
         }
 
         [Test]
+        public void SecondaryScaleChangesTheSecondaryAxisForEveryOrientationAndPlane()
+        {
+            const float scale = 0.75f;
+            const float radius = 2f;
+
+            foreach (HexOrientation orientation in Enum.GetValues(typeof(HexOrientation)))
+            {
+                foreach (HexPlane plane in Enum.GetValues(typeof(HexPlane)))
+                {
+                    var layout = new HexLayout(orientation, plane, radius, Vector3.zero, scale);
+                    var world = layout.HexToWorld(new HexCoord(0, 1));
+                    var expectedSecondary = orientation == HexOrientation.Pointy
+                        ? radius * 1.5f * scale
+                        : radius * Mathf.Sqrt(3f) * scale;
+                    var actualSecondary = plane == HexPlane.XY ? world.y : world.z;
+
+                    Assert.That(actualSecondary, Is.EqualTo(expectedSecondary).Within(0.00001f),
+                        string.Format("{0}/{1} secondary axis", orientation, plane));
+                    Assert.That(plane == HexPlane.XY ? world.z : world.y, Is.EqualTo(0f).Within(0.00001f));
+                }
+            }
+        }
+
+        [Test]
+        public void ScaledLayoutsRoundTripHexCentersForEveryOrientationAndPlane()
+        {
+            var coordinates = new[]
+            {
+                new HexCoord(0, 0),
+                new HexCoord(1, 0),
+                new HexCoord(1, -1),
+                new HexCoord(-2, 3),
+                new HexCoord(4, -5),
+                new HexCoord(-3, -2)
+            };
+
+            foreach (HexOrientation orientation in Enum.GetValues(typeof(HexOrientation)))
+            {
+                foreach (HexPlane plane in Enum.GetValues(typeof(HexPlane)))
+                {
+                    var layout = new HexLayout(
+                        orientation,
+                        plane,
+                        2.75f,
+                        new Vector3(10f, 20f, 30f),
+                        0.8f
+                        );
+
+                    foreach (var coordinate in coordinates)
+                    {
+                        Assert.That(
+                            layout.WorldToHex(layout.HexToWorld(coordinate)),
+                            Is.EqualTo(coordinate),
+                            string.Format("{0}/{1} failed for {2}.", orientation, plane, coordinate));
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void NonPositiveOrNonFiniteSecondaryScaleIsRejected()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new HexLayout(HexOrientation.Pointy, HexPlane.XY, 1f, Vector3.zero, 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new HexLayout(HexOrientation.Pointy, HexPlane.XY, 1f, Vector3.zero, -1f));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new HexLayout(HexOrientation.Pointy, HexPlane.XY, 1f, Vector3.zero, float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new HexLayout(HexOrientation.Pointy, HexPlane.XY, 1f, Vector3.zero, float.PositiveInfinity));
+        }
+
+        [Test]
         public void NonPositiveOrNonFiniteRadiusIsRejected()
         {
             Assert.Throws<ArgumentOutOfRangeException>(

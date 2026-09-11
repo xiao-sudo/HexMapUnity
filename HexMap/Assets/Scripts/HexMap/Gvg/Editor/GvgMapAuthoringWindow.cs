@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using HexMap.Core;
@@ -91,6 +91,7 @@ namespace HexMap.Gvg.Editor
             var orientation = (HexOrientation)EditorGUILayout.EnumPopup("Orientation", m_Asset.Orientation);
             var plane = (HexPlane)EditorGUILayout.EnumPopup("Plane", m_Asset.Plane);
             var outerRadius = EditorGUILayout.FloatField("Outer Radius", m_Asset.OuterRadius);
+            var secondaryScale = EditorGUILayout.FloatField("Secondary Scale", m_Asset.SecondaryScale);
             if (EditorGUI.EndChangeCheck())
             {
                 Undo.RecordObject(m_Asset, "Edit GVG Map Settings");
@@ -98,6 +99,7 @@ namespace HexMap.Gvg.Editor
                 m_Asset.Orientation = orientation;
                 m_Asset.Plane = plane;
                 if (outerRadius > 0f) m_Asset.OuterRadius = outerRadius;
+                if (secondaryScale > 0f) m_Asset.SecondaryScale = secondaryScale;
                 EditorUtility.SetDirty(m_Asset);
                 SceneView.RepaintAll();
             }
@@ -488,7 +490,13 @@ namespace HexMap.Gvg.Editor
             try
             {
                 map = m_Asset.CreateRuntimeMap();
-                layout = new HexLayout(m_Asset.Orientation, m_Asset.Plane, m_Asset.OuterRadius, Vector3.zero);
+                layout = new HexLayout(
+                    m_Asset.Orientation,
+                    m_Asset.Plane,
+                    m_Asset.OuterRadius,
+                    Vector3.zero,
+                    m_Asset.SecondaryScale
+                    );
                 return true;
             }
             catch (Exception)
@@ -526,7 +534,7 @@ namespace HexMap.Gvg.Editor
             {
                 var angle = (angleOffset + index * 60f) * Mathf.Deg2Rad;
                 var x = Mathf.Cos(angle) * layout.OuterRadius;
-                var secondary = Mathf.Sin(angle) * layout.OuterRadius;
+                var secondary = Mathf.Sin(angle) * layout.OuterRadius * layout.SecondaryScale;
                 var corner = layout.Plane == HexPlane.XY
                     ? center + new Vector3(x, secondary, 0f)
                     : center + new Vector3(x, 0f, secondary);

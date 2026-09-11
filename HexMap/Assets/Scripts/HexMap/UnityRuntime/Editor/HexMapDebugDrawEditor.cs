@@ -83,7 +83,7 @@ namespace HexMap.UnityRuntime.Editor
             {
                 var angle = (angleOffset + index * 60f) * Mathf.Deg2Rad;
                 var x = Mathf.Cos(angle) * layout.OuterRadius;
-                var secondary = Mathf.Sin(angle) * layout.OuterRadius;
+                var secondary = Mathf.Sin(angle) * layout.OuterRadius * layout.SecondaryScale;
                 var localCorner = layout.Plane == HexPlane.XY
                     ? center + new Vector3(x, secondary, 0f)
                     : center + new Vector3(x, 0f, secondary);
@@ -128,7 +128,9 @@ namespace HexMap.UnityRuntime.Editor
                     view.Orientation,
                     view.Plane,
                     view.OuterRadius,
-                    view.Origin);
+                    view.Origin,
+                    view.SecondaryScale
+                    );
                 return true;
             }
             catch (ArgumentException)

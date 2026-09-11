@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -68,6 +68,7 @@ namespace HexMap.Gvg.Editor
                 candidate.Orientation = targetAsset.Orientation;
                 candidate.Plane = targetAsset.Plane;
                 candidate.OuterRadius = targetAsset.OuterRadius;
+                candidate.SecondaryScale = targetAsset.SecondaryScale;
                 candidate.ReplacePlots(importedPlots);
                 GvgMapAuthoringUtility.NormalizePlotIds(candidate);
 

@@ -127,7 +127,7 @@ namespace HexMap.UnityRuntime
                 var angle = (m_Layout.Orientation == HexOrientation.Pointy ? 30f : 0f) + index * 60f;
                 var radians = angle * Mathf.Deg2Rad;
                 var x = Mathf.Cos(radians) * m_Layout.OuterRadius;
-                var secondary = Mathf.Sin(radians) * m_Layout.OuterRadius;
+                var secondary = Mathf.Sin(radians) * m_Layout.OuterRadius * m_Layout.SecondaryScale;
                 vertices[index + 1] = m_Layout.Plane == HexPlane.XY
                     ? new Vector3(x, secondary, 0f)
                     : new Vector3(x, 0f, secondary);

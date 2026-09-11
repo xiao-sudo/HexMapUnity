@@ -12,6 +12,7 @@ namespace HexMap.UnityRuntime
         [SerializeField] private HexOrientation m_Orientation = HexOrientation.Pointy;
         [SerializeField] private HexPlane m_Plane = HexPlane.XZ;
         [SerializeField] private float m_OuterRadius = 1f;
+        [SerializeField] private float m_SecondaryScale = 1f;
         [SerializeField] private Vector3 m_Origin;
         [SerializeField] private Material m_CellMaterial;
         [SerializeField] private int m_CellLayer;
@@ -48,6 +49,12 @@ namespace HexMap.UnityRuntime
         {
             get { return m_OuterRadius; }
             set { m_OuterRadius = value; }
+        }
+
+        public float SecondaryScale
+        {
+            get { return m_SecondaryScale; }
+            set { m_SecondaryScale = value; }
         }
 
         public Vector3 Origin
@@ -107,7 +114,13 @@ namespace HexMap.UnityRuntime
             var definition = new HexMapDefinition(m_Radius);
 
             m_Map = new RuntimeHexMap(definition);
-            m_Layout = new HexLayout(m_Orientation, m_Plane, m_OuterRadius, m_Origin);
+            m_Layout = new HexLayout(
+                m_Orientation,
+                m_Plane,
+                m_OuterRadius,
+                m_Origin,
+                m_SecondaryScale
+                );
             var renderConfig = new HexMapRenderConfig(transform, m_CellMaterial, m_CellLayer);
             m_Renderer = new HexMapRenderer(m_Map, m_Layout, renderConfig);
         }

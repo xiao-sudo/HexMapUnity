@@ -21,7 +21,8 @@ namespace HexMap.Core
             HexOrientation orientation,
             HexPlane plane,
             float outerRadius,
-            Vector3 origin)
+            Vector3 origin,
+            float secondaryScale = 1)
         {
             if (!Enum.IsDefined(typeof(HexOrientation), orientation))
             {
@@ -38,6 +39,11 @@ namespace HexMap.Core
                 throw new ArgumentOutOfRangeException(nameof(outerRadius), outerRadius, "Outer radius must be positive and finite.");
             }
 
+            if (!IsFinitePositive(secondaryScale))
+            {
+                throw new ArgumentOutOfRangeException(nameof(secondaryScale), secondaryScale, "Secondary scale must be positive and finite.");
+            }
+
             if (!IsFinite(origin))
             {
                 throw new ArgumentOutOfRangeException(nameof(origin), origin, "Origin must be finite.");
@@ -46,12 +52,14 @@ namespace HexMap.Core
             Orientation = orientation;
             Plane = plane;
             OuterRadius = outerRadius;
+            SecondaryScale = secondaryScale;
             Origin = origin;
         }
 
         public HexOrientation Orientation { get; }
         public HexPlane Plane { get; }
         public float OuterRadius { get; }
+        public float SecondaryScale { get; }
         public Vector3 Origin { get; }
 
         public Vector3 HexToWorld(HexCoord coordinate)
@@ -71,6 +79,8 @@ namespace HexMap.Core
                 x = OuterRadius * 1.5f * coordinate.Q;
                 planeCoordinate = OuterRadius * Mathf.Sqrt(3f) * (coordinate.R + coordinate.Q * 0.5f);
             }
+
+            planeCoordinate *= SecondaryScale;
 
             if (Plane == HexPlane.XY)
             {
@@ -92,6 +102,7 @@ namespace HexMap.Core
             var delta = worldPoint - Origin;
             var x = delta.x;
             var planeCoordinate = Plane == HexPlane.XY ? delta.y : delta.z;
+            planeCoordinate /= SecondaryScale;
 
             float q;
             float r;
@@ -148,6 +159,11 @@ namespace HexMap.Core
             if (!IsFinitePositive(OuterRadius))
             {
                 throw new InvalidOperationException("HexLayout was not initialized with a valid outer radius.");
+            }
+
+            if (!IsFinitePositive(SecondaryScale))
+            {
+                throw new InvalidOperationException("HexLayout was not initialized with a valid secondary scale.");
             }
         }
 

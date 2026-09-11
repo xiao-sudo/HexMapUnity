@@ -30,6 +30,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(mapView.ShowDebugLabels, Is.True);
             Assert.That(mapView.ShowDebugCoordinates, Is.False);
             Assert.That(mapView.ShowDebugBounds, Is.True);
+            Assert.That(mapView.SecondaryScale, Is.EqualTo(1f));
 
             mapView.ShowDebugCoordinates = true;
             Assert.That(mapView.ShowDebugCoordinates, Is.True);
@@ -59,6 +60,19 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(view.Cell.Coordinate, Is.EqualTo(new HexCoord(0, 0)));
             Assert.That(view.IsValid, Is.True);
             Assert.That(mapView.TryGetHexView(new HexCoord(100, 0), out view), Is.False);
+        }
+
+        [Test]
+        public void BuildUsesSecondaryScaleForLayoutGeometry()
+        {
+            m_ViewObject = new GameObject("Hex Map View");
+            var mapView = m_ViewObject.AddComponent<HexMapView>();
+            mapView.SecondaryScale = 0.8f;
+            mapView.Build();
+
+            Assert.That(mapView.Layout.SecondaryScale, Is.EqualTo(0.8f));
+            var world = mapView.Layout.HexToWorld(new HexCoord(0, 1));
+            Assert.That(world.z, Is.EqualTo(1.2f).Within(0.00001f));
         }
 
         [Test]
@@ -104,6 +118,48 @@ namespace HexMap.UnityRuntime.Tests
             var mapView = m_ViewObject.AddComponent<HexMapView>();
 
             Assert.Throws<InvalidOperationException>(() => mapView.Build());
+        }
+
+        [Test]
+        public void RendererAppliesSecondaryScaleToSharedMesh()
+        {
+            var map = new Runtime.HexMap(new HexMapDefinition(1));
+            var parent = new GameObject("Renderer Parent");
+
+            try
+            {
+                var pointyRenderer = new HexMapRenderer(
+                    map,
+                    new HexLayout(HexOrientation.Pointy, HexPlane.XZ, 1f, Vector3.zero, 0.8f),
+                    new HexMapRenderConfig(parent.transform, null, 0));
+                try
+                {
+                    var pointyMesh = parent.GetComponentInChildren<MeshFilter>().sharedMesh;
+                    Assert.That(pointyMesh.vertices[2].z, Is.EqualTo(0.8f).Within(0.00001f));
+                }
+                finally
+                {
+                    pointyRenderer.Dispose();
+                }
+
+                var flatRenderer = new HexMapRenderer(
+                    map,
+                    new HexLayout(HexOrientation.Flat, HexPlane.XZ, 1f, Vector3.zero, 0.8f),
+                    new HexMapRenderConfig(parent.transform, null, 0));
+                try
+                {
+                    var flatMesh = parent.GetComponentInChildren<MeshFilter>().sharedMesh;
+                    Assert.That(flatMesh.vertices[2].z, Is.EqualTo(Mathf.Sin(60f * Mathf.Deg2Rad) * 0.8f).Within(0.00001f));
+                }
+                finally
+                {
+                    flatRenderer.Dispose();
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(parent);
+            }
         }
 
         [Test]

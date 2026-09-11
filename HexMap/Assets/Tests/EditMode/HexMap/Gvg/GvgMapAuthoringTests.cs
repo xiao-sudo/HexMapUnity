@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -30,6 +30,24 @@ namespace HexMap.Gvg.Tests
                 }
 
                 Assert.That(GvgMapAuthoringUtility.Validate(asset).IsValid, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+        [Test]
+        public void SecondaryScaleCanBeConfiguredAndRejectsInvalidValues()
+        {
+            var asset = CreateAsset(0);
+            try
+            {
+                asset.SecondaryScale = 0.8f;
+                Assert.That(asset.SecondaryScale, Is.EqualTo(0.8f));
+
+                Assert.Throws<ArgumentOutOfRangeException>(() => asset.SecondaryScale = 0f);
+                Assert.Throws<ArgumentOutOfRangeException>(() => asset.SecondaryScale = float.NaN);
             }
             finally
             {
