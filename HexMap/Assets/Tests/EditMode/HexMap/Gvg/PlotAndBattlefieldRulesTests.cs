@@ -48,6 +48,7 @@ namespace HexMap.Gvg.Tests
                 1,
                 new[] { cell, cell },
                 PlotType.Normal,
+                PlotGenerationType.Initial,
                 PlotState.Open,
                 FactionId.Neutral,
                 OwnershipMode.Capturable,
@@ -57,6 +58,7 @@ namespace HexMap.Gvg.Tests
                 2,
                 new[] { cell },
                 PlotType.Obstacle,
+                PlotGenerationType.Initial,
                 PlotState.Open,
                 FactionId.Neutral,
                 OwnershipMode.Capturable,
@@ -87,7 +89,7 @@ namespace HexMap.Gvg.Tests
                 CreatePlot(2, new[] { enemy }, FactionId.Blue),
                 CreatePlot(3, new[] { fixedEnemy }, FactionId.Blue, OwnershipMode.Fixed),
                 CreatePlot(4, new[] { blocked }, FactionId.Red, OwnershipMode.Capturable, BlockingState.Blocked),
-                CreatePlot(5, new[] { closed }, FactionId.Red, OwnershipMode.Capturable, BlockingState.Passable, PlotState.NotOpened)
+                CreatePlot(5, new[] { closed }, FactionId.Red, OwnershipMode.Capturable, BlockingState.Passable, PlotState.NotOpen)
             };
             var policy = new PlotPathPolicy(new PlotRegistry(map, plots), FactionId.Red);
 
@@ -139,7 +141,7 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void SameBattlePlotReturnsZeroStepPath()
+        public void SameOpenPlotReturnsZeroStepPath()
         {
             var map = new RuntimeHexMap(new HexMapDefinition(1));
             var cell = CellAt(map, 0, 0);
@@ -149,7 +151,7 @@ namespace HexMap.Gvg.Tests
                 FactionId.Blue,
                 OwnershipMode.Fixed,
                 BlockingState.Passable,
-                PlotState.Battle);
+                PlotState.Open);
             var service = new PlotPathService(new PlotRegistry(map, new[] { plot }));
             var result = new PathResult(new List<HexCell>(1));
 
@@ -166,16 +168,75 @@ namespace HexMap.Gvg.Tests
             FactionId owner = FactionId.Neutral,
             OwnershipMode ownershipMode = OwnershipMode.Capturable,
             BlockingState blockingState = BlockingState.Passable,
-            PlotState state = PlotState.Open)
+            PlotState state = PlotState.Open,
+            PlotGenerationType generationType = PlotGenerationType.Initial)
         {
             return new Plot(
                 id,
                 cells,
                 PlotType.Normal,
+                generationType,
                 state,
                 owner,
                 ownershipMode,
                 blockingState);
+        }
+
+        [Test]
+        public void PlotTypeAndGenerationTypeUseTheSpecifiedNumericValues()
+        {
+            Assert.That((int)PlotType.Camp, Is.EqualTo(1));
+            Assert.That((int)PlotType.Normal, Is.EqualTo(2));
+            Assert.That((int)PlotType.Grass, Is.EqualTo(3));
+            Assert.That((int)PlotType.SmallCity, Is.EqualTo(4));
+            Assert.That((int)PlotType.BigCity, Is.EqualTo(5));
+            Assert.That((int)PlotType.Capital, Is.EqualTo(6));
+            Assert.That((int)PlotType.Obstacle, Is.EqualTo(7));
+            Assert.That((int)PlotGenerationType.Initial, Is.EqualTo(0));
+            Assert.That((int)PlotGenerationType.TimedOpen, Is.EqualTo(1));
+            Assert.That((int)PlotState.NotOpen, Is.EqualTo(0));
+            Assert.That((int)PlotState.Open, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void PlotOpenAndCloseAreIdempotent()
+        {
+            var map = new RuntimeHexMap(new HexMapDefinition(0));
+            var plot = CreatePlot(0, new[] { CellAt(map, 0, 0) }, state: PlotState.NotOpen);
+
+            Assert.That(plot.Open(), Is.True);
+            Assert.That(plot.PlotState, Is.EqualTo(PlotState.Open));
+            Assert.That(plot.Open(), Is.False);
+            Assert.That(plot.Close(), Is.True);
+            Assert.That(plot.PlotState, Is.EqualTo(PlotState.NotOpen));
+            Assert.That(plot.Close(), Is.False);
+        }
+
+        [Test]
+        public void PlotRejectsTimedOpenObstacleAndUndefinedEnums()
+        {
+            var map = new RuntimeHexMap(new HexMapDefinition(0));
+            var cell = CellAt(map, 0, 0);
+
+            Assert.Throws<ArgumentException>(() => new Plot(
+                0,
+                new[] { cell },
+                PlotType.Obstacle,
+                PlotGenerationType.TimedOpen,
+                PlotState.Open,
+                FactionId.Neutral,
+                OwnershipMode.Capturable,
+                BlockingState.Blocked));
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => new Plot(
+                0,
+                new[] { cell },
+                (PlotType)0,
+                PlotGenerationType.Initial,
+                PlotState.Open,
+                FactionId.Neutral,
+                OwnershipMode.Capturable,
+                BlockingState.Passable));
         }
 
         private static HexCell CellAt(RuntimeHexMap map, int q, int r)

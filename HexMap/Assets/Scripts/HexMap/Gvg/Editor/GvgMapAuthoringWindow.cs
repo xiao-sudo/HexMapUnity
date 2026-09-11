@@ -153,11 +153,53 @@ namespace HexMap.Gvg.Editor
             var plotType = (PlotType)EditorGUILayout.EnumPopup("Plot Type", plot.PlotType);
             if (EditorGUI.EndChangeCheck())
             {
-                Undo.RecordObject(m_Asset, "Edit GVG Plot Type");
-                plot.PlotType = plotType;
-                EditorUtility.SetDirty(m_Asset);
-                SceneView.RepaintAll();
+                if (plotType == PlotType.Obstacle && plot.GenerationType == PlotGenerationType.TimedOpen)
+                {
+                    EditorUtility.DisplayDialog(
+                        "Invalid Plot Configuration",
+                        "Obstacle Plots cannot use TimedOpen generation.",
+                        "OK");
+                }
+                else
+                {
+                    Undo.RecordObject(m_Asset, "Edit GVG Plot Type");
+                    plot.PlotType = plotType;
+                    EditorUtility.SetDirty(m_Asset);
+                    SceneView.RepaintAll();
+                }
             }
+
+            EditorGUI.BeginChangeCheck();
+            var generationType = (PlotGenerationType)EditorGUILayout.EnumPopup(
+                "Generation Type",
+                plot.GenerationType);
+            if (EditorGUI.EndChangeCheck())
+            {
+                if (plotType == PlotType.Obstacle && generationType == PlotGenerationType.TimedOpen)
+                {
+                    EditorUtility.DisplayDialog(
+                        "Invalid Plot Configuration",
+                        "Obstacle Plots cannot use TimedOpen generation.",
+                        "OK");
+                }
+                else
+                {
+                    Undo.RecordObject(m_Asset, "Edit GVG Plot Generation Type");
+                    plot.GenerationType = generationType;
+                    EditorUtility.SetDirty(m_Asset);
+                    SceneView.RepaintAll();
+                }
+            }
+
+            var initialState = generationType == PlotGenerationType.Initial
+                ? PlotState.Open
+                : PlotState.NotOpen;
+            var initialPassable = initialState == PlotState.Open && plot.PlotType != PlotType.Obstacle;
+            EditorGUILayout.LabelField("Initial Runtime State", initialState.ToString());
+            EditorGUILayout.LabelField("Initial Passable", initialPassable ? "Yes" : "No");
+            EditorGUILayout.LabelField(
+                "Initial Capturable",
+                initialState == PlotState.Open && plot.PlotType != PlotType.Camp ? "Yes" : "No");
 
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Merge Selected"))
@@ -358,7 +400,15 @@ namespace HexMap.Gvg.Editor
             var label = plot.PlotId.ToString();
             if (m_ShowHexIds) label += "\n#" + cell.Id;
             if (m_ShowCoordinates) label += "\n(" + cell.Coordinate.Q + "," + cell.Coordinate.R + ")";
-            if (m_ShowTypes) label += "\n" + plot.PlotType;
+            if (m_ShowTypes)
+            {
+                label += "\n" + plot.PlotType;
+                label += "\n" + plot.GenerationType;
+                if (plot.GenerationType == PlotGenerationType.TimedOpen)
+                {
+                    label += "\n" + PlotState.NotOpen;
+                }
+            }
             return label;
         }
 

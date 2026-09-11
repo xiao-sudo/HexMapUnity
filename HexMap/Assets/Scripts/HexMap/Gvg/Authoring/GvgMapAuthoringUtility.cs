@@ -179,11 +179,15 @@ namespace HexMap.Gvg.Authoring
                 var blockingState = authoredPlot.PlotType == PlotType.Obstacle
                     ? BlockingState.Blocked
                     : BlockingState.Passable;
+                var plotState = authoredPlot.GenerationType == PlotGenerationType.Initial
+                    ? PlotState.Open
+                    : PlotState.NotOpen;
                 plots.Add(new Plot(
                     authoredPlot.PlotId,
                     cells,
                     authoredPlot.PlotType,
-                    PlotState.Open,
+                    authoredPlot.GenerationType,
+                    plotState,
                     FactionId.Neutral,
                     ownershipMode,
                     blockingState));
@@ -223,6 +227,21 @@ namespace HexMap.Gvg.Authoring
                 if (!plotIds.Add(plot.PlotId))
                 {
                     AddIssue(issues, "Duplicate PlotId: " + plot.PlotId + ".");
+                }
+
+                if (!Enum.IsDefined(typeof(PlotType), plot.PlotType))
+                {
+                    AddIssue(issues, "Plot " + plot.PlotId + " has an undefined PlotType value: " + (int)plot.PlotType + ".");
+                }
+
+                if (!Enum.IsDefined(typeof(PlotGenerationType), plot.GenerationType))
+                {
+                    AddIssue(issues, "Plot " + plot.PlotId + " has an undefined PlotGenerationType value: " + (int)plot.GenerationType + ".");
+                }
+
+                if (plot.PlotType == PlotType.Obstacle && plot.GenerationType == PlotGenerationType.TimedOpen)
+                {
+                    AddIssue(issues, "Obstacle Plot " + plot.PlotId + " cannot use TimedOpen generation.");
                 }
 
                 if (plot.HexIds == null || plot.HexIds.Count == 0)

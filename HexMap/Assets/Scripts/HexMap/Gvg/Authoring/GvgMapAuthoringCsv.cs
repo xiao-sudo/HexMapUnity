@@ -36,13 +36,14 @@ namespace HexMap.Gvg.Authoring
 
             sortedPlots.Sort((left, right) => left.PlotId.CompareTo(right.PlotId));
             var builder = new StringBuilder();
-            builder.AppendLine("PlotId,HexIds,PlotType");
+            builder.AppendLine("PlotId,HexIds,PlotType,GenerationType");
             for (var index = 0; index < sortedPlots.Count; index++)
             {
                 var plot = sortedPlots[index];
                 builder.Append(plot.PlotId.ToString(CultureInfo.InvariantCulture)).Append(',')
                     .Append(Escape(FormatHexIds(plot.HexIds))).Append(',')
-                    .Append(((int)plot.PlotType).ToString(CultureInfo.InvariantCulture)).AppendLine();
+                    .Append(((int)plot.PlotType).ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(((int)plot.GenerationType).ToString(CultureInfo.InvariantCulture)).AppendLine();
             }
 
             return builder.ToString();
@@ -87,7 +88,7 @@ namespace HexMap.Gvg.Authoring
             builder.AppendLine("## Files");
             builder.AppendLine();
             builder.AppendLine("- `Map.csv`: map identity and layout settings.");
-            builder.AppendLine("- `Plots.csv`: Plot topology and PlotType values.");
+            builder.AppendLine("- `Plots.csv`: Plot topology, PlotType, and GenerationType values.");
             builder.AppendLine("- `Cells.csv`: Cell coordinates and their owning PlotId.");
             builder.AppendLine();
             builder.AppendLine("CSV files are UTF-8 with BOM for Excel compatibility. `HexIds` uses a quoted JSON-like array with no spaces, for example `\"[1,2,3]\"`.");
@@ -100,6 +101,14 @@ namespace HexMap.Gvg.Authoring
                     .Append(" = ").Append(plotType).AppendLine();
             }
             builder.AppendLine();
+            builder.AppendLine("## PlotGenerationType");
+            builder.AppendLine();
+            foreach (PlotGenerationType generationType in Enum.GetValues(typeof(PlotGenerationType)))
+            {
+                builder.Append("- ").Append(((int)generationType).ToString(CultureInfo.InvariantCulture))
+                    .Append(" = ").Append(generationType).AppendLine();
+            }
+            builder.AppendLine();
             builder.AppendLine("## PlotId Rules");
             builder.AppendLine();
             builder.AppendLine("- Single-cell PlotId equals its only HexId.");
@@ -108,12 +117,16 @@ namespace HexMap.Gvg.Authoring
             builder.AppendLine();
             builder.AppendLine("## Runtime Defaults");
             builder.AppendLine();
-            builder.AppendLine("- PlotState = Open");
+            builder.AppendLine("- GenerationType.Initial = 0 and projects to PlotState.Open.");
+            builder.AppendLine("- GenerationType.TimedOpen = 1 and projects to PlotState.NotOpen.");
+            builder.AppendLine("- PlotState.NotOpen is not passable and cannot be captured.");
+            builder.AppendLine("- Open() and Close() are controlled by outer runtime business.");
             builder.AppendLine("- OwnerFaction = Neutral");
             builder.AppendLine("- OwnershipMode = Capturable");
             builder.AppendLine("- BlockingState = Passable");
             builder.AppendLine("- PlotType.Obstacle overrides BlockingState to Blocked.");
             builder.AppendLine("- PlotType.Camp overrides OwnershipMode to Fixed.");
+            builder.AppendLine("- Obstacle Plots cannot use GenerationType.TimedOpen.");
             builder.AppendLine();
             builder.AppendLine("CSV import is not implemented in this issue. These files are export review artifacts and a future import source.");
             return builder.ToString();

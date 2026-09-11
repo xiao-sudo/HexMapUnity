@@ -7,13 +7,13 @@
 **Status:** ready-for-human
 
 - [x] 编辑器可以创建地图范围并将 Hex 分配给 Plot，而不要求直接维护策划原始坐标表。
-- [ ] 编辑器可以配置地块类型、状态、归属槽位、可通行、可占领、代表格和可停驻格。
+- [x] 编辑器可以配置 PlotType 和 GenerationType，并预览由规则派生的初始状态、可通行性和可占领性。
 - [x] 预览显示坐标、地块 ID、类型、阻碍、大营、城池和归属色，并与运行时数据一致。
 - [x] 导出结果可以被运行时地图生成和 GVG 规则加载。
 
 ## Refined design contract
 
-本节记录经方案拷问后确认的执行契约。它覆盖顶部旧验收项中关于代表格、可停驻格、归属色、状态和阻碍字段的表述：第一版地图 Authoring 只负责地图拓扑和 Plot 类型，动态状态、阵营归属和战场初始化由运行时逻辑负责。
+本节记录经方案拷问后确认的执行契约。它覆盖顶部旧验收项中关于代表格、可停驻格、归属色、状态和阻碍字段的表述：第一版地图 Authoring 负责地图拓扑、PlotType 和 GenerationType，运行时状态、阵营归属和战场初始化由运行时逻辑负责。
 
 ### Scope
 
@@ -34,9 +34,28 @@
 - Plot 上的模型、Prefab、Addressables key 或正式战场表现资源。
 - 运行时动态阵营分配、占领、状态流转和战斗初始化逻辑。
 
+### Enum and lifecycle contract
+
+PlotType 使用固定数字：
+
+1 = Camp
+2 = Normal
+3 = Grass
+4 = SmallCity
+5 = BigCity
+6 = Capital
+7 = Obstacle
+
+PlotGenerationType 使用固定数字：
+
+0 = Initial
+1 = TimedOpen
+
+PlotState 只有 NotOpen=0 和 Open=1。Initial 初始投影为 Open；TimedOpen 初始投影为 NotOpen。NotOpen 不可通行、不可作为寻路目标且不可占领；开放时机由外层业务调用 Open()，关闭时机由外层业务调用 Close()。Battle 和 NotGenerated 不属于 PlotState。
+
 ### Runtime contract changes required by this issue
 
-- 删除 `RepresentativeCell` 概念。多格 Plot 的所有 Hex 都代表该 Plot 的一部分。
+- 删除 RepresentativeCell 概念。多格 Plot 的所有 Hex 都代表该 Plot 的一部分。
 - 多格 Plot 后续如果需要 UI 标签、镜头聚焦或小地图文字锚点，应从 Plot 内所有 Hex 的世界中心派生，例如几何平均点或包围中心，而不是配置一个代表格。
 - `Plot` 构造函数调整为：
 
@@ -45,6 +64,7 @@ Plot(
     int plotId,
     IReadOnlyList<HexCell> cells,
     PlotType plotType,
+    PlotGenerationType generationType,
     PlotState plotState,
     FactionId ownerFaction,
     OwnershipMode ownershipMode,
@@ -83,9 +103,10 @@ Plots[]
 PlotId
 HexIds      // List<int>
 PlotType
+GenerationType
 ```
 
-不在 authoring asset 中保存 `PlotState`、`OwnerFaction`、`OwnershipMode`、`BlockingState`、`RepresentativeHexId`、可停驻格、模型 key 或 Prefab 引用。
+不在 authoring asset 中保存 PlotState、OwnerFaction、OwnershipMode、BlockingState、RepresentativeHexId、可停驻格、模型 key 或 Prefab 引用。GenerationType 是 authoring 配置字段。
 
 ### Default initialization rules
 
@@ -94,13 +115,15 @@ PlotType
 ```text
 PlotId = HexId
 HexIds = [HexId]
-PlotType = Normal
+PlotType = Normal = 2
+GenerationType = Initial = 0
 ```
 
 Editor 预览和 authoring-to-runtime 投影使用以下默认运行时规则：
 
 ```text
-PlotState = Open
+GenerationType.Initial = 0 -> PlotState.Open
+GenerationType.TimedOpen = 1 -> PlotState.NotOpen
 OwnerFaction = Neutral
 OwnershipMode = Capturable
 BlockingState = Passable
@@ -111,6 +134,8 @@ BlockingState = Passable
 ```text
 PlotType.Obstacle -> BlockingState.Blocked
 PlotType.Camp -> OwnershipMode.Fixed
+PlotType.Obstacle + GenerationType.TimedOpen -> invalid
+PlotState.NotOpen -> not passable and not capturable
 ```
 
 `Camp` 的具体阵营不由地图表配置；由运行时战场初始化逻辑绑定参战方槽位。
@@ -149,12 +174,12 @@ SceneView 工具模式：
 
 默认预览：
 
-- 颜色显示 `PlotType`，并突出 `Obstacle`、`Camp`、`SmallCity`、`BigCity` 和 `Capital`。
-- 标签默认只显示 `PlotId`。
+- 颜色显示 PlotType，并突出 Obstacle、Camp、SmallCity、BigCity 和 Capital。
+- 标签默认只显示 PlotId；开启类型显示时同时显示 PlotType、GenerationType 和 TimedOpen 的初始 NotOpen 状态。
 - `HexId`、坐标和类型名是可开关显示层。
 - 未分配 Hex 使用明显错误色，并在错误列表中显示数量和前若干 `HexId`。
 
-第一版不显示动态归属色。归属由运行时初始化，不是 authoring 配置字段。
+第一版不显示动态归属色。预览同时显示选中 Plot 的初始运行时状态、是否可通行和是否可占领；TimedOpen 初始为 NotOpen。归属仍由运行时初始化，不是 authoring 配置字段。
 
 ### CSV export
 
@@ -192,7 +217,7 @@ MapId,Radius,Orientation,Plane,OuterRadius
 `Plots.csv` 列：
 
 ```text
-PlotId,HexIds,PlotType
+PlotId,HexIds,PlotType,GenerationType
 ```
 
 `Cells.csv` 列：
@@ -211,38 +236,42 @@ HexId,Q,R,PlotId
 
 - 文件用途。
 - CSV 编码和数组字段格式。
-- `PlotType` 数字枚举对照。
-- `PlotId` 编号规则。
-- 默认运行时初始化规则。
+- PlotType 和 GenerationType 数字枚举对照。
+- PlotId 编号规则。
+- 默认运行时初始化规则、NotOpen 的不可通行/不可占领规则和 Open()/Close() 外层调用边界。
 - CSV 当前是导出审核件和未来导入源，本 issue 不支持导入。
 
 ### Export validation
 
 导出前硬失败条件：
 
-- `PlotId` 唯一。
-- `HexId` 存在于当前 `Radius` 生成的地图中。
+- PlotId 唯一。
+- HexId 存在于当前 Radius 生成的地图中。
 - Plot 非空。
 - Hex 唯一归属。
 - 地图范围内所有 Hex 都被 Plot 覆盖。
-- 单格 Plot 的 `PlotId == HexId`。
-- 多格 Plot 的 `PlotId < 0`。
+- 单格 Plot 的 PlotId == HexId。
+- 多格 Plot 的 PlotId < 0。
+- PlotType 和 PlotGenerationType 数值必须已定义。
+- Obstacle 不允许使用 TimedOpen。
 
-`Obstacle` 的阻碍语义由默认初始化规则保证，不再校验单独的 `BlockingState` 字段。
+Obstacle 的阻碍语义由默认初始化规则保证 BlockingState.Blocked；同时校验 Obstacle 不允许使用 TimedOpen。
 
 ### Tests
 
 优先使用纯 C# / EditMode 测试，覆盖：
 
-- 删除 `RepresentativeCell` 后的 `Plot` 构造和现有 GVG 规则测试更新。
+- 删除 RepresentativeCell 后的 Plot 构造和现有 GVG 规则测试更新。
 - 运行时允许负数多格 `PlotId`。
 - 默认全图单格 Plot 生成。
 - 单格/多格 PlotId 规则校验。
 - 合并、抢占、移除和删除后的全覆盖与唯一归属。
 - Radius 扩大/缩小后的 Plot 修正规则。
-- CSV row 生成、排序、`HexIds` 数组格式。
+- CSV row 生成、排序、HexIds 数组格式和 GenerationType 数值。
+- PlotType/PlotGenerationType 数值、Initial/TimedOpen 初始状态、Open()/Close() 幂等行为和 NotOpen 寻路约束。
+- Obstacle + TimedOpen 在 authoring validation 和 runtime 投影入口被拒绝。
 - UTF-8 BOM 写出。
-- `README.md` 内容包含 `PlotType` 数字枚举对照和默认初始化规则。
+- README.md 内容包含 PlotType/GenerationType 数字枚举对照、默认初始化规则和 NotOpen 行为。
 
 不做 SceneView UI 自动化测试；EditorWindow 和 SceneView 交互第一版通过手测验收。
 
@@ -251,4 +280,8 @@ HexId,Q,R,PlotId
 
 ### Agent implementation update - 2026-09-10
 
-Implemented the refined authoring contract: ScriptableObject source asset, runtime-visible authoring utilities, EditorWindow + SceneView preview/editing, validation, CSV/README export, Plot runtime contract update, and focused EditMode coverage. The legacy checklist item for configuring status/ownership/representative/standable cells remains governed by the refined design contract: first version stores only topology and PlotType; runtime defaults derive state, ownership, occupancy, and blocking semantics.
+Implemented the refined authoring contract and the generation-state amendment: authoring stores topology, PlotType, and GenerationType; Initial projects to Open, TimedOpen projects to NotOpen, and outer runtime business controls Open()/Close(). Obstacle cannot use TimedOpen.
+
+### Agent implementation update - 2026-09-11
+
+Implemented the generation-type authoring field, runtime projection, editor preview, CSV/README export contract, validation, and focused EditMode coverage. Existing authoring resources were intentionally not migrated.

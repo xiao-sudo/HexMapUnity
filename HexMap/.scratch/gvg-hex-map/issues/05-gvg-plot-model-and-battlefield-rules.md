@@ -4,11 +4,11 @@
 
 **Blocked by:** 02 — 运行时 Hex 地图与格子拾取.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 - [ ] 一个 Plot 可以包含一个或多个 HexCell；每个 HexCell 最多属于一个 Plot，并可从任意 Cell 反查 Plot。
-- [ ] 代表格和可停驻格分别配置，且两者都能被规则服务独立查询。
-- [ ] 支持大营、普通地块、草地、小城、大城、都城和阻碍等地块类型，以及未生成、未开放、中立、已归属和战斗中状态。
+- [x] 删除代表格和可停驻格配置，多格 Plot 的全部 Cell 都是潜在进入目标。
+- [x] 支持固定数值的 PlotType、Initial/TimedOpen 生成类型和 NotOpen/Open 状态；Battle 由上层业务维护。
 - [ ] 归属、开放状态和阻碍能够统一决定地块的可见、可选中、可通行和可进入结果；地图外区域默认不可通行。
 - [ ] 通过小型合成地图测试单格地块、多格地块和状态变化行为。
 
@@ -38,9 +38,9 @@
 ```text
 PlotId
 Cells
-RepresentativeCell
 PlotType
-PlotState
+PlotGenerationType  // Initial 或 TimedOpen
+PlotState           // NotOpen 或 Open
 OwnerFaction
 OwnershipMode       // Capturable 或 Fixed
 BlockingState       // Passable 或 Blocked
@@ -48,22 +48,22 @@ BlockingState       // Passable 或 Blocked
 
 `HexCell` 只保留基础地图身份（HexId 和坐标），不直接引用 GVG `Plot`，也不持有阵营、类型、状态或阻挡。由 `PlotRegistry` 提供 `PlotId -> Plot` 和 `CellId/HexCell -> Plot` 查询。
 
-每个 Plot 恰好有一个代表格，且代表格必须属于该 Plot。删除固定 `StandableCells`：多格 Plot 的所有 Cell 都是潜在进入目标，路径到达任意合法 Cell 即视为到达 Plot；单格 Plot 的唯一 Cell 同时是代表格和进入目标。
+删除代表格和固定 StandableCells 概念：多格 Plot 的所有 Cell 都是潜在进入目标，路径到达任意合法 Cell 即视为到达 Plot；单格 Plot 的唯一 Cell 同时是进入目标。
 
-支持的类型为 `Camp`、`Normal`、`Grass`、`SmallCity`、`BigCity`、`Capital` 和 `Obstacle`。Grass 第一版不引入特殊移动规则；开放城池（包括都城）理论上都可作为占领目标。
+支持的类型和固定数值为 Camp=1、Normal=2、Grass=3、SmallCity=4、BigCity=5、Capital=6、Obstacle=7。
 
 生命周期状态与归属分开：
 
 ```text
-PlotState = NotGenerated | NotOpened | Open | Battle
+PlotState = NotOpen | Open
 OwnerFaction = 一个阵营值；Neutral 也是合法阵营
 ```
 
-本 issue 不实现状态转换。寻路把 `Open` 和 `Battle` 视为相同的可寻路状态；`NotGenerated` 和 `NotOpened` 不参与寻路。
+Plot 只维护 NotOpen 和 Open 两种状态。Open() 执行 NotOpen -> Open，Close() 执行 Open -> NotOpen，重复调用幂等；开放和关闭的时机由外层业务负责。寻路只允许 Open Plot；战斗状态属于上层业务，不在 Plot 中维护。
 
-`OwnershipMode.Capturable` 表示归属可由后续占领业务改变；`OwnershipMode.Fixed` 表示归属不可由占领业务改变。寻路阵营不等于 Fixed Plot 归属时，不能生成到该 Plot 的路径；归属匹配时可以经过并作为目标。Neutral 按普通阵营处理。
+PlotGenerationType.Initial 初始投影为 Open，PlotGenerationType.TimedOpen 初始投影为 NotOpen；NotOpen Plot 不可通行、不可作为寻路目标且不可占领，具体占领判断由外层业务负责。OwnershipMode.Capturable 表示归属可由后续占领业务改变；OwnershipMode.Fixed 表示归属不可由占领业务改变。
 
-第一版只支持 Plot 级阻挡：Plot 内所有 Cell 共享 `BlockingState`，不支持单个 Cell 的阻挡覆盖。 `PlotType.Obstacle` 必须验证为 `BlockingState.Blocked`；寻路策略只读取阻挡状态，不硬编码类型分支。
+第一版只支持 Plot 级阻挡：Plot 内所有 Cell 共享 BlockingState，不支持单个 Cell 的阻挡覆盖。PlotType.Obstacle 必须验证为 BlockingState.Blocked，且不允许使用 PlotGenerationType.TimedOpen；寻路策略只读取阻挡状态，不硬编码类型分支。
 
 ### Plot-to-Plot pathfinding
 
@@ -87,14 +87,14 @@ FindPath(startPlotId, targetPlotId, movingFaction, result)
 
 ```text
 CanPass(cell)
-    PlotState 为 Open 或 Battle
+    PlotState 为 Open
     BlockingState == Passable
     OwnerFaction == movingFaction
 ```
 
 ```text
 CanEnter(cell)
-    PlotState 为 Open 或 Battle
+    PlotState 为 Open
     BlockingState == Passable
     若 OwnershipMode == Fixed，则 OwnerFaction == movingFaction
     否则允许作为路径终点
@@ -108,8 +108,8 @@ CanEnter(cell)
 | 己方 Fixed Plot | 是 | 是 |
 | 敌方 Fixed Plot | 否 | 否 |
 | 阻挡 Plot | 否 | 否 |
-| 未生成/未开放 Plot | 否 | 否 |
-| Battle Plot | 按归属和阻挡判断 | 按归属和阻挡判断 |
+| NotOpen Plot | 否 | 否 |
+| 战斗状态 | 由上层战斗业务附加处理 | 由上层战斗业务附加处理 |
 
 `CanEnter` 只决定路径能否生成到目标 Cell，不决定到达后的占领、攻击、战斗队列或驻守动作。
 
@@ -119,7 +119,7 @@ CanEnter(cell)
 
 - 不存在的 PlotId、空 Plot 或地图外 Cell。
 - 一个 Plot 内重复 Cell，或一个 Cell 多重归属。
-- 不属于 Plot 的代表格。
+- 不属于 Plot 的 Cell。
 - 展开后的起点或目标集合为空。
 - 未满足 `Obstacle -> Blocked` 约束的配置。
 
@@ -127,15 +127,15 @@ CanEnter(cell)
 
 使用小型合成地图的纯 C# EditMode 测试覆盖：
 
-- 单格/多格 Plot、代表格、Cell-to-Plot 反查和重复归属验证。
+- 单格/多格 Plot、Cell-to-Plot 反查和重复归属验证。
 - 多起点/多目标最短路径、零步相交、无效输入、不可达目标和结果容量不足。
 - 起点不调用 `CanPass`，目标只调用 `CanEnter`。
 - 多格 Plot 任意 Cell 可作为起点或终点。
 - 己方 Plot 可通行；敌方/中立 Plot 不可作为中间通路但开放非 Fixed 时可作为终点。
 - 敌方 Fixed Plot 不可作为终点，己方 Fixed Plot 可通行并可作为终点。
-- Plot 级阻挡、Obstacle、未生成和未开放 Plot 均不能生成路径。
-- Battle 不产生独立寻路分支；起点 Plot 与目标 Plot 相同返回零步路径。
-- Plot 配置错误在进入通用 HexPathfinder 前被拒绝。
+- Plot 级阻挡、Obstacle 和 NotOpen Plot 均不能生成路径。
+- Plot 不维护 Battle 状态；战斗期间的额外规则由上层业务提供。起点 Plot 与目标 Plot 相同仍返回零步路径。
+- Plot 配置错误（包括 Obstacle + TimedOpen）在进入通用 HexPathfinder 前被拒绝。
 
 ## Amendment from issue 10 authoring design
 
@@ -150,6 +150,7 @@ Plot(
     int plotId,
     IReadOnlyList<HexCell> cells,
     PlotType plotType,
+    PlotGenerationType generationType,
     PlotState plotState,
     FactionId ownerFaction,
     OwnershipMode ownershipMode,
@@ -158,3 +159,6 @@ Plot(
 
 - 运行时 `Plot` 允许负数 `PlotId`，唯一性仍由 `PlotRegistry` 保证。
 - Authoring 层采用编号约定：单格 Plot 的 `PlotId` 等于唯一 Cell 的 `HexId`；多格 Plot 使用负数 `PlotId`，从 `-1` 开始递减。该编号约定由 authoring/export validator 强制，不要求通用运行时 `Plot` 构造函数理解 authoring 规则。
+### Agent implementation update - 2026-09-11
+
+Implemented the fixed PlotType values, PlotGenerationType initial-state projection, NotOpen/Open lifecycle with idempotent Open()/Close(), TimedOpen path restrictions, Obstacle + TimedOpen validation, and updated EditMode coverage.

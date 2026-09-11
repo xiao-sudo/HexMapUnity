@@ -10,15 +10,26 @@ namespace HexMap.Gvg.Authoring
         [SerializeField] private int m_PlotId;
         [SerializeField] private List<int> m_HexIds = new List<int>();
         [SerializeField] private PlotType m_PlotType = PlotType.Normal;
+        [SerializeField] private PlotGenerationType m_GenerationType = PlotGenerationType.Initial;
 
         public GvgPlotAuthoringData() { }
 
         public GvgPlotAuthoringData(int plotId, IEnumerable<int> hexIds, PlotType plotType)
+            : this(plotId, hexIds, plotType, PlotGenerationType.Initial)
+        {
+        }
+
+        public GvgPlotAuthoringData(
+            int plotId,
+            IEnumerable<int> hexIds,
+            PlotType plotType,
+            PlotGenerationType generationType)
         {
             if (hexIds == null) throw new ArgumentNullException(nameof(hexIds));
             m_PlotId = plotId;
             m_HexIds = new List<int>(hexIds);
             m_PlotType = plotType;
+            m_GenerationType = generationType;
         }
 
         public int PlotId
@@ -38,9 +49,15 @@ namespace HexMap.Gvg.Authoring
             set { m_PlotType = value; }
         }
 
+        public PlotGenerationType GenerationType
+        {
+            get { return m_GenerationType; }
+            set { m_GenerationType = value; }
+        }
+
         public GvgPlotAuthoringData Clone()
         {
-            return new GvgPlotAuthoringData(m_PlotId, m_HexIds, m_PlotType);
+            return new GvgPlotAuthoringData(m_PlotId, m_HexIds, m_PlotType, m_GenerationType);
         }
     }
 }

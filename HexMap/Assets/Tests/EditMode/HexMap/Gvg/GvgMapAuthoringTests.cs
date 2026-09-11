@@ -164,7 +164,7 @@ namespace HexMap.Gvg.Tests
 
                 Assert.That(mapCsv, Does.StartWith("MapId,Radius,Orientation,Plane,OuterRadius"));
                 Assert.That(mapCsv, Does.Contain("\"Map,One\",1,0,1,1"));
-                Assert.That(plotsCsv.Split(new[] { Environment.NewLine }, StringSplitOptions.None)[1], Is.EqualTo("-1,\"[0,6]\",4"));
+                Assert.That(plotsCsv.Split(new[] { Environment.NewLine }, StringSplitOptions.None)[1], Is.EqualTo("-1,\"[0,6]\",5,0"));
                 Assert.That(cellsCsv.Split(new[] { Environment.NewLine }, StringSplitOptions.None)[1], Is.EqualTo("0,0,0,-1"));
             }
             finally
@@ -190,13 +190,72 @@ namespace HexMap.Gvg.Tests
                 Assert.That(mapBytes[2], Is.EqualTo(0xBF));
 
                 var readme = File.ReadAllText(Path.Combine(directory, GvgMapAuthoringCsv.ReadmeFileName));
-                Assert.That(readme, Does.Contain("0 = Camp"));
-                Assert.That(readme, Does.Contain("PlotState = Open"));
+                Assert.That(readme, Does.Contain("1 = Camp"));
+                Assert.That(readme, Does.Contain("0 = Initial"));
+                Assert.That(readme, Does.Contain("1 = TimedOpen"));
+                Assert.That(readme, Does.Contain("projects to PlotState.Open"));
                 Assert.That(readme, Does.Contain("CSV import is not implemented"));
             }
             finally
             {
                 if (Directory.Exists(directory)) Directory.Delete(directory, true);
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+        [Test]
+        public void RuntimeProjectionUsesGenerationTypeForInitialState()
+        {
+            var asset = CreateAsset(1);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Normal, PlotGenerationType.Initial),
+                    new GvgPlotAuthoringData(1, new[] { 1 }, PlotType.Normal, PlotGenerationType.TimedOpen),
+                    new GvgPlotAuthoringData(2, new[] { 2 }, PlotType.Normal),
+                    new GvgPlotAuthoringData(3, new[] { 3 }, PlotType.Normal),
+                    new GvgPlotAuthoringData(4, new[] { 4 }, PlotType.Normal),
+                    new GvgPlotAuthoringData(5, new[] { 5 }, PlotType.Normal),
+                    new GvgPlotAuthoringData(6, new[] { 6 }, PlotType.Normal)
+                });
+
+                var runtimePlots = GvgMapAuthoringUtility.CreateRuntimePlots(asset);
+                Assert.That(runtimePlots[0].GenerationType, Is.EqualTo(PlotGenerationType.Initial));
+                Assert.That(runtimePlots[0].PlotState, Is.EqualTo(PlotState.Open));
+                Assert.That(runtimePlots[1].GenerationType, Is.EqualTo(PlotGenerationType.TimedOpen));
+                Assert.That(runtimePlots[1].PlotState, Is.EqualTo(PlotState.NotOpen));
+                Assert.That(runtimePlots[1].IsOpenForPathfinding, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+        [Test]
+        public void ValidationRejectsTimedOpenObstacle()
+        {
+            var asset = CreateAsset(0);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(
+                        0,
+                        new[] { 0 },
+                        PlotType.Obstacle,
+                        PlotGenerationType.TimedOpen)
+                });
+
+                var validation = GvgMapAuthoringUtility.Validate(asset);
+                Assert.That(validation.IsValid, Is.False);
+                Assert.That(ContainsIssue(validation, "cannot use TimedOpen"), Is.True);
+                Assert.Throws<InvalidOperationException>(
+                    () => GvgMapAuthoringUtility.CreateRuntimePlots(asset));
+            }
+            finally
+            {
                 UnityEngine.Object.DestroyImmediate(asset);
             }
         }
