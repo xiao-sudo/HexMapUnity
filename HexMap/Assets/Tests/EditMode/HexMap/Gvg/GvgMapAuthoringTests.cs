@@ -297,7 +297,7 @@ namespace HexMap.Gvg.Tests
             {
                 asset.ReplacePlots(new[]
                 {
-                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Normal, 0, 100),
+                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Normal, 0, -1),
                     new GvgPlotAuthoringData(1, new[] { 1 }, PlotType.Normal, 100, -1),
                     new GvgPlotAuthoringData(2, new[] { 2 }, PlotType.Normal, 0, -1),
                     new GvgPlotAuthoringData(3, new[] { 3 }, PlotType.Normal, 0, -1),
