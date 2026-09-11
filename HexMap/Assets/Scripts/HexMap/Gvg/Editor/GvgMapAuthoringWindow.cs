@@ -122,9 +122,28 @@ namespace HexMap.Gvg.Editor
             m_ShowHexIds = EditorGUILayout.Toggle("Show HexId", m_ShowHexIds);
             m_ShowCoordinates = EditorGUILayout.Toggle("Show Coordinates", m_ShowCoordinates);
             m_ShowTypes = EditorGUILayout.Toggle("Show Type", m_ShowTypes);
+            DrawPlotTypeLegend();
             EditorGUILayout.LabelField("Selected Hexes", string.Join(",", m_SelectedHexIds.ConvertAll(value => value.ToString()).ToArray()));
         }
 
+        private void DrawPlotTypeLegend()
+        {
+            EditorGUILayout.LabelField("Plot Type Colors", EditorStyles.miniBoldLabel);
+            foreach (PlotType plotType in Enum.GetValues(typeof(PlotType)))
+            {
+                EditorGUILayout.BeginHorizontal();
+                var swatch = GUILayoutUtility.GetRect(18f, EditorGUIUtility.singleLineHeight, GUILayout.Width(18f));
+                EditorGUI.DrawRect(swatch, ColorFor(plotType));
+                EditorGUILayout.LabelField(plotType.ToString());
+                EditorGUILayout.EndHorizontal();
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            var notOpenSwatch = GUILayoutUtility.GetRect(18f, EditorGUIUtility.singleLineHeight, GUILayout.Width(18f));
+            EditorGUI.DrawRect(notOpenSwatch, m_NotOpenOverlayColor);
+            EditorGUILayout.LabelField("NotOpen overlay");
+            EditorGUILayout.EndHorizontal();
+        }
         private void DrawSelectedPlotControls()
         {
             var plot = FindSelectedPlot();
@@ -181,7 +200,7 @@ namespace HexMap.Gvg.Editor
             {
                 DrawHexScheduleControls(plot.HexIds[0]);
             }
-            var initialState = plot.Start == 0 ? PlotState.Open : PlotState.NotOpen;
+            var initialState = GetInitialPlotState(plot);
             var initialPassable = initialState == PlotState.Open && plot.PlotType != PlotType.Obstacle;
             EditorGUILayout.LabelField("Initial Runtime State", initialState.ToString());
             EditorGUILayout.LabelField("Initial Passable", initialPassable ? "Yes" : "No");
@@ -428,7 +447,7 @@ namespace HexMap.Gvg.Editor
                     fill = Color.Lerp(fill, Color.yellow, 0.45f);
                 }
 
-                DrawHex(layout, cell.Coordinate, fill);
+                DrawHex(layout, cell.Coordinate, fill, hasPlot && GetInitialPlotState(plot) == PlotState.NotOpen);
                 Handles.Label(layout.HexToWorld(cell.Coordinate), FormatLabel(cell, plot, hasPlot), m_LabelStyle);
             }
         }
@@ -524,7 +543,7 @@ namespace HexMap.Gvg.Editor
             return map.TryGetCell(coordinate, out cell);
         }
 
-        private void DrawHex(HexLayout layout, HexCoord coordinate, Color fill)
+        private void DrawHex(HexLayout layout, HexCoord coordinate, Color fill, bool isNotOpen)
         {
             var center = layout.HexToWorld(coordinate);
             var corners = new Vector3[6];
@@ -547,8 +566,39 @@ namespace HexMap.Gvg.Editor
             Handles.DrawAAConvexPolygon(corners);
             Handles.color = Color.black;
             Handles.DrawAAPolyLine(1f, outline);
+            if (isNotOpen)
+            {
+                DrawNotOpenOverlay(layout, center, outline);
+            }
         }
 
+        private void DrawNotOpenOverlay(HexLayout layout, Vector3 center, Vector3[] outline)
+        {
+            Handles.color = m_NotOpenOverlayColor;
+            Handles.DrawAAPolyLine(2.5f, outline);
+
+            var horizontalRadius = layout.OuterRadius * 0.42f;
+            var verticalRadius = layout.OuterRadius * layout.SecondaryScale * 0.42f;
+            var firstLine = new Vector3[2];
+            var secondLine = new Vector3[2];
+            if (layout.Plane == HexPlane.XY)
+            {
+                firstLine[0] = center + new Vector3(-horizontalRadius, -verticalRadius, 0f);
+                firstLine[1] = center + new Vector3(horizontalRadius, verticalRadius, 0f);
+                secondLine[0] = center + new Vector3(-horizontalRadius, verticalRadius, 0f);
+                secondLine[1] = center + new Vector3(horizontalRadius, -verticalRadius, 0f);
+            }
+            else
+            {
+                firstLine[0] = center + new Vector3(-horizontalRadius, 0f, -verticalRadius);
+                firstLine[1] = center + new Vector3(horizontalRadius, 0f, verticalRadius);
+                secondLine[0] = center + new Vector3(-horizontalRadius, 0f, verticalRadius);
+                secondLine[1] = center + new Vector3(horizontalRadius, 0f, -verticalRadius);
+            }
+
+            Handles.DrawAAPolyLine(2f, firstLine);
+            Handles.DrawAAPolyLine(2f, secondLine);
+        }
         private string FormatLabel(HexCell cell, GvgPlotAuthoringData plot, bool hasPlot)
         {
             if (!hasPlot) return "Unassigned" + Environment.NewLine + "#" + cell.Id;
@@ -562,15 +612,17 @@ namespace HexMap.Gvg.Editor
             if (m_ShowTypes)
             {
                 label += Environment.NewLine + plot.PlotType;
+                label += Environment.NewLine + "State: " + GetInitialPlotState(plot);
                 label += Environment.NewLine + "[" + plot.Start + "," + plot.End + ")";
-                if (plot.Start > 0)
-                {
-                    label += Environment.NewLine + PlotState.NotOpen;
-                }
             }
 
             return label;
         }
+        private static PlotState GetInitialPlotState(GvgPlotAuthoringData plot)
+        {
+            return plot.Start > 0 ? PlotState.NotOpen : PlotState.Open;
+        }
+
         private static GUIStyle CreateLabelStyle()
         {
             var style = new GUIStyle();
@@ -592,6 +644,8 @@ namespace HexMap.Gvg.Editor
                 default: return new Color(0.45f, 0.45f, 0.5f, 0.35f);
             }
         }
+
+        private static readonly Color m_NotOpenOverlayColor = new Color(1f, 0.82f, 0.1f, 0.95f);
 
         private void CreateAsset()
         {
