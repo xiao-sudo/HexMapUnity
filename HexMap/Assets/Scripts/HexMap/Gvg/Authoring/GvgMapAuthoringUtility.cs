@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using HexMap.Runtime;
 using RuntimeHexMap = HexMap.Runtime.HexMap;
@@ -14,10 +14,29 @@ namespace HexMap.Gvg.Authoring
             for (var index = 0; index < map.Cells.Count; index++)
             {
                 var cell = map.Cells[index];
-                plots.Add(new GvgPlotAuthoringData(cell.Id, new[] { cell.Id }, PlotType.Normal));
+                plots.Add(new GvgPlotAuthoringData(cell.Id, new[] { cell.Id }, PlotType.Normal, 0, -1));
             }
 
             return plots;
+        }
+
+        public static int CalculateTimedSinglePlotIdBase(int maxHexId)
+        {
+            if (maxHexId < 0) throw new ArgumentOutOfRangeException(nameof(maxHexId));
+            return ((maxHexId / 100) + 1) * 100;
+        }
+
+        public static int CalculateMultiPlotIdBase(PlotType plotType)
+        {
+            if (!Enum.IsDefined(typeof(PlotType), plotType))
+                throw new ArgumentOutOfRangeException(nameof(plotType), plotType, "PlotType is not defined.");
+            return 10000 + 1000 * (int)plotType;
+        }
+
+        public static bool IsValidMultiPlotId(int plotId, PlotType plotType)
+        {
+            var baseId = CalculateMultiPlotIdBase(plotType);
+            return plotId >= baseId && plotId < baseId + 1000;
         }
 
         public static void ResetToDefaultPlots(GvgMapAuthoringAsset asset)
@@ -29,8 +48,8 @@ namespace HexMap.Gvg.Authoring
         public static void RebuildRadius(GvgMapAuthoringAsset asset, int radius)
         {
             ValidateAsset(asset);
-            asset.Radius = radius;
-            RepairForCurrentRadius(asset);
+            if (radius != asset.Radius)
+                throw new InvalidOperationException("Changing Radius and generating new Hexes is not supported in the current GVG authoring version.");
         }
 
         public static bool TryPaintAdd(GvgMapAuthoringAsset asset, int plotId, int hexId)
@@ -48,8 +67,15 @@ namespace HexMap.Gvg.Authoring
                 plot.HexIds.Add(hexId);
             }
 
+            if (plot.HexIds.Count > 1)
+            {
+                plot.Start = 0;
+                plot.End = -1;
+                RemoveOverlappingPlotsExceptTarget(asset.MutablePlots, plot);
+            }
+
             RemoveEmptyPlots(asset.MutablePlots);
-            NormalizePlotIds(asset.MutablePlots);
+            NormalizePlotIds(asset);
             return true;
         }
 
@@ -60,8 +86,12 @@ namespace HexMap.Gvg.Authoring
             if (plot == null || !plot.HexIds.Contains(hexId) || plot.HexIds.Count <= 1) return false;
 
             plot.HexIds.Remove(hexId);
-            asset.MutablePlots.Add(new GvgPlotAuthoringData(hexId, new[] { hexId }, PlotType.Normal));
-            NormalizePlotIds(asset.MutablePlots);
+            if (!ContainsHex(asset.MutablePlots, hexId))
+            {
+                asset.MutablePlots.Add(new GvgPlotAuthoringData(hexId, new[] { hexId }, PlotType.Normal, 0, -1));
+            }
+
+            NormalizePlotIds(asset);
             return true;
         }
 
@@ -71,13 +101,18 @@ namespace HexMap.Gvg.Authoring
             var plot = FindPlot(asset.MutablePlots, plotId);
             if (plot == null) return false;
 
+            var removedHexIds = new List<int>(plot.HexIds);
             asset.MutablePlots.Remove(plot);
-            foreach (var hexId in plot.HexIds)
+            for (var index = 0; index < removedHexIds.Count; index++)
             {
-                asset.MutablePlots.Add(new GvgPlotAuthoringData(hexId, new[] { hexId }, PlotType.Normal));
+                var hexId = removedHexIds[index];
+                if (!ContainsHex(asset.MutablePlots, hexId))
+                {
+                    asset.MutablePlots.Add(new GvgPlotAuthoringData(hexId, new[] { hexId }, PlotType.Normal, 0, -1));
+                }
             }
 
-            NormalizePlotIds(asset.MutablePlots);
+            NormalizePlotIds(asset);
             return true;
         }
 
@@ -85,52 +120,62 @@ namespace HexMap.Gvg.Authoring
         {
             ValidateAsset(asset);
             if (hexIds == null) throw new ArgumentNullException(nameof(hexIds));
+
             var primary = FindPlot(asset.MutablePlots, primaryPlotId);
             if (primary == null) return false;
 
             var mergedHexIds = new HashSet<int>(primary.HexIds);
+            var plotsToRemove = new HashSet<GvgPlotAuthoringData>();
+            var map = asset.CreateRuntimeMap();
+
             foreach (var hexId in hexIds)
             {
-                var plot = FindPlotContainingHex(asset.MutablePlots, hexId);
-                if (plot != null)
+                if (!map.TryGetCell(hexId, out _)) continue;
+                mergedHexIds.Add(hexId);
+
+                for (var index = 0; index < asset.MutablePlots.Count; index++)
                 {
-                    for (var index = 0; index < plot.HexIds.Count; index++)
+                    var candidate = asset.MutablePlots[index];
+                    if (candidate != null && candidate.HexIds.Contains(hexId))
                     {
-                        mergedHexIds.Add(plot.HexIds[index]);
+                        plotsToRemove.Add(candidate);
+                        for (var candidateHexIndex = 0; candidateHexIndex < candidate.HexIds.Count; candidateHexIndex++)
+                        {
+                            mergedHexIds.Add(candidate.HexIds[candidateHexIndex]);
+                        }
                     }
-                }
-                else
-                {
-                    mergedHexIds.Add(hexId);
                 }
             }
 
-            var map = asset.CreateRuntimeMap();
+            for (var index = 0; index < asset.MutablePlots.Count; index++)
+            {
+                var candidate = asset.MutablePlots[index];
+                if (candidate == null || candidate == primary || plotsToRemove.Contains(candidate)) continue;
+                for (var hexIndex = 0; hexIndex < candidate.HexIds.Count; hexIndex++)
+                {
+                    if (mergedHexIds.Contains(candidate.HexIds[hexIndex]))
+                    {
+                        plotsToRemove.Add(candidate);
+                        break;
+                    }
+                }
+            }
+            foreach (var candidate in plotsToRemove)
+            {
+                if (candidate != primary) asset.MutablePlots.Remove(candidate);
+            }
+
             primary.HexIds.Clear();
             foreach (var hexId in mergedHexIds)
             {
-                if (map.TryGetCell(hexId, out _))
-                {
-                    primary.HexIds.Add(hexId);
-                }
+                if (map.TryGetCell(hexId, out _)) primary.HexIds.Add(hexId);
             }
 
-            for (var index = asset.MutablePlots.Count - 1; index >= 0; index--)
-            {
-                var plot = asset.MutablePlots[index];
-                if (plot == primary) continue;
-                for (var hexIndex = plot.HexIds.Count - 1; hexIndex >= 0; hexIndex--)
-                {
-                    if (mergedHexIds.Contains(plot.HexIds[hexIndex]))
-                    {
-                        plot.HexIds.RemoveAt(hexIndex);
-                    }
-                }
-            }
-
+            primary.Start = 0;
+            primary.End = -1;
             RemoveEmptyPlots(asset.MutablePlots);
-            NormalizePlotIds(asset.MutablePlots);
-            return primary.HexIds.Count > 0;
+            NormalizePlotIds(asset);
+            return primary.HexIds.Count > 1;
         }
 
         public static bool TryPasteHexIdsToPlot(GvgMapAuthoringAsset asset, int primaryPlotId, string text)
@@ -179,14 +224,14 @@ namespace HexMap.Gvg.Authoring
                 var blockingState = authoredPlot.PlotType == PlotType.Obstacle
                     ? BlockingState.Blocked
                     : BlockingState.Passable;
-                var plotState = authoredPlot.GenerationType == PlotGenerationType.Initial
+                var plotState = authoredPlot.Start == 0
                     ? PlotState.Open
                     : PlotState.NotOpen;
+
                 plots.Add(new Plot(
                     authoredPlot.PlotId,
                     cells,
                     authoredPlot.PlotType,
-                    authoredPlot.GenerationType,
                     plotState,
                     FactionId.Neutral,
                     ownershipMode,
@@ -214,7 +259,9 @@ namespace HexMap.Gvg.Authoring
             }
 
             var plotIds = new HashSet<int>();
-            var assignedHexIds = new HashSet<int>();
+            var singlePlotsByHex = new Dictionary<int, List<GvgPlotAuthoringData>>();
+            var multiPlotByHex = new Dictionary<int, GvgPlotAuthoringData>();
+
             for (var plotIndex = 0; plotIndex < asset.Plots.Count; plotIndex++)
             {
                 var plot = asset.Plots[plotIndex];
@@ -234,61 +281,140 @@ namespace HexMap.Gvg.Authoring
                     AddIssue(issues, "Plot " + plot.PlotId + " has an undefined PlotType value: " + (int)plot.PlotType + ".");
                 }
 
-                if (!Enum.IsDefined(typeof(PlotGenerationType), plot.GenerationType))
-                {
-                    AddIssue(issues, "Plot " + plot.PlotId + " has an undefined PlotGenerationType value: " + (int)plot.GenerationType + ".");
-                }
-
-                if (plot.PlotType == PlotType.Obstacle && plot.GenerationType == PlotGenerationType.TimedOpen)
-                {
-                    AddIssue(issues, "Obstacle Plot " + plot.PlotId + " cannot use TimedOpen generation.");
-                }
-
                 if (plot.HexIds == null || plot.HexIds.Count == 0)
                 {
                     AddIssue(issues, "Plot " + plot.PlotId + " has no HexIds.");
                     continue;
                 }
 
+                if (plot.Start < 0)
+                {
+                    AddIssue(issues, "Plot " + plot.PlotId + " has a negative Start.");
+                }
+
+                if (plot.End != -1 && plot.End <= plot.Start)
+                {
+                    AddIssue(issues, "Plot " + plot.PlotId + " must have End > Start or End = -1.");
+                }
+
+                var plotHexIds = new HashSet<int>();
                 for (var hexIndex = 0; hexIndex < plot.HexIds.Count; hexIndex++)
                 {
                     var hexId = plot.HexIds[hexIndex];
+                    if (!plotHexIds.Add(hexId))
+                    {
+                        AddIssue(issues, "Plot " + plot.PlotId + " contains duplicate HexId: " + hexId + ".");
+                    }
+
                     if (!map.TryGetCell(hexId, out _))
                     {
                         AddIssue(issues, "Plot " + plot.PlotId + " references HexId outside radius: " + hexId + ".");
                     }
-
-                    if (!assignedHexIds.Add(hexId))
-                    {
-                        AddIssue(issues, "HexId belongs to multiple Plots: " + hexId + ".");
-                    }
                 }
 
-                if (plot.HexIds.Count == 1)
+                if (plot.IsMultiCell)
                 {
-                    if (plot.PlotId != plot.HexIds[0])
+                    if (plot.Start != 0 || plot.End != -1)
                     {
-                        AddIssue(issues, "Single-cell Plot must use its HexId as PlotId: " + plot.PlotId + ".");
+                        AddIssue(issues, "Multi-cell Plot " + plot.PlotId + " must use Start=0 and End=-1.");
+                    }
+
+                    if (Enum.IsDefined(typeof(PlotType), plot.PlotType) &&
+                        !IsValidMultiPlotId(plot.PlotId, plot.PlotType))
+                    {
+                        AddIssue(issues, "Multi-cell Plot " + plot.PlotId + " does not match its PlotType ID range.");
+                    }
+
+                    for (var hexIndex = 0; hexIndex < plot.HexIds.Count; hexIndex++)
+                    {
+                        var hexId = plot.HexIds[hexIndex];
+                        GvgPlotAuthoringData existingMulti;
+                        if (multiPlotByHex.TryGetValue(hexId, out existingMulti) && existingMulti != plot)
+                        {
+                            AddIssue(issues, "HexId belongs to multiple multi-cell Plots: " + hexId + ".");
+                        }
+                        else
+                        {
+                            multiPlotByHex[hexId] = plot;
+                        }
                     }
                 }
-                else if (plot.PlotId >= 0)
+                else
                 {
-                    AddIssue(issues, "Multi-cell Plot must use a negative PlotId: " + plot.PlotId + ".");
+                    List<GvgPlotAuthoringData> layers;
+                    if (!singlePlotsByHex.TryGetValue(plot.HexIds[0], out layers))
+                    {
+                        layers = new List<GvgPlotAuthoringData>();
+                        singlePlotsByHex.Add(plot.HexIds[0], layers);
+                    }
+
+                    layers.Add(plot);
                 }
             }
 
-            var missingHexIds = new List<int>();
+            var timedBase = map.Cells.Count == 0
+                ? 0
+                : CalculateTimedSinglePlotIdBase(MaxHexId(map));
+
+            foreach (var pair in singlePlotsByHex)
+            {
+                var hexId = pair.Key;
+                var layers = pair.Value;
+                layers.Sort(CompareLayers);
+
+                var expectedType = layers[0].PlotType;
+                for (var index = 0; index < layers.Count; index++)
+                {
+                    var layer = layers[index];
+                    if (layer.PlotType != expectedType)
+                    {
+                        AddIssue(issues, "HexId " + hexId + " has multiple single-cell PlotTypes.");
+                    }
+
+                    if (index == 0)
+                    {
+                        if (layer.PlotId != hexId)
+                        {
+                            AddIssue(issues, "First single-cell layer for HexId " + hexId + " must use PlotId " + hexId + ".");
+                        }
+                    }
+                    else
+                    {
+                        if (layer.PlotId < timedBase)
+                        {
+                            AddIssue(issues, "Later single-cell layer for HexId " + hexId + " must use PlotId >= " + timedBase + ".");
+                        }
+
+                        if (layers[index - 1].End != layer.Start)
+                        {
+                            AddIssue(issues, "Single-cell layers for HexId " + hexId + " must be contiguous.");
+                        }
+                    }
+
+                    if (index == layers.Count - 1 && layer.End != -1)
+                    {
+                        AddIssue(issues, "Final single-cell layer for HexId " + hexId + " must use End=-1.");
+                    }
+
+                    if (layer.End == -1 && index != layers.Count - 1)
+                    {
+                        AddIssue(issues, "Only the final single-cell layer for HexId " + hexId + " may use End=-1.");
+                    }
+                }
+
+                if (multiPlotByHex.ContainsKey(hexId))
+                {
+                    AddIssue(issues, "HexId " + hexId + " cannot belong to a multi-cell Plot and a single-cell schedule.");
+                }
+            }
+
             for (var index = 0; index < map.Cells.Count; index++)
             {
-                if (!assignedHexIds.Contains(map.Cells[index].Id))
+                var hexId = map.Cells[index].Id;
+                if (!singlePlotsByHex.ContainsKey(hexId) && !multiPlotByHex.ContainsKey(hexId))
                 {
-                    missingHexIds.Add(map.Cells[index].Id);
+                    AddIssue(issues, "Map HexId " + hexId + " is not assigned to a Plot or single-cell schedule.");
                 }
-            }
-
-            if (missingHexIds.Count > 0)
-            {
-                AddIssue(issues, "Map has " + missingHexIds.Count + " unassigned HexIds: " + FormatFirstHexIds(missingHexIds) + ".");
             }
 
             return new GvgMapAuthoringValidationResult(issues);
@@ -297,45 +423,7 @@ namespace HexMap.Gvg.Authoring
         public static void RepairForCurrentRadius(GvgMapAuthoringAsset asset)
         {
             ValidateAsset(asset);
-            var map = asset.CreateRuntimeMap();
-            var assignedHexIds = new HashSet<int>();
-            for (var plotIndex = asset.MutablePlots.Count - 1; plotIndex >= 0; plotIndex--)
-            {
-                var plot = asset.MutablePlots[plotIndex];
-                if (plot == null)
-                {
-                    asset.MutablePlots.RemoveAt(plotIndex);
-                    continue;
-                }
-
-                var keptHexIds = new List<int>();
-                for (var hexIndex = 0; hexIndex < plot.HexIds.Count; hexIndex++)
-                {
-                    var hexId = plot.HexIds[hexIndex];
-                    if (map.TryGetCell(hexId, out _) && assignedHexIds.Add(hexId))
-                    {
-                        keptHexIds.Add(hexId);
-                    }
-                }
-
-                plot.HexIds.Clear();
-                plot.HexIds.AddRange(keptHexIds);
-                if (plot.HexIds.Count == 0)
-                {
-                    asset.MutablePlots.RemoveAt(plotIndex);
-                }
-            }
-
-            for (var cellIndex = 0; cellIndex < map.Cells.Count; cellIndex++)
-            {
-                var cell = map.Cells[cellIndex];
-                if (!assignedHexIds.Contains(cell.Id))
-                {
-                    asset.MutablePlots.Add(new GvgPlotAuthoringData(cell.Id, new[] { cell.Id }, PlotType.Normal));
-                }
-            }
-
-            NormalizePlotIds(asset.MutablePlots);
+            throw new InvalidOperationException("Repairing coverage after a Radius change is not supported in the current GVG authoring version.");
         }
 
         public static Dictionary<int, GvgPlotAuthoringData> CreatePlotLookup(
@@ -351,13 +439,17 @@ namespace HexMap.Gvg.Authoring
                 for (var hexIndex = 0; hexIndex < plot.HexIds.Count; hexIndex++)
                 {
                     var hexId = plot.HexIds[hexIndex];
-                    if (throwOnDuplicate)
+                    GvgPlotAuthoringData existing;
+                    if (lookup.TryGetValue(hexId, out existing))
                     {
-                        lookup.Add(hexId, plot);
+                        if (throwOnDuplicate)
+                            throw new InvalidOperationException("HexId has multiple authoring Plot layers: " + hexId + ".");
+                        if (CompareLayers(plot, existing) < 0)
+                            lookup[hexId] = plot;
                     }
                     else
                     {
-                        lookup[hexId] = plot;
+                        lookup.Add(hexId, plot);
                     }
                 }
             }
@@ -365,44 +457,147 @@ namespace HexMap.Gvg.Authoring
             return lookup;
         }
 
-        public static void NormalizePlotIds(IReadOnlyList<GvgPlotAuthoringData> plots)
+        public static void NormalizePlotIds(GvgMapAuthoringAsset asset)
         {
-            if (plots == null) throw new ArgumentNullException(nameof(plots));
+            ValidateAsset(asset);
+            var map = asset.CreateRuntimeMap();
+            var timedBase = map.Cells.Count == 0 ? 0 : CalculateTimedSinglePlotIdBase(MaxHexId(map));
             var usedIds = new HashSet<int>();
-            var preservedMultiPlots = new HashSet<GvgPlotAuthoringData>();
-            var preservedMultiPlotIds = new HashSet<int>();
-            for (var index = 0; index < plots.Count; index++)
+            var retainedPlots = new HashSet<GvgPlotAuthoringData>();
+            var originalIdCounts = new Dictionary<int, int>();
+
+            for (var index = 0; index < asset.MutablePlots.Count; index++)
             {
-                var plot = plots[index];
+                var plot = asset.MutablePlots[index];
+                if (plot == null) continue;
+                int count;
+                originalIdCounts.TryGetValue(plot.PlotId, out count);
+                originalIdCounts[plot.PlotId] = count + 1;
+            }
+
+            var singleGroups = new Dictionary<int, List<GvgPlotAuthoringData>>();
+            for (var index = 0; index < asset.MutablePlots.Count; index++)
+            {
+                var plot = asset.MutablePlots[index];
                 if (plot == null || plot.HexIds == null || plot.HexIds.Count != 1) continue;
-                plot.PlotId = plot.HexIds[0];
-                usedIds.Add(plot.PlotId);
+
+                List<GvgPlotAuthoringData> layers;
+                if (!singleGroups.TryGetValue(plot.HexIds[0], out layers))
+                {
+                    layers = new List<GvgPlotAuthoringData>();
+                    singleGroups.Add(plot.HexIds[0], layers);
+                }
+
+                layers.Add(plot);
             }
 
-            for (var index = 0; index < plots.Count; index++)
+            foreach (var pair in singleGroups)
             {
-                var plot = plots[index];
-                if (plot == null || plot.HexIds == null || plot.HexIds.Count <= 1 || plot.PlotId >= 0) continue;
-                if (!preservedMultiPlotIds.Add(plot.PlotId)) continue;
-                preservedMultiPlots.Add(plot);
+                pair.Value.Sort(CompareLayers);
+                pair.Value[0].PlotId = pair.Key;
+                usedIds.Add(pair.Key);
             }
 
-            foreach (var plotId in preservedMultiPlotIds)
+            for (var index = 0; index < asset.MutablePlots.Count; index++)
             {
-                usedIds.Add(plotId);
+                var plot = asset.MutablePlots[index];
+                if (plot == null || !plot.IsMultiCell) continue;
+                if (Enum.IsDefined(typeof(PlotType), plot.PlotType) &&
+                    IsValidMultiPlotId(plot.PlotId, plot.PlotType) &&
+                    !usedIds.Contains(plot.PlotId) &&
+                    originalIdCounts[plot.PlotId] == 1)
+                {
+                    usedIds.Add(plot.PlotId);
+                    retainedPlots.Add(plot);
+                }
             }
 
-            for (var index = 0; index < plots.Count; index++)
+            foreach (var pair in singleGroups)
             {
-                var plot = plots[index];
-                if (plot == null || plot.HexIds == null || plot.HexIds.Count <= 1) continue;
-                if (preservedMultiPlots.Contains(plot)) continue;
+                for (var index = 1; index < pair.Value.Count; index++)
+                {
+                    var plot = pair.Value[index];
+                    if (plot.PlotId >= timedBase &&
+                        !usedIds.Contains(plot.PlotId) &&
+                        originalIdCounts[plot.PlotId] == 1)
+                    {
+                        usedIds.Add(plot.PlotId);
+                        retainedPlots.Add(plot);
+                    }
+                }
+            }
 
-                plot.PlotId = AllocateNegativePlotId(usedIds);
-                usedIds.Add(plot.PlotId);
+            var nextTimedId = timedBase;
+            foreach (var pair in singleGroups)
+            {
+                for (var index = 1; index < pair.Value.Count; index++)
+                {
+                    var plot = pair.Value[index];
+                    if (retainedPlots.Contains(plot)) continue;
+                    while (usedIds.Contains(nextTimedId)) nextTimedId++;
+                    plot.PlotId = nextTimedId++;
+                    usedIds.Add(plot.PlotId);
+                }
+            }
+
+            for (var index = 0; index < asset.MutablePlots.Count; index++)
+            {
+                var plot = asset.MutablePlots[index];
+                if (plot == null || !plot.IsMultiCell || retainedPlots.Contains(plot)) continue;
+
+                var nextId = CalculateMultiPlotIdBase(plot.PlotType);
+                while (usedIds.Contains(nextId)) nextId++;
+                plot.PlotId = nextId;
+                usedIds.Add(nextId);
             }
         }
+        private static int MaxHexId(RuntimeHexMap map)
+        {
+            var maxHexId = 0;
+            for (var index = 0; index < map.Cells.Count; index++)
+            {
+                if (map.Cells[index].Id > maxHexId) maxHexId = map.Cells[index].Id;
+            }
 
+            return maxHexId;
+        }
+
+        private static int CompareLayers(GvgPlotAuthoringData left, GvgPlotAuthoringData right)
+        {
+            var result = left.Start.CompareTo(right.Start);
+            return result != 0 ? result : left.PlotId.CompareTo(right.PlotId);
+        }
+
+        private static bool ContainsHex(List<GvgPlotAuthoringData> plots, int hexId)
+        {
+            for (var index = 0; index < plots.Count; index++)
+            {
+                if (plots[index] != null && plots[index].HexIds.Contains(hexId)) return true;
+            }
+
+            return false;
+        }
+
+        private static void RemoveOverlappingPlotsExceptTarget(
+            List<GvgPlotAuthoringData> plots,
+            GvgPlotAuthoringData target)
+        {
+            var targetHexIds = new HashSet<int>(target.HexIds);
+            for (var index = plots.Count - 1; index >= 0; index--)
+            {
+                var plot = plots[index];
+                if (plot == null || plot == target) continue;
+                for (var hexIndex = plot.HexIds.Count - 1; hexIndex >= 0; hexIndex--)
+                {
+                    if (targetHexIds.Contains(plot.HexIds[hexIndex]))
+                    {
+                        plot.HexIds.RemoveAt(hexIndex);
+                    }
+                }
+
+                if (plot.HexIds.Count == 0) plots.RemoveAt(index);
+            }
+        }
         private static void RemoveHexFromOtherPlots(
             List<GvgPlotAuthoringData> plots,
             GvgPlotAuthoringData target,
@@ -413,6 +608,7 @@ namespace HexMap.Gvg.Authoring
                 var plot = plots[index];
                 if (plot == target) continue;
                 plot.HexIds.Remove(hexId);
+                if (plot.HexIds.Count == 0) plots.RemoveAt(index);
             }
         }
 
@@ -437,43 +633,107 @@ namespace HexMap.Gvg.Authoring
             return null;
         }
 
-        private static GvgPlotAuthoringData FindPlotContainingHex(List<GvgPlotAuthoringData> plots, int hexId)
+        private static int MaxHexIdFromPlots(IReadOnlyList<GvgPlotAuthoringData> plots)
         {
+            var maxHexId = 0;
             for (var index = 0; index < plots.Count; index++)
             {
                 var plot = plots[index];
-                if (plot != null && plot.HexIds != null && plot.HexIds.Contains(hexId)) return plot;
+                if (plot == null || plot.HexIds == null) continue;
+                for (var hexIndex = 0; hexIndex < plot.HexIds.Count; hexIndex++)
+                {
+                    maxHexId = Math.Max(maxHexId, plot.HexIds[hexIndex]);
+                }
             }
 
-            return null;
+            return maxHexId;
         }
 
-        private static int AllocateNegativePlotId(HashSet<int> usedIds)
+        public static void NormalizePlotIds(IReadOnlyList<GvgPlotAuthoringData> plots)
         {
-            var plotId = -1;
-            while (usedIds.Contains(plotId))
+            if (plots == null) throw new ArgumentNullException(nameof(plots));
+            var usedIds = new HashSet<int>();
+            var retainedPlots = new HashSet<GvgPlotAuthoringData>();
+            var maxHexId = MaxHexIdFromPlots(plots);
+            var timedBase = CalculateTimedSinglePlotIdBase(maxHexId);
+            var groups = new Dictionary<int, List<GvgPlotAuthoringData>>();
+
+            for (var index = 0; index < plots.Count; index++)
             {
-                plotId--;
+                var plot = plots[index];
+                if (plot == null || !plot.IsMultiCell)
+                {
+                    if (plot != null && plot.HexIds != null && plot.HexIds.Count == 1)
+                    {
+                        List<GvgPlotAuthoringData> layers;
+                        if (!groups.TryGetValue(plot.HexIds[0], out layers))
+                        {
+                            layers = new List<GvgPlotAuthoringData>();
+                            groups.Add(plot.HexIds[0], layers);
+                        }
+
+                        layers.Add(plot);
+                    }
+                }
             }
 
-            return plotId;
-        }
+            foreach (var pair in groups)
+            {
+                pair.Value.Sort(CompareLayers);
+                pair.Value[0].PlotId = pair.Key;
+                usedIds.Add(pair.Key);
+            }
 
+            for (var index = 0; index < plots.Count; index++)
+            {
+                var plot = plots[index];
+                if (plot == null || !plot.IsMultiCell) continue;
+                if (IsValidMultiPlotId(plot.PlotId, plot.PlotType) && !usedIds.Contains(plot.PlotId))
+                {
+                    usedIds.Add(plot.PlotId);
+                    retainedPlots.Add(plot);
+                }
+            }
+
+            foreach (var pair in groups)
+            {
+                for (var index = 1; index < pair.Value.Count; index++)
+                {
+                    var plot = pair.Value[index];
+                    if (plot.PlotId >= timedBase && !usedIds.Contains(plot.PlotId))
+                    {
+                        usedIds.Add(plot.PlotId);
+                        retainedPlots.Add(plot);
+                    }
+                }
+            }
+
+            var nextTimedId = timedBase;
+            foreach (var pair in groups)
+            {
+                for (var index = 1; index < pair.Value.Count; index++)
+                {
+                    var plot = pair.Value[index];
+                    if (retainedPlots.Contains(plot)) continue;
+                    while (usedIds.Contains(nextTimedId)) nextTimedId++;
+                    plot.PlotId = nextTimedId++;
+                    usedIds.Add(plot.PlotId);
+                }
+            }
+
+            for (var index = 0; index < plots.Count; index++)
+            {
+                var plot = plots[index];
+                if (plot == null || !plot.IsMultiCell || retainedPlots.Contains(plot)) continue;
+                var nextId = CalculateMultiPlotIdBase(plot.PlotType);
+                while (usedIds.Contains(nextId)) nextId++;
+                plot.PlotId = nextId;
+                usedIds.Add(nextId);
+            }
+        }
         private static void AddIssue(List<GvgMapAuthoringValidationIssue> issues, string message)
         {
             issues.Add(new GvgMapAuthoringValidationIssue(GvgMapAuthoringValidationSeverity.Error, message));
-        }
-
-        private static string FormatFirstHexIds(List<int> hexIds)
-        {
-            var limit = Math.Min(hexIds.Count, 8);
-            var values = new string[limit];
-            for (var index = 0; index < limit; index++)
-            {
-                values[index] = hexIds[index].ToString();
-            }
-
-            return string.Join(",", values);
         }
 
         private static void ValidateAsset(GvgMapAuthoringAsset asset)

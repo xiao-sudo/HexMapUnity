@@ -27,15 +27,34 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void RegistryRejectsMultiplePlotOwnership()
+        public void RegistryAllowsMultipleClosedOrTemporalPlotsForOneCell()
         {
-            var map = new RuntimeHexMap(new HexMapDefinition(1));
+            var map = new RuntimeHexMap(new HexMapDefinition(0));
             var cell = CellAt(map, 0, 0);
-            var first = CreatePlot(1, new[] { cell });
-            var second = CreatePlot(2, new[] { cell });
-            var registry = new PlotRegistry(map, new[] { first });
+            var first = CreatePlot(0, new[] { cell }, state: PlotState.NotOpen);
+            var second = CreatePlot(400, new[] { cell }, state: PlotState.Open);
+            var registry = new PlotRegistry(map, new[] { first, second });
 
-            Assert.Throws<ArgumentException>(() => registry.Add(second));
+            IReadOnlyList<Plot> plots;
+            Assert.That(registry.TryGetPlotsForCell(cell.Id, out plots), Is.True);
+            Assert.That(plots.Count, Is.EqualTo(2));
+
+            Plot active;
+            Assert.That(registry.TryGetPlotForCell(cell.Id, out active), Is.True);
+            Assert.That(active, Is.SameAs(second));
+        }
+
+        [Test]
+        public void RegistryRejectsMultipleOpenPlotsForOneCell()
+        {
+            var map = new RuntimeHexMap(new HexMapDefinition(0));
+            var cell = CellAt(map, 0, 0);
+            var first = CreatePlot(0, new[] { cell });
+            var second = CreatePlot(400, new[] { cell });
+            var registry = new PlotRegistry(map, new[] { first, second });
+
+            Plot active;
+            Assert.That(registry.TryGetPlotForCell(cell.Id, out active), Is.False);
         }
 
         [Test]
@@ -48,7 +67,6 @@ namespace HexMap.Gvg.Tests
                 1,
                 new[] { cell, cell },
                 PlotType.Normal,
-                PlotGenerationType.Initial,
                 PlotState.Open,
                 FactionId.Neutral,
                 OwnershipMode.Capturable,
@@ -58,7 +76,6 @@ namespace HexMap.Gvg.Tests
                 2,
                 new[] { cell },
                 PlotType.Obstacle,
-                PlotGenerationType.Initial,
                 PlotState.Open,
                 FactionId.Neutral,
                 OwnershipMode.Capturable,
@@ -66,12 +83,12 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void PlotAllowsNegativePlotIdsForAuthoringGeneratedMultiCellPlots()
+        public void PlotAllowsTypedPositivePlotIdsForMultiCellPlots()
         {
             var map = new RuntimeHexMap(new HexMapDefinition(1));
-            var plot = CreatePlot(-1, new[] { CellAt(map, 0, 0), CellAt(map, 1, 0) });
+            var plot = CreatePlot(12000, new[] { CellAt(map, 0, 0), CellAt(map, 1, 0) });
 
-            Assert.That(plot.PlotId, Is.EqualTo(-1));
+            Assert.That(plot.PlotId, Is.EqualTo(12000));
         }
 
         [Test]
@@ -126,7 +143,7 @@ namespace HexMap.Gvg.Tests
             }
 
             plots.Add(CreatePlot(
-                99,
+                12000,
                 new[] { targetCellA, targetCellB },
                 FactionId.Blue));
 
@@ -134,7 +151,7 @@ namespace HexMap.Gvg.Tests
             var service = new PlotPathService(registry);
             var result = new PathResult(new List<HexCell>(map.Count));
 
-            service.FindPath(1, 99, FactionId.Red, result);
+            service.FindPath(1, 12000, FactionId.Red, result);
 
             Assert.That(result.IsSuccess, Is.True);
             Assert.That(result.ReachedTarget.Coordinate, Is.EqualTo(targetCellA.Coordinate).Or.EqualTo(targetCellB.Coordinate));
@@ -162,28 +179,8 @@ namespace HexMap.Gvg.Tests
             Assert.That(result.ReachedTarget, Is.EqualTo(cell));
         }
 
-        private static Plot CreatePlot(
-            int id,
-            IReadOnlyList<HexCell> cells,
-            FactionId owner = FactionId.Neutral,
-            OwnershipMode ownershipMode = OwnershipMode.Capturable,
-            BlockingState blockingState = BlockingState.Passable,
-            PlotState state = PlotState.Open,
-            PlotGenerationType generationType = PlotGenerationType.Initial)
-        {
-            return new Plot(
-                id,
-                cells,
-                PlotType.Normal,
-                generationType,
-                state,
-                owner,
-                ownershipMode,
-                blockingState);
-        }
-
         [Test]
-        public void PlotTypeAndGenerationTypeUseTheSpecifiedNumericValues()
+        public void PlotTypeUsesTheSpecifiedNumericValues()
         {
             Assert.That((int)PlotType.Camp, Is.EqualTo(1));
             Assert.That((int)PlotType.Normal, Is.EqualTo(2));
@@ -192,8 +189,6 @@ namespace HexMap.Gvg.Tests
             Assert.That((int)PlotType.BigCity, Is.EqualTo(5));
             Assert.That((int)PlotType.Capital, Is.EqualTo(6));
             Assert.That((int)PlotType.Obstacle, Is.EqualTo(7));
-            Assert.That((int)PlotGenerationType.Initial, Is.EqualTo(0));
-            Assert.That((int)PlotGenerationType.TimedOpen, Is.EqualTo(1));
             Assert.That((int)PlotState.NotOpen, Is.EqualTo(0));
             Assert.That((int)PlotState.Open, Is.EqualTo(1));
         }
@@ -212,36 +207,27 @@ namespace HexMap.Gvg.Tests
             Assert.That(plot.Close(), Is.False);
         }
 
-        [Test]
-        public void PlotRejectsTimedOpenObstacleAndUndefinedEnums()
-        {
-            var map = new RuntimeHexMap(new HexMapDefinition(0));
-            var cell = CellAt(map, 0, 0);
-
-            Assert.Throws<ArgumentException>(() => new Plot(
-                0,
-                new[] { cell },
-                PlotType.Obstacle,
-                PlotGenerationType.TimedOpen,
-                PlotState.Open,
-                FactionId.Neutral,
-                OwnershipMode.Capturable,
-                BlockingState.Blocked));
-
-            Assert.Throws<ArgumentOutOfRangeException>(() => new Plot(
-                0,
-                new[] { cell },
-                (PlotType)0,
-                PlotGenerationType.Initial,
-                PlotState.Open,
-                FactionId.Neutral,
-                OwnershipMode.Capturable,
-                BlockingState.Passable));
-        }
-
         private static HexCell CellAt(RuntimeHexMap map, int q, int r)
         {
             return map.Query(new HexCoord(q, r)).Cell;
+        }
+
+        private static Plot CreatePlot(
+            int id,
+            IReadOnlyList<HexCell> cells,
+            FactionId owner = FactionId.Neutral,
+            OwnershipMode ownershipMode = OwnershipMode.Capturable,
+            BlockingState blockingState = BlockingState.Passable,
+            PlotState state = PlotState.Open)
+        {
+            return new Plot(
+                id,
+                cells,
+                PlotType.Normal,
+                state,
+                owner,
+                ownershipMode,
+                blockingState);
         }
     }
 }

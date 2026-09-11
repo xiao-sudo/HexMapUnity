@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -12,7 +12,7 @@ namespace HexMap.Gvg.Tests
     public sealed class GvgMapAuthoringTests
     {
         [Test]
-        public void DefaultGenerationCreatesOneSingleCellPlotForEveryHex()
+        public void DefaultGenerationCreatesOneOpenSingleCellLayerForEveryHex()
         {
             var asset = CreateAsset(1);
             try
@@ -25,7 +25,10 @@ namespace HexMap.Gvg.Tests
                     Assert.That(plot.HexIds.Count, Is.EqualTo(1));
                     Assert.That(plot.PlotId, Is.EqualTo(plot.HexIds[0]));
                     Assert.That(plot.PlotType, Is.EqualTo(PlotType.Normal));
+                    Assert.That(plot.Start, Is.EqualTo(0));
+                    Assert.That(plot.End, Is.EqualTo(-1));
                 }
+
                 Assert.That(GvgMapAuthoringUtility.Validate(asset).IsValid, Is.True);
             }
             finally
@@ -35,27 +38,20 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void ValidationRejectsAuthoringCoverageAndPlotIdRuleErrors()
+        public void ValidationAllowsMultipleContiguousLayersForOneHex()
         {
-            var asset = CreateAsset(1);
+            var asset = CreateAsset(0);
             try
             {
                 asset.ReplacePlots(new[]
                 {
-                    new GvgPlotAuthoringData(4, new[] { 0 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(9, new[] { 1, 2 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(10, new[] { 2 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(11, new[] { 100 }, PlotType.Normal)
+                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Normal, 100, 200),
+                    new GvgPlotAuthoringData(400, new[] { 0 }, PlotType.Normal, 200, -1)
                 });
 
                 var validation = GvgMapAuthoringUtility.Validate(asset);
 
-                Assert.That(validation.IsValid, Is.False);
-                Assert.That(ContainsIssue(validation, "Single-cell Plot must use its HexId"), Is.True);
-                Assert.That(ContainsIssue(validation, "Multi-cell Plot must use a negative PlotId"), Is.True);
-                Assert.That(ContainsIssue(validation, "belongs to multiple Plots"), Is.True);
-                Assert.That(ContainsIssue(validation, "outside radius"), Is.True);
-                Assert.That(ContainsIssue(validation, "unassigned HexIds"), Is.True);
+                Assert.That(validation.IsValid, Is.True);
             }
             finally
             {
@@ -64,7 +60,89 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void EditingOperationsMaintainFullCoverageAndUniqueOwnership()
+        public void ValidationRejectsTimeGapsAndMixedTypesForOneHex()
+        {
+            var asset = CreateAsset(0);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Obstacle, 0, 100),
+                    new GvgPlotAuthoringData(400, new[] { 0 }, PlotType.Normal, 200, -1)
+                });
+
+                var validation = GvgMapAuthoringUtility.Validate(asset);
+
+                Assert.That(validation.IsValid, Is.False);
+                Assert.That(ContainsIssue(validation, "contiguous"), Is.True);
+                Assert.That(ContainsIssue(validation, "multiple single-cell PlotTypes"), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+        [Test]
+        public void NormalizePlotIdsUsesHexIdForFirstLayerAndTypedRangeForMultiPlot()
+        {
+            var asset = CreateAsset(11);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(12, new[] { 0 }, PlotType.Normal, 0, 100),
+                    new GvgPlotAuthoringData(13, new[] { 0 }, PlotType.Normal, 100, -1),
+                    new GvgPlotAuthoringData(14, new[] { 1, 2 }, PlotType.SmallCity, 0, -1),
+                    new GvgPlotAuthoringData(15, new[] { 3, 4 }, PlotType.Camp, 0, -1),
+                    new GvgPlotAuthoringData(16, new[] { 5, 6 }, PlotType.Normal, 0, -1)
+                });
+
+                GvgMapAuthoringUtility.NormalizePlotIds(asset);
+
+                var layers = asset.Plots.Where(plot => plot.HexIds.Count == 1 && plot.HexIds[0] == 0)
+                    .OrderBy(plot => plot.Start)
+                    .ToList();
+                Assert.That(layers[0].PlotId, Is.EqualTo(0));
+                Assert.That(layers[1].PlotId, Is.GreaterThanOrEqualTo(400));
+                Assert.That(asset.Plots.Where(plot => plot.IsMultiCell).Select(plot => plot.PlotId),
+                    Is.EquivalentTo(new[] { 14000, 11000, 12000 }));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+        [Test]
+        public void NormalizePlotIdsReassignsImportedMultiIdsThatCollideWithHexIds()
+        {
+            var asset = CreateAsset(11);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(11, new[] { 102, 139 }, PlotType.SmallCity, 0, -1),
+                    new GvgPlotAuthoringData(35, new[] { 7, 8 }, PlotType.Obstacle, 0, -1),
+                    new GvgPlotAuthoringData(36, new[] { 12, 14 }, PlotType.Obstacle, 0, -1),
+                    new GvgPlotAuthoringData(37, new[] { 13, 15 }, PlotType.Obstacle, 0, -1),
+                    new GvgPlotAuthoringData(298, new[] { 11 }, PlotType.Normal, 0, -1)
+                });
+
+                GvgMapAuthoringUtility.NormalizePlotIds(asset);
+
+                Assert.That(asset.Plots.Single(plot => plot.HexIds.Count == 1).PlotId, Is.EqualTo(11));
+                Assert.That(asset.Plots.Where(plot => plot.IsMultiCell).Select(plot => plot.PlotId),
+                    Is.EquivalentTo(new[] { 14000, 17000, 17001, 17002 }));
+                Assert.That(asset.Plots.Select(plot => plot.PlotId).Distinct().Count(),
+                    Is.EqualTo(asset.Plots.Count));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+        public void EditingOperationsMaintainCoverageAndUseTypedMultiPlotIds()
         {
             var asset = CreateAsset(1);
             try
@@ -72,20 +150,21 @@ namespace HexMap.Gvg.Tests
                 GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
 
                 Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, 0, new[] { 1 }), Is.True);
-                var multiPlot = FindPlot(asset, -1);
+                var multiPlot = FindMultiPlot(asset);
                 Assert.That(multiPlot.HexIds, Is.EquivalentTo(new[] { 0, 1 }));
+                Assert.That(multiPlot.PlotId, Is.EqualTo(12000));
 
-                Assert.That(GvgMapAuthoringUtility.TryPaintAdd(asset, -1, 2), Is.True);
-                multiPlot = FindPlot(asset, -1);
+                Assert.That(GvgMapAuthoringUtility.TryPaintAdd(asset, multiPlot.PlotId, 2), Is.True);
+                multiPlot = FindMultiPlot(asset);
                 Assert.That(multiPlot.HexIds, Is.EquivalentTo(new[] { 0, 1, 2 }));
                 Assert.That(asset.Plots.Any(plot => plot.PlotId == 2), Is.False);
 
-                Assert.That(GvgMapAuthoringUtility.TryPaintRemove(asset, -1, 2), Is.True);
-                multiPlot = FindPlot(asset, -1);
+                Assert.That(GvgMapAuthoringUtility.TryPaintRemove(asset, multiPlot.PlotId, 2), Is.True);
+                multiPlot = FindMultiPlot(asset);
                 Assert.That(multiPlot.HexIds, Is.EquivalentTo(new[] { 0, 1 }));
                 Assert.That(FindPlot(asset, 2).HexIds, Is.EqualTo(new[] { 2 }));
 
-                Assert.That(GvgMapAuthoringUtility.TryDeletePlot(asset, -1), Is.True);
+                Assert.That(GvgMapAuthoringUtility.TryDeletePlot(asset, multiPlot.PlotId), Is.True);
                 Assert.That(asset.Plots.Count, Is.EqualTo(7));
                 Assert.That(GvgMapAuthoringUtility.Validate(asset).IsValid, Is.True);
             }
@@ -119,27 +198,16 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void RebuildRadiusExpandsAndShrinksCoverage()
+        public void RadiusChangesAreRejectedInTheCurrentVersion()
         {
             var asset = CreateAsset(1);
             try
             {
                 GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
-                GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, 0, new[] { 6 });
 
-                GvgMapAuthoringUtility.RebuildRadius(asset, 2);
-
-                Assert.That(asset.Radius, Is.EqualTo(2));
-                Assert.That(asset.Plots.SelectMany(plot => plot.HexIds).Distinct().Count(), Is.EqualTo(19));
-                Assert.That(FindPlot(asset, -1).HexIds, Is.EquivalentTo(new[] { 0, 6 }));
-
-                GvgMapAuthoringUtility.RebuildRadius(asset, 0);
-
-                Assert.That(asset.Radius, Is.EqualTo(0));
-                Assert.That(asset.Plots.Count, Is.EqualTo(1));
-                Assert.That(asset.Plots[0].PlotId, Is.EqualTo(0));
-                Assert.That(asset.Plots[0].HexIds, Is.EqualTo(new[] { 0 }));
-                Assert.That(GvgMapAuthoringUtility.Validate(asset).IsValid, Is.True);
+                Assert.Throws<InvalidOperationException>(
+                    () => GvgMapAuthoringUtility.RebuildRadius(asset, 2));
+                Assert.That(asset.Radius, Is.EqualTo(1));
             }
             finally
             {
@@ -148,24 +216,26 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void CsvOutputSortsRowsAndQuotesHexIdArrays()
+        public void CsvOutputUsesOneFileAndExportsTimeRanges()
         {
-            var asset = CreateAsset(1);
+            var asset = CreateAsset(0);
             try
             {
-                asset.MapId = "Map,One";
-                GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
-                GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, 0, new[] { 6 });
-                FindPlot(asset, -1).PlotType = PlotType.BigCity;
+                asset.MapId = "MapOne";
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Normal, 0, 338400),
+                    new GvgPlotAuthoringData(400, new[] { 0 }, PlotType.Normal, 338400, -1)
+                });
 
-                var mapCsv = GvgMapAuthoringCsv.CreateMapCsv(asset);
-                var plotsCsv = GvgMapAuthoringCsv.CreatePlotsCsv(asset);
-                var cellsCsv = GvgMapAuthoringCsv.CreateCellsCsv(asset);
+                var csv = GvgMapAuthoringCsv.CreateGvgMapCsv(asset);
+                var lines = csv.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
 
-                Assert.That(mapCsv, Does.StartWith("MapId,Radius,Orientation,Plane,OuterRadius"));
-                Assert.That(mapCsv, Does.Contain("\"Map,One\",1,0,1,1"));
-                Assert.That(plotsCsv.Split(new[] { Environment.NewLine }, StringSplitOptions.None)[1], Is.EqualTo("-1,\"[0,6]\",5,0"));
-                Assert.That(cellsCsv.Split(new[] { Environment.NewLine }, StringSplitOptions.None)[1], Is.EqualTo("0,0,0,-1"));
+                Assert.That(lines[0], Is.EqualTo("PlotId,HexIds,PlotType,Start,End"));
+                Assert.That(lines[1], Is.EqualTo("0,\"[0]\",2,0,338400"));
+                Assert.That(lines[2], Is.EqualTo("400,\"[0]\",2,338400,-1"));
+                Assert.That(GvgMapAuthoringCsv.CreateFiles(asset).Keys,
+                    Is.EquivalentTo(new[] { "GVGMap_MapOne.csv" }));
             }
             finally
             {
@@ -174,27 +244,25 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void ExportWriterWritesUtf8BomAndReadmeDocumentsEnumsAndDefaults()
+        public void ExportWriterWritesUtf8BomAndReadmeDocumentsNewContract()
         {
             var asset = CreateAsset(0);
             var directory = Path.Combine(Path.GetTempPath(), "GvgMapAuthoringTests_" + Guid.NewGuid().ToString("N"));
             try
             {
                 GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
-
                 GvgMapAuthoringExportWriter.WriteFiles(directory, GvgMapAuthoringCsv.CreateFiles(asset));
 
-                var mapBytes = File.ReadAllBytes(Path.Combine(directory, GvgMapAuthoringCsv.MapFileName));
-                Assert.That(mapBytes[0], Is.EqualTo(0xEF));
-                Assert.That(mapBytes[1], Is.EqualTo(0xBB));
-                Assert.That(mapBytes[2], Is.EqualTo(0xBF));
+                var csvBytes = File.ReadAllBytes(Path.Combine(directory, "GVGMap_" + asset.MapId + ".csv"));
+                Assert.That(csvBytes[0], Is.EqualTo(0xEF));
+                Assert.That(csvBytes[1], Is.EqualTo(0xBB));
+                Assert.That(csvBytes[2], Is.EqualTo(0xBF));
 
-                var readme = File.ReadAllText(Path.Combine(directory, GvgMapAuthoringCsv.ReadmeFileName));
-                Assert.That(readme, Does.Contain("1 = Camp"));
-                Assert.That(readme, Does.Contain("0 = Initial"));
-                Assert.That(readme, Does.Contain("1 = TimedOpen"));
-                Assert.That(readme, Does.Contain("projects to PlotState.Open"));
-                Assert.That(readme, Does.Contain("CSV import is not implemented"));
+                var readme = GvgMapAuthoringCsv.CreateReadme(asset);
+                Assert.That(readme, Does.Contain("PlotId,HexIds,PlotType,Start,End"));
+                Assert.That(readme, Does.Contain("End=-1"));
+                Assert.That(readme, Does.Contain("11000+"));
+                Assert.That(readme, Does.Not.Contain("GenerationType"));
             }
             finally
             {
@@ -204,28 +272,25 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void RuntimeProjectionUsesGenerationTypeForInitialState()
+        public void RuntimeProjectionUsesStartForInitialState()
         {
             var asset = CreateAsset(1);
             try
             {
                 asset.ReplacePlots(new[]
                 {
-                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Normal, PlotGenerationType.Initial),
-                    new GvgPlotAuthoringData(1, new[] { 1 }, PlotType.Normal, PlotGenerationType.TimedOpen),
-                    new GvgPlotAuthoringData(2, new[] { 2 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(3, new[] { 3 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(4, new[] { 4 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(5, new[] { 5 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(6, new[] { 6 }, PlotType.Normal)
+                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Normal, 0, 100),
+                    new GvgPlotAuthoringData(1, new[] { 1 }, PlotType.Normal, 100, -1),
+                    new GvgPlotAuthoringData(2, new[] { 2 }, PlotType.Normal, 0, -1),
+                    new GvgPlotAuthoringData(3, new[] { 3 }, PlotType.Normal, 0, -1),
+                    new GvgPlotAuthoringData(4, new[] { 4 }, PlotType.Normal, 0, -1),
+                    new GvgPlotAuthoringData(5, new[] { 5 }, PlotType.Normal, 0, -1),
+                    new GvgPlotAuthoringData(6, new[] { 6 }, PlotType.Normal, 0, -1)
                 });
 
                 var runtimePlots = GvgMapAuthoringUtility.CreateRuntimePlots(asset);
-                Assert.That(runtimePlots[0].GenerationType, Is.EqualTo(PlotGenerationType.Initial));
-                Assert.That(runtimePlots[0].PlotState, Is.EqualTo(PlotState.Open));
-                Assert.That(runtimePlots[1].GenerationType, Is.EqualTo(PlotGenerationType.TimedOpen));
-                Assert.That(runtimePlots[1].PlotState, Is.EqualTo(PlotState.NotOpen));
-                Assert.That(runtimePlots[1].IsOpenForPathfinding, Is.False);
+                Assert.That(runtimePlots.First(plot => plot.PlotId == 0).PlotState, Is.EqualTo(PlotState.Open));
+                Assert.That(runtimePlots.First(plot => plot.PlotId == 1).PlotState, Is.EqualTo(PlotState.NotOpen));
             }
             finally
             {
@@ -234,59 +299,20 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void ValidationRejectsTimedOpenObstacle()
+        public void ValidationRejectsTimedMultiCellPlot()
         {
-            var asset = CreateAsset(0);
+            var asset = CreateAsset(1);
             try
             {
                 asset.ReplacePlots(new[]
                 {
-                    new GvgPlotAuthoringData(
-                        0,
-                        new[] { 0 },
-                        PlotType.Obstacle,
-                        PlotGenerationType.TimedOpen)
+                    new GvgPlotAuthoringData(12000, new[] { 0, 1 }, PlotType.Normal, 1, -1)
                 });
 
                 var validation = GvgMapAuthoringUtility.Validate(asset);
+
                 Assert.That(validation.IsValid, Is.False);
-                Assert.That(ContainsIssue(validation, "cannot use TimedOpen"), Is.True);
-                Assert.Throws<InvalidOperationException>(
-                    () => GvgMapAuthoringUtility.CreateRuntimePlots(asset));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(asset);
-            }
-        }
-
-        [Test]
-        public void RuntimeProjectionAppliesDefaultRulesAndTypeOverrides()
-        {
-            var asset = CreateAsset(1);
-            try
-            {
-                asset.ReplacePlots(new[]
-                {
-                    new GvgPlotAuthoringData(-1, new[] { 0, 1 }, PlotType.Obstacle),
-                    new GvgPlotAuthoringData(2, new[] { 2 }, PlotType.Camp),
-                    new GvgPlotAuthoringData(3, new[] { 3 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(4, new[] { 4 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(5, new[] { 5 }, PlotType.Normal),
-                    new GvgPlotAuthoringData(6, new[] { 6 }, PlotType.Normal)
-                });
-
-                var runtimePlots = GvgMapAuthoringUtility.CreateRuntimePlots(asset);
-                var obstacle = runtimePlots.First(plot => plot.PlotId == -1);
-                var camp = runtimePlots.First(plot => plot.PlotId == 2);
-                var normal = runtimePlots.First(plot => plot.PlotId == 3);
-
-                Assert.That(obstacle.BlockingState, Is.EqualTo(BlockingState.Blocked));
-                Assert.That(obstacle.OwnerFaction, Is.EqualTo(FactionId.Neutral));
-                Assert.That(obstacle.PlotState, Is.EqualTo(PlotState.Open));
-                Assert.That(camp.OwnershipMode, Is.EqualTo(OwnershipMode.Fixed));
-                Assert.That(normal.OwnershipMode, Is.EqualTo(OwnershipMode.Capturable));
-                Assert.That(normal.BlockingState, Is.EqualTo(BlockingState.Passable));
+                Assert.That(ContainsIssue(validation, "Start=0 and End=-1"), Is.True);
             }
             finally
             {
@@ -312,6 +338,13 @@ namespace HexMap.Gvg.Tests
         private static GvgPlotAuthoringData FindPlotContainingHex(GvgMapAuthoringAsset asset, int hexId)
         {
             var plot = asset.Plots.FirstOrDefault(candidate => candidate.HexIds.Contains(hexId));
+            Assert.That(plot, Is.Not.Null);
+            return plot;
+        }
+
+        private static GvgPlotAuthoringData FindMultiPlot(GvgMapAuthoringAsset asset)
+        {
+            var plot = asset.Plots.FirstOrDefault(candidate => candidate.IsMultiCell);
             Assert.That(plot, Is.Not.Null);
             return plot;
         }

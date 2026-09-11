@@ -10,6 +10,7 @@ namespace HexMap.Gvg.Editor
         public static string Export(GvgMapAuthoringAsset asset)
         {
             if (asset == null) throw new ArgumentNullException(nameof(asset));
+
             var validation = GvgMapAuthoringUtility.Validate(asset);
             if (!validation.IsValid)
             {
@@ -26,7 +27,13 @@ namespace HexMap.Gvg.Editor
             var exportDirectory = Path.Combine("Assets/HexMap/Gvg/Exports", assetName);
             GvgMapAuthoringExportWriter.WriteFiles(exportDirectory, GvgMapAuthoringCsv.CreateFiles(asset));
             AssetDatabase.Refresh();
-            return exportDirectory;
+
+            return Path.Combine(
+                exportDirectory,
+                string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    GvgMapAuthoringCsv.FileNameFormat,
+                    asset.MapId));
         }
     }
 }

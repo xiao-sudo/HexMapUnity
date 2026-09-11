@@ -16,12 +16,6 @@ namespace HexMap.Gvg
         Obstacle = 7
     }
 
-    public enum PlotGenerationType
-    {
-        Initial = 0,
-        TimedOpen = 1
-    }
-
     public enum PlotState
     {
         NotOpen = 0,
@@ -52,7 +46,6 @@ namespace HexMap.Gvg
         private readonly int m_PlotId;
         private readonly IReadOnlyList<HexCell> m_Cells;
         private readonly PlotType m_PlotType;
-        private readonly PlotGenerationType m_GenerationType;
         private PlotState m_PlotState;
         private readonly FactionId m_OwnerFaction;
         private readonly OwnershipMode m_OwnershipMode;
@@ -62,7 +55,6 @@ namespace HexMap.Gvg
             int plotId,
             IReadOnlyList<HexCell> cells,
             PlotType plotType,
-            PlotGenerationType generationType,
             PlotState plotState,
             FactionId ownerFaction,
             OwnershipMode ownershipMode,
@@ -72,8 +64,6 @@ namespace HexMap.Gvg
             if (cells.Count == 0) throw new ArgumentException("A Plot must contain at least one cell.", nameof(cells));
             if (!Enum.IsDefined(typeof(PlotType), plotType))
                 throw new ArgumentOutOfRangeException(nameof(plotType), plotType, "PlotType is not defined.");
-            if (!Enum.IsDefined(typeof(PlotGenerationType), generationType))
-                throw new ArgumentOutOfRangeException(nameof(generationType), generationType, "PlotGenerationType is not defined.");
             if (!Enum.IsDefined(typeof(PlotState), plotState))
                 throw new ArgumentOutOfRangeException(nameof(plotState), plotState, "PlotState is not defined.");
 
@@ -97,15 +87,9 @@ namespace HexMap.Gvg
                 throw new ArgumentException("Obstacle Plots must be blocked.", nameof(blockingState));
             }
 
-            if (plotType == PlotType.Obstacle && generationType == PlotGenerationType.TimedOpen)
-            {
-                throw new ArgumentException("Obstacle Plots cannot use TimedOpen generation.", nameof(generationType));
-            }
-
             m_PlotId = plotId;
             m_Cells = new ReadOnlyCollection<HexCell>(copiedCells);
             m_PlotType = plotType;
-            m_GenerationType = generationType;
             m_PlotState = plotState;
             m_OwnerFaction = ownerFaction;
             m_OwnershipMode = ownershipMode;
@@ -115,7 +99,6 @@ namespace HexMap.Gvg
         public int PlotId { get { return m_PlotId; } }
         public IReadOnlyList<HexCell> Cells { get { return m_Cells; } }
         public PlotType PlotType { get { return m_PlotType; } }
-        public PlotGenerationType GenerationType { get { return m_GenerationType; } }
         public PlotState PlotState { get { return m_PlotState; } }
         public FactionId OwnerFaction { get { return m_OwnerFaction; } }
         public OwnershipMode OwnershipMode { get { return m_OwnershipMode; } }

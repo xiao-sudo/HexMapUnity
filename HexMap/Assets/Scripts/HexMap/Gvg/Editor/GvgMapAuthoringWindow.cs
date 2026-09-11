@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using HexMap.Core;
 using HexMap.Gvg.Authoring;
 using HexMap.Runtime;
@@ -84,7 +85,9 @@ namespace HexMap.Gvg.Editor
             EditorGUILayout.LabelField("Map", EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
             var mapId = EditorGUILayout.TextField("Map Id", m_Asset.MapId);
-            var radius = EditorGUILayout.IntField("Radius", m_Asset.Radius);
+            EditorGUI.BeginDisabledGroup(true);
+            EditorGUILayout.IntField("Radius", m_Asset.Radius);
+            EditorGUI.EndDisabledGroup();
             var orientation = (HexOrientation)EditorGUILayout.EnumPopup("Orientation", m_Asset.Orientation);
             var plane = (HexPlane)EditorGUILayout.EnumPopup("Plane", m_Asset.Plane);
             var outerRadius = EditorGUILayout.FloatField("Outer Radius", m_Asset.OuterRadius);
@@ -92,15 +95,6 @@ namespace HexMap.Gvg.Editor
             {
                 Undo.RecordObject(m_Asset, "Edit GVG Map Settings");
                 m_Asset.MapId = mapId;
-                if (radius != m_Asset.Radius && EditorUtility.DisplayDialog(
-                    "Rebuild Radius",
-                    "Changing radius rebuilds the map coverage. Hexes outside the new radius are removed and new hexes get default single-cell Plots.",
-                    "Apply",
-                    "Cancel"))
-                {
-                    GvgMapAuthoringUtility.RebuildRadius(m_Asset, radius);
-                }
-
                 m_Asset.Orientation = orientation;
                 m_Asset.Plane = plane;
                 if (outerRadius > 0f) m_Asset.OuterRadius = outerRadius;
@@ -108,7 +102,6 @@ namespace HexMap.Gvg.Editor
                 SceneView.RepaintAll();
             }
 
-            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Reset Default Plots"))
             {
                 Undo.RecordObject(m_Asset, "Reset GVG Map Plots");
@@ -117,16 +110,9 @@ namespace HexMap.Gvg.Editor
                 EditorUtility.SetDirty(m_Asset);
                 SceneView.RepaintAll();
             }
-            if (GUILayout.Button("Repair Coverage"))
-            {
-                Undo.RecordObject(m_Asset, "Repair GVG Map Coverage");
-                GvgMapAuthoringUtility.RepairForCurrentRadius(m_Asset);
-                EditorUtility.SetDirty(m_Asset);
-                SceneView.RepaintAll();
-            }
-            EditorGUILayout.EndHorizontal();
-        }
 
+            EditorGUILayout.HelpBox("Radius changes and new Hex generation are disabled in the current GVG authoring version.", MessageType.Info);
+        }
         private void DrawToolControls()
         {
             EditorGUILayout.LabelField("Scene Tool", EditorStyles.boldLabel);
@@ -149,57 +135,62 @@ namespace HexMap.Gvg.Editor
 
             EditorGUILayout.LabelField("PlotId", plot.PlotId.ToString());
             EditorGUILayout.LabelField("HexIds", string.Join(",", plot.HexIds.ConvertAll(value => value.ToString()).ToArray()));
+
             EditorGUI.BeginChangeCheck();
             var plotType = (PlotType)EditorGUILayout.EnumPopup("Plot Type", plot.PlotType);
             if (EditorGUI.EndChangeCheck())
             {
-                if (plotType == PlotType.Obstacle && plot.GenerationType == PlotGenerationType.TimedOpen)
+                Undo.RecordObject(m_Asset, "Edit GVG Plot Type");
+                plot.PlotType = plotType;
+                if (plot.HexIds.Count == 1)
                 {
-                    EditorUtility.DisplayDialog(
-                        "Invalid Plot Configuration",
-                        "Obstacle Plots cannot use TimedOpen generation.",
-                        "OK");
+                    var hexId = plot.HexIds[0];
+                    for (var index = 0; index < m_Asset.Plots.Count; index++)
+                    {
+                        var layer = m_Asset.Plots[index];
+                        if (layer != null && layer.HexIds.Count == 1 && layer.HexIds[0] == hexId)
+                        {
+                            layer.PlotType = plotType;
+                        }
+                    }
                 }
-                else
-                {
-                    Undo.RecordObject(m_Asset, "Edit GVG Plot Type");
-                    plot.PlotType = plotType;
-                    EditorUtility.SetDirty(m_Asset);
-                    SceneView.RepaintAll();
-                }
+
+                GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+                EditorUtility.SetDirty(m_Asset);
+                SceneView.RepaintAll();
             }
 
+            EditorGUI.BeginDisabledGroup(plot.IsMultiCell);
             EditorGUI.BeginChangeCheck();
-            var generationType = (PlotGenerationType)EditorGUILayout.EnumPopup(
-                "Generation Type",
-                plot.GenerationType);
+            var start = EditorGUILayout.IntField("Start Seconds", plot.Start);
+            var end = EditorGUILayout.IntField("End Seconds", plot.End);
             if (EditorGUI.EndChangeCheck())
             {
-                if (plotType == PlotType.Obstacle && generationType == PlotGenerationType.TimedOpen)
-                {
-                    EditorUtility.DisplayDialog(
-                        "Invalid Plot Configuration",
-                        "Obstacle Plots cannot use TimedOpen generation.",
-                        "OK");
-                }
-                else
-                {
-                    Undo.RecordObject(m_Asset, "Edit GVG Plot Generation Type");
-                    plot.GenerationType = generationType;
-                    EditorUtility.SetDirty(m_Asset);
-                    SceneView.RepaintAll();
-                }
+                Undo.RecordObject(m_Asset, "Edit GVG Plot Time Layer");
+                plot.Start = start;
+                plot.End = end;
+                GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+                EditorUtility.SetDirty(m_Asset);
+                SceneView.RepaintAll();
             }
+            EditorGUI.EndDisabledGroup();
 
-            var initialState = generationType == PlotGenerationType.Initial
-                ? PlotState.Open
-                : PlotState.NotOpen;
+            if (!plot.IsMultiCell)
+            {
+                DrawHexScheduleControls(plot.HexIds[0]);
+            }
+            var initialState = plot.Start == 0 ? PlotState.Open : PlotState.NotOpen;
             var initialPassable = initialState == PlotState.Open && plot.PlotType != PlotType.Obstacle;
             EditorGUILayout.LabelField("Initial Runtime State", initialState.ToString());
             EditorGUILayout.LabelField("Initial Passable", initialPassable ? "Yes" : "No");
             EditorGUILayout.LabelField(
                 "Initial Capturable",
                 initialState == PlotState.Open && plot.PlotType != PlotType.Camp ? "Yes" : "No");
+
+            if (plot.IsMultiCell)
+            {
+                EditorGUILayout.HelpBox("Multi-cell Plots are permanently open in this version.", MessageType.Info);
+            }
 
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Merge Selected"))
@@ -219,7 +210,144 @@ namespace HexMap.Gvg.Editor
                 RecordAndApply("Paste GVG HexIds", () => GvgMapAuthoringUtility.TryPasteHexIdsToPlot(m_Asset, plot.PlotId, m_PastedHexIds));
             }
         }
+        private void DrawHexScheduleControls(int hexId)
+        {
+            var layers = GetLayersForHex(hexId);
+            EditorGUILayout.LabelField("Hex Open Time Layers", EditorStyles.boldLabel);
 
+            for (var index = 0; index < layers.Count; index++)
+            {
+                var layer = layers[index];
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Plot " + layer.PlotId, GUILayout.Width(70f));
+                EditorGUI.BeginChangeCheck();
+                var start = EditorGUILayout.IntField("Start", layer.Start);
+                var end = EditorGUILayout.IntField("End", layer.End);
+                var changed = EditorGUI.EndChangeCheck();
+                if (changed)
+                {
+                    Undo.RecordObject(m_Asset, "Edit GVG Hex Open Time Layer");
+                    layer.Start = start;
+                    layer.End = end;
+                    GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+                    EditorUtility.SetDirty(m_Asset);
+                    SceneView.RepaintAll();
+                    Repaint();
+                }
+
+                var delete = layers.Count > 1 && GUILayout.Button("Delete", GUILayout.Width(55f));
+                EditorGUILayout.EndHorizontal();
+                if (delete)
+                {
+                    DeleteHexScheduleLayer(hexId, layer);
+                    break;
+                }
+            }
+
+            if (GUILayout.Button("Add Time Layer"))
+            {
+                AddHexScheduleLayer(hexId, layers);
+            }
+        }
+
+        private List<GvgPlotAuthoringData> GetLayersForHex(int hexId)
+        {
+            var layers = new List<GvgPlotAuthoringData>();
+            for (var index = 0; index < m_Asset.Plots.Count; index++)
+            {
+                var plot = m_Asset.Plots[index];
+                if (plot != null && !plot.IsMultiCell && plot.HexIds.Contains(hexId))
+                {
+                    layers.Add(plot);
+                }
+            }
+
+            layers.Sort((left, right) =>
+            {
+                var result = left.Start.CompareTo(right.Start);
+                return result != 0 ? result : left.PlotId.CompareTo(right.PlotId);
+            });
+            return layers;
+        }
+
+        private void AddHexScheduleLayer(int hexId, List<GvgPlotAuthoringData> layers)
+        {
+            if (layers.Count == 0) return;
+
+            var last = layers[layers.Count - 1];
+            var splitStart = last.End == -1 ? last.Start + 1 : last.End;
+            if (splitStart <= last.Start || splitStart == int.MaxValue)
+            {
+                EditorUtility.DisplayDialog("Add Time Layer", "The final time layer has no available second to split.", "OK");
+                return;
+            }
+
+            Undo.RecordObject(m_Asset, "Add GVG Hex Open Time Layer");
+            last.End = splitStart;
+            m_Asset.ReplacePlots(CreatePlotsWithAdditionalLayer(hexId, layers, splitStart));
+            GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+            EditorUtility.SetDirty(m_Asset);
+            SceneView.RepaintAll();
+            Repaint();
+        }
+
+        private void DeleteHexScheduleLayer(int hexId, GvgPlotAuthoringData layerToDelete)
+        {
+            var layers = GetLayersForHex(hexId);
+            if (layers.Count <= 1) return;
+
+            var remaining = new List<GvgPlotAuthoringData>();
+            for (var index = 0; index < m_Asset.Plots.Count; index++)
+            {
+                var plot = m_Asset.Plots[index];
+                if (plot != layerToDelete) remaining.Add(plot.Clone());
+            }
+
+            var deletedIndex = layers.IndexOf(layerToDelete);
+            if (deletedIndex > 0)
+            {
+                var previous = layers[deletedIndex - 1];
+                var replacement = remaining.Find(plot => plot.PlotId == previous.PlotId);
+                if (replacement != null)
+                {
+                    replacement.End = deletedIndex == layers.Count - 1
+                        ? -1
+                        : layers[deletedIndex].End;
+                }
+            }
+
+            Undo.RecordObject(m_Asset, "Delete GVG Hex Open Time Layer");
+            m_Asset.ReplacePlots(remaining);
+            GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+            EditorUtility.SetDirty(m_Asset);
+            SceneView.RepaintAll();
+            Repaint();
+        }
+
+        private IEnumerable<GvgPlotAuthoringData> CreatePlotsWithAdditionalLayer(
+            int hexId,
+            List<GvgPlotAuthoringData> layers,
+            int splitStart)
+        {
+            var result = new List<GvgPlotAuthoringData>();
+            for (var index = 0; index < m_Asset.Plots.Count; index++)
+            {
+                var plot = m_Asset.Plots[index];
+                if (plot == null) continue;
+                if (plot.IsMultiCell || !plot.HexIds.Contains(hexId))
+                {
+                    result.Add(plot.Clone());
+                }
+            }
+
+            for (var index = 0; index < layers.Count; index++)
+            {
+                result.Add(layers[index].Clone());
+            }
+
+            result.Add(new GvgPlotAuthoringData(0, new[] { hexId }, layers[0].PlotType, splitStart, -1));
+            return result;
+        }
         private void DrawValidationControls()
         {
             var validation = GvgMapAuthoringUtility.Validate(m_Asset);
@@ -238,6 +366,26 @@ namespace HexMap.Gvg.Editor
 
         private void DrawExportControls()
         {
+            if (GUILayout.Button("Import Excel"))
+            {
+                var path = EditorUtility.OpenFilePanel("Import GVG Map Excel", string.Empty, "xlsx");
+                if (!string.IsNullOrEmpty(path))
+                {
+                    var result = GvgMapExcelImporter.Import(path, m_Asset);
+                    if (result.Applied)
+                    {
+                        EditorUtility.SetDirty(m_Asset);
+                        SceneView.RepaintAll();
+                        Repaint();
+                        EditorUtility.DisplayDialog("GVG Map Import", "Imported " + result.ImportedRowCount + " rows.", "OK");
+                    }
+                    else
+                    {
+                        EditorUtility.DisplayDialog("GVG Map Import Failed", string.Join(Environment.NewLine, result.Errors.ToArray()), "OK");
+                    }
+                }
+            }
+
             if (!GUILayout.Button("Export CSV")) return;
             try
             {
@@ -249,7 +397,6 @@ namespace HexMap.Gvg.Editor
                 EditorUtility.DisplayDialog("GVG Map Export Failed", exception.Message, "OK");
             }
         }
-
         private void OnSceneGui(SceneView sceneView)
         {
             if (m_Asset == null) return;
@@ -396,22 +543,26 @@ namespace HexMap.Gvg.Editor
 
         private string FormatLabel(HexCell cell, GvgPlotAuthoringData plot, bool hasPlot)
         {
-            if (!hasPlot) return "Unassigned\n#" + cell.Id;
+            if (!hasPlot) return "Unassigned" + Environment.NewLine + "#" + cell.Id;
             var label = plot.PlotId.ToString();
-            if (m_ShowHexIds) label += "\n#" + cell.Id;
-            if (m_ShowCoordinates) label += "\n(" + cell.Coordinate.Q + "," + cell.Coordinate.R + ")";
+            if (m_ShowHexIds) label += Environment.NewLine + "#" + cell.Id;
+            if (m_ShowCoordinates)
+            {
+                label += Environment.NewLine + "(" + cell.Coordinate.Q + "," + cell.Coordinate.R + ")";
+            }
+
             if (m_ShowTypes)
             {
-                label += "\n" + plot.PlotType;
-                label += "\n" + plot.GenerationType;
-                if (plot.GenerationType == PlotGenerationType.TimedOpen)
+                label += Environment.NewLine + plot.PlotType;
+                label += Environment.NewLine + "[" + plot.Start + "," + plot.End + ")";
+                if (plot.Start > 0)
                 {
-                    label += "\n" + PlotState.NotOpen;
+                    label += Environment.NewLine + PlotState.NotOpen;
                 }
             }
+
             return label;
         }
-
         private static GUIStyle CreateLabelStyle()
         {
             var style = new GUIStyle();

@@ -10,12 +10,13 @@ namespace HexMap.Gvg.Authoring
         [SerializeField] private int m_PlotId;
         [SerializeField] private List<int> m_HexIds = new List<int>();
         [SerializeField] private PlotType m_PlotType = PlotType.Normal;
-        [SerializeField] private PlotGenerationType m_GenerationType = PlotGenerationType.Initial;
+        [SerializeField] private int m_Start;
+        [SerializeField] private int m_End = -1;
 
         public GvgPlotAuthoringData() { }
 
         public GvgPlotAuthoringData(int plotId, IEnumerable<int> hexIds, PlotType plotType)
-            : this(plotId, hexIds, plotType, PlotGenerationType.Initial)
+            : this(plotId, hexIds, plotType, 0, -1)
         {
         }
 
@@ -23,13 +24,15 @@ namespace HexMap.Gvg.Authoring
             int plotId,
             IEnumerable<int> hexIds,
             PlotType plotType,
-            PlotGenerationType generationType)
+            int start,
+            int end)
         {
             if (hexIds == null) throw new ArgumentNullException(nameof(hexIds));
             m_PlotId = plotId;
             m_HexIds = new List<int>(hexIds);
             m_PlotType = plotType;
-            m_GenerationType = generationType;
+            m_Start = start;
+            m_End = end;
         }
 
         public int PlotId
@@ -49,15 +52,26 @@ namespace HexMap.Gvg.Authoring
             set { m_PlotType = value; }
         }
 
-        public PlotGenerationType GenerationType
+        public int Start
         {
-            get { return m_GenerationType; }
-            set { m_GenerationType = value; }
+            get { return m_Start; }
+            set { m_Start = value; }
+        }
+
+        public int End
+        {
+            get { return m_End; }
+            set { m_End = value; }
+        }
+
+        public bool IsMultiCell
+        {
+            get { return m_HexIds != null && m_HexIds.Count > 1; }
         }
 
         public GvgPlotAuthoringData Clone()
         {
-            return new GvgPlotAuthoringData(m_PlotId, m_HexIds, m_PlotType, m_GenerationType);
+            return new GvgPlotAuthoringData(m_PlotId, m_HexIds, m_PlotType, m_Start, m_End);
         }
     }
 }

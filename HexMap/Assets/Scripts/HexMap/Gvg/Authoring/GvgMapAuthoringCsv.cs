@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -7,27 +7,12 @@ namespace HexMap.Gvg.Authoring
 {
     public static class GvgMapAuthoringCsv
     {
-        public const string MapFileName = "Map.csv";
-        public const string PlotsFileName = "Plots.csv";
-        public const string CellsFileName = "Cells.csv";
-        public const string ReadmeFileName = "README.md";
+        public const string FileNameFormat = "GVGMap_{0}.csv";
 
-        public static string CreateMapCsv(GvgMapAuthoringAsset asset)
+        public static string CreateGvgMapCsv(GvgMapAuthoringAsset asset)
         {
             if (asset == null) throw new ArgumentNullException(nameof(asset));
-            var builder = new StringBuilder();
-            builder.AppendLine("MapId,Radius,Orientation,Plane,OuterRadius");
-            builder.Append(Escape(asset.MapId)).Append(',')
-                .Append(asset.Radius.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(((int)asset.Orientation).ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(((int)asset.Plane).ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(asset.OuterRadius.ToString("R", CultureInfo.InvariantCulture)).AppendLine();
-            return builder.ToString();
-        }
 
-        public static string CreatePlotsCsv(GvgMapAuthoringAsset asset)
-        {
-            if (asset == null) throw new ArgumentNullException(nameof(asset));
             var sortedPlots = new List<GvgPlotAuthoringData>();
             for (var index = 0; index < asset.Plots.Count; index++)
             {
@@ -36,62 +21,53 @@ namespace HexMap.Gvg.Authoring
 
             sortedPlots.Sort((left, right) => left.PlotId.CompareTo(right.PlotId));
             var builder = new StringBuilder();
-            builder.AppendLine("PlotId,HexIds,PlotType,GenerationType");
+            builder.AppendLine("PlotId,HexIds,PlotType,Start,End");
+
             for (var index = 0; index < sortedPlots.Count; index++)
             {
                 var plot = sortedPlots[index];
                 builder.Append(plot.PlotId.ToString(CultureInfo.InvariantCulture)).Append(',')
                     .Append(Escape(FormatHexIds(plot.HexIds))).Append(',')
                     .Append(((int)plot.PlotType).ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(((int)plot.GenerationType).ToString(CultureInfo.InvariantCulture)).AppendLine();
+                    .Append(plot.Start.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(plot.End.ToString(CultureInfo.InvariantCulture)).AppendLine();
             }
 
             return builder.ToString();
         }
 
-        public static string CreateCellsCsv(GvgMapAuthoringAsset asset)
+        public static Dictionary<string, string> CreateFiles(GvgMapAuthoringAsset asset)
         {
             if (asset == null) throw new ArgumentNullException(nameof(asset));
-            var map = asset.CreateRuntimeMap();
-            var plotsByHexId = GvgMapAuthoringUtility.CreatePlotLookup(asset, true);
-            var cells = new List<HexMap.Runtime.HexCell>(map.Cells);
-            cells.Sort((left, right) => left.Id.CompareTo(right.Id));
 
-            var builder = new StringBuilder();
-            builder.AppendLine("HexId,Q,R,PlotId");
-            for (var index = 0; index < cells.Count; index++)
+            var fileName = string.Format(
+                CultureInfo.InvariantCulture,
+                FileNameFormat,
+                asset.MapId);
+
+            return new Dictionary<string, string>
             {
-                var cell = cells[index];
-                GvgPlotAuthoringData plot;
-                if (!plotsByHexId.TryGetValue(cell.Id, out plot))
-                {
-                    throw new InvalidOperationException("HexId is not assigned to a Plot: " + cell.Id);
-                }
-
-                builder.Append(cell.Id.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(cell.Coordinate.Q.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(cell.Coordinate.R.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(plot.PlotId.ToString(CultureInfo.InvariantCulture)).AppendLine();
-            }
-
-            return builder.ToString();
+                { fileName, CreateGvgMapCsv(asset) }
+            };
         }
 
         public static string CreateReadme(GvgMapAuthoringAsset asset)
         {
             if (asset == null) throw new ArgumentNullException(nameof(asset));
+
             var builder = new StringBuilder();
             builder.AppendLine("# GVG Map Export");
             builder.AppendLine();
             builder.AppendLine("This directory is generated from the Unity ScriptableObject authoring asset.");
             builder.AppendLine();
-            builder.AppendLine("## Files");
+            builder.AppendLine("## File");
             builder.AppendLine();
-            builder.AppendLine("- `Map.csv`: map identity and layout settings.");
-            builder.AppendLine("- `Plots.csv`: Plot topology, PlotType, and GenerationType values.");
-            builder.AppendLine("- `Cells.csv`: Cell coordinates and their owning PlotId.");
+            builder.AppendLine("One GVGMap_<MapId>.csv file is generated with one row per Plot.");
             builder.AppendLine();
-            builder.AppendLine("CSV files are UTF-8 with BOM for Excel compatibility. `HexIds` uses a quoted JSON-like array with no spaces, for example `\"[1,2,3]\"`.");
+            builder.AppendLine("The CSV is UTF-8 with BOM for Excel compatibility.");
+            builder.AppendLine("Header: PlotId,HexIds,PlotType,Start,End.");
+            builder.AppendLine("HexIds uses a quoted JSON-like array with no spaces, for example [1,2,3].");
+            builder.AppendLine("Start and End are seconds from GVG start; the interval is [Start, End), and End=-1 means forever.");
             builder.AppendLine();
             builder.AppendLine("## PlotType");
             builder.AppendLine();
@@ -101,51 +77,27 @@ namespace HexMap.Gvg.Authoring
                     .Append(" = ").Append(plotType).AppendLine();
             }
             builder.AppendLine();
-            builder.AppendLine("## PlotGenerationType");
-            builder.AppendLine();
-            foreach (PlotGenerationType generationType in Enum.GetValues(typeof(PlotGenerationType)))
-            {
-                builder.Append("- ").Append(((int)generationType).ToString(CultureInfo.InvariantCulture))
-                    .Append(" = ").Append(generationType).AppendLine();
-            }
-            builder.AppendLine();
             builder.AppendLine("## PlotId Rules");
             builder.AppendLine();
-            builder.AppendLine("- Single-cell PlotId equals its only HexId.");
-            builder.AppendLine("- Multi-cell PlotId is negative and allocated from -1 downward.");
-            builder.AppendLine("- PlotId uniqueness is required before export.");
+            builder.AppendLine("- A single-cell Plot with one or more layers uses HexId for the first layer.");
+            builder.AppendLine("- Later single-cell layers use the global sequence beginning at the next whole hundred after MaxHexId.");
+            builder.AppendLine("- Multi-cell PlotId = 10000 + 1000 * (int)PlotType + sequence.");
+            builder.AppendLine("- Current PlotType ranges are Camp 11000+, Normal 12000+, Grass 13000+, SmallCity 14000+, BigCity 15000+, Capital 16000+, and Obstacle 17000+.");
+            builder.AppendLine("- Existing IDs are retained when valid; new IDs are not reused after deletion.");
             builder.AppendLine();
-            builder.AppendLine("## Runtime Defaults");
+            builder.AppendLine("## Authoring Validation");
             builder.AppendLine();
-            builder.AppendLine("- GenerationType.Initial = 0 and projects to PlotState.Open.");
-            builder.AppendLine("- GenerationType.TimedOpen = 1 and projects to PlotState.NotOpen.");
-            builder.AppendLine("- PlotState.NotOpen is not passable and cannot be captured.");
-            builder.AppendLine("- Open() and Close() are controlled by outer runtime business.");
-            builder.AppendLine("- OwnerFaction = Neutral");
-            builder.AppendLine("- OwnershipMode = Capturable");
-            builder.AppendLine("- BlockingState = Passable");
-            builder.AppendLine("- PlotType.Obstacle overrides BlockingState to Blocked.");
-            builder.AppendLine("- PlotType.Camp overrides OwnershipMode to Fixed.");
-            builder.AppendLine("- Obstacle Plots cannot use GenerationType.TimedOpen.");
-            builder.AppendLine();
-            builder.AppendLine("CSV import is not implemented in this issue. These files are export review artifacts and a future import source.");
+            builder.AppendLine("- Single-cell layers for one Hex must use one PlotType and contiguous, non-overlapping [Start, End) intervals.");
+            builder.AppendLine("- The first layer may start after zero; End=-1 is allowed only on the final layer.");
+            builder.AppendLine("- Multi-cell Plots must use Start=0 and End=-1.");
+            builder.AppendLine("- PlotScheduleService and runtime time scheduling are outside this export.");
             return builder.ToString();
         }
 
-        public static Dictionary<string, string> CreateFiles(GvgMapAuthoringAsset asset)
-        {
-            return new Dictionary<string, string>
-            {
-                { MapFileName, CreateMapCsv(asset) },
-                { PlotsFileName, CreatePlotsCsv(asset) },
-                { CellsFileName, CreateCellsCsv(asset) },
-                { ReadmeFileName, CreateReadme(asset) }
-            };
-        }
-
-
         private static string FormatHexIds(List<int> hexIds)
         {
+            if (hexIds == null) throw new ArgumentNullException(nameof(hexIds));
+
             var sortedHexIds = new List<int>(hexIds);
             sortedHexIds.Sort();
             var values = new string[sortedHexIds.Count];
@@ -159,10 +111,9 @@ namespace HexMap.Gvg.Authoring
 
         private static string Escape(string value)
         {
-            if (value == null) return string.Empty;
-            var requiresQuoting = value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0;
-            if (!requiresQuoting) return value;
-            return "\"" + value.Replace("\"", "\"\"") + "\"";
+            if (value == null) return "\"\"";
+            var quote = '"';
+            return quote + value.Replace(quote.ToString(), new string(quote, 2)) + quote;
         }
     }
 }
