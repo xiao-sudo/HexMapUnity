@@ -262,6 +262,16 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
             if (!TryParseInt(values, "I", rowNumber, "Start", out start, errors)) return false;
             int end;
             if (!TryParseInt(values, "J", rowNumber, "End", out end, errors)) return false;
+            var affiliatedCampId = Plot.NoAffiliatedCampId;
+            if (values.ContainsKey("K") && !string.IsNullOrWhiteSpace(values["K"]))
+            {
+                if (!TryParseInt(values, "K", rowNumber, "AffiliatedCampId", out affiliatedCampId, errors)) return false;
+                if (affiliatedCampId < Plot.NoAffiliatedCampId)
+                {
+                    errors.Add("Row " + rowNumber + " has an AffiliatedCampId smaller than -1.");
+                    return false;
+                }
+            }
 
             int generationType;
             if (TryParseInt(values, "D", rowNumber, "legacy GenerationType", out generationType, errors))
@@ -278,7 +288,8 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
                 hexIds,
                 (PlotType)plotTypeValue,
                 start,
-                end);
+                end,
+                affiliatedCampId);
             return true;
         }
 
@@ -319,7 +330,8 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
                     row.HexIds,
                     row.PlotType,
                     row.Start,
-                    row.End);
+                    row.End,
+                    row.AffiliatedCampId);
                 plots.Add(plot);
 
                 if (plot.IsMultiCell)
@@ -388,7 +400,7 @@ return plots;
 
         private sealed class ImportedRow
         {
-            public ImportedRow(int sourceId, List<int> hexIds, PlotType plotType, int start, int end)
+            public ImportedRow(int sourceId, List<int> hexIds, PlotType plotType, int start, int end, int affiliatedCampId)
             {
                 SourceId = sourceId;
                 HexIds = hexIds;
@@ -402,6 +414,7 @@ return plots;
             public PlotType PlotType { get; private set; }
             public int Start { get; private set; }
             public int End { get; private set; }
+            public int AffiliatedCampId { get; private set; }
         }
     }
 }

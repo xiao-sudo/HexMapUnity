@@ -69,7 +69,6 @@ namespace HexMap.Gvg.Tests
                 PlotType.Normal,
                 PlotState.Open,
                 FactionId.Neutral,
-                OwnershipMode.Capturable,
                 BlockingState.Passable));
 
             Assert.Throws<ArgumentException>(() => new Plot(
@@ -78,7 +77,6 @@ namespace HexMap.Gvg.Tests
                 PlotType.Obstacle,
                 PlotState.Open,
                 FactionId.Neutral,
-                OwnershipMode.Capturable,
                 BlockingState.Passable));
         }
 
@@ -97,29 +95,49 @@ namespace HexMap.Gvg.Tests
             var map = new RuntimeHexMap(new HexMapDefinition(1));
             var own = CellAt(map, 0, 0);
             var enemy = CellAt(map, 1, 0);
-            var fixedEnemy = CellAt(map, 0, 1);
+            var affiliatedEnemy = CellAt(map, 0, 1);
             var blocked = CellAt(map, -1, 0);
             var closed = CellAt(map, -1, 1);
             var plots = new[]
             {
                 CreatePlot(1, new[] { own }, FactionId.Red),
                 CreatePlot(2, new[] { enemy }, FactionId.Blue),
-                CreatePlot(3, new[] { fixedEnemy }, FactionId.Blue, OwnershipMode.Fixed),
-                CreatePlot(4, new[] { blocked }, FactionId.Red, OwnershipMode.Capturable, BlockingState.Blocked),
-                CreatePlot(5, new[] { closed }, FactionId.Red, OwnershipMode.Capturable, BlockingState.Passable, PlotState.NotOpen)
+                CreatePlot(3, new[] { affiliatedEnemy }, FactionId.Neutral, affiliatedCampId: 12000),
+                CreatePlot(4, new[] { blocked }, FactionId.Red, BlockingState.Blocked),
+                CreatePlot(5, new[] { closed }, FactionId.Red, state: PlotState.NotOpen)
             };
-            var policy = new PlotPathPolicy(new PlotRegistry(map, plots), FactionId.Red);
+            var resolver = new TestCampFactionResolver();
+            resolver.Set(12000, FactionId.Blue);
+            var policy = new PlotPathPolicy(new PlotRegistry(map, plots), resolver, FactionId.Red);
+            var bluePolicy = new PlotPathPolicy(new PlotRegistry(map, plots), resolver, FactionId.Blue);
 
             Assert.That(policy.CanPass(own), Is.True);
             Assert.That(policy.CanEnter(own), Is.True);
             Assert.That(policy.CanPass(enemy), Is.False);
             Assert.That(policy.CanEnter(enemy), Is.True);
-            Assert.That(policy.CanPass(fixedEnemy), Is.False);
-            Assert.That(policy.CanEnter(fixedEnemy), Is.False);
+            Assert.That(policy.CanPass(affiliatedEnemy), Is.False);
+            Assert.That(policy.CanEnter(affiliatedEnemy), Is.False);
+            Assert.That(bluePolicy.CanPass(affiliatedEnemy), Is.False);
+            Assert.That(bluePolicy.CanEnter(affiliatedEnemy), Is.True);
             Assert.That(policy.CanPass(blocked), Is.False);
             Assert.That(policy.CanEnter(blocked), Is.False);
             Assert.That(policy.CanPass(closed), Is.False);
             Assert.That(policy.CanEnter(closed), Is.False);
+        }
+
+        [Test]
+        public void AffiliatedPlotRequiresTheCampCurrentFaction()
+        {
+            var map = new RuntimeHexMap(new HexMapDefinition(0));
+            var cell = CellAt(map, 0, 0);
+            var plot = CreatePlot(1, new[] { cell }, affiliatedCampId: 12000);
+            var registry = new PlotRegistry(map, new[] { plot });
+            var resolver = new TestCampFactionResolver();
+            resolver.Set(12000, FactionId.Red);
+
+            Assert.That(new PlotPathPolicy(registry, resolver, FactionId.Red).CanEnter(cell), Is.True);
+            Assert.That(new PlotPathPolicy(registry, resolver, FactionId.Blue).CanEnter(cell), Is.False);
+            Assert.That(new PlotPathPolicy(registry, resolver, FactionId.Red).CanPass(cell), Is.False);
         }
 
         [Test]
@@ -158,6 +176,34 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
+        public void PlotPathServiceUsesCampFactionResolverForAffiliatedTarget()
+        {
+            var map = new RuntimeHexMap(new HexMapDefinition(1));
+            var startCell = CellAt(map, -1, 0);
+            var targetCell = CellAt(map, 1, 0);
+            var plots = new List<Plot>
+            {
+                CreatePlot(1, new[] { startCell }, FactionId.Red),
+                CreatePlot(2, new[] { targetCell }, FactionId.Neutral, affiliatedCampId: 12000)
+            };
+            foreach (var cell in map.Cells)
+            {
+                if (cell.Id == startCell.Id || cell.Id == targetCell.Id) continue;
+                plots.Add(CreatePlot(cell.Id + 100, new[] { cell }, FactionId.Red));
+            }
+
+            var resolver = new TestCampFactionResolver();
+            resolver.Set(12000, FactionId.Red);
+            var service = new PlotPathService(new PlotRegistry(map, plots), resolver);
+            var result = new PathResult(new List<HexCell>(map.Count));
+
+            service.FindPath(1, 2, FactionId.Red, result);
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.ReachedTarget, Is.EqualTo(targetCell));
+        }
+
+        [Test]
         public void SameOpenPlotReturnsZeroStepPath()
         {
             var map = new RuntimeHexMap(new HexMapDefinition(1));
@@ -165,10 +211,7 @@ namespace HexMap.Gvg.Tests
             var plot = CreatePlot(
                 1,
                 new[] { cell },
-                FactionId.Blue,
-                OwnershipMode.Fixed,
-                BlockingState.Passable,
-                PlotState.Open);
+                FactionId.Blue);
             var service = new PlotPathService(new PlotRegistry(map, new[] { plot }));
             var result = new PathResult(new List<HexCell>(1));
 
@@ -216,9 +259,9 @@ namespace HexMap.Gvg.Tests
             int id,
             IReadOnlyList<HexCell> cells,
             FactionId owner = FactionId.Neutral,
-            OwnershipMode ownershipMode = OwnershipMode.Capturable,
             BlockingState blockingState = BlockingState.Passable,
-            PlotState state = PlotState.Open)
+            PlotState state = PlotState.Open,
+            int affiliatedCampId = Plot.NoAffiliatedCampId)
         {
             return new Plot(
                 id,
@@ -226,8 +269,24 @@ namespace HexMap.Gvg.Tests
                 PlotType.Normal,
                 state,
                 owner,
-                ownershipMode,
-                blockingState);
+                blockingState,
+                affiliatedCampId);
+        }
+
+        private sealed class TestCampFactionResolver : ICampFactionResolver
+        {
+            private readonly Dictionary<int, FactionId> m_FactionsByCampId =
+                new Dictionary<int, FactionId>();
+
+            public void Set(int campId, FactionId factionId)
+            {
+                m_FactionsByCampId[campId] = factionId;
+            }
+
+            public bool TryGetFaction(int campId, out FactionId factionId)
+            {
+                return m_FactionsByCampId.TryGetValue(campId, out factionId);
+            }
         }
     }
 }

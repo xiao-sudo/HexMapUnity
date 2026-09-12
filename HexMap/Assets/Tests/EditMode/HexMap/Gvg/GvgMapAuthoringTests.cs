@@ -249,9 +249,9 @@ namespace HexMap.Gvg.Tests
                 var csv = GvgMapAuthoringCsv.CreateGvgMapCsv(asset);
                 var lines = csv.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
 
-                Assert.That(lines[0], Is.EqualTo("PlotId,HexIds,PlotType,Start,End"));
-                Assert.That(lines[1], Is.EqualTo("0,\"[0]\",2,0,338400"));
-                Assert.That(lines[2], Is.EqualTo("400,\"[0]\",2,338400,-1"));
+                Assert.That(lines[0], Is.EqualTo("PlotId,HexIds,PlotType,Start,End,AffiliatedCampId"));
+                Assert.That(lines[1], Is.EqualTo("0,\"[0]\",2,0,338400,-1"));
+                Assert.That(lines[2], Is.EqualTo("400,\"[0]\",2,338400,-1,-1"));
                 Assert.That(GvgMapAuthoringCsv.CreateFiles(asset).Keys,
                     Is.EquivalentTo(new[] { "GVGMap_MapOne.csv" }));
             }
@@ -277,7 +277,7 @@ namespace HexMap.Gvg.Tests
                 Assert.That(csvBytes[2], Is.EqualTo(0xBF));
 
                 var readme = GvgMapAuthoringCsv.CreateReadme(asset);
-                Assert.That(readme, Does.Contain("PlotId,HexIds,PlotType,Start,End"));
+                Assert.That(readme, Does.Contain("PlotId,HexIds,PlotType,Start,End,AffiliatedCampId"));
                 Assert.That(readme, Does.Contain("End=-1"));
                 Assert.That(readme, Does.Contain("11000+"));
                 Assert.That(readme, Does.Not.Contain("GenerationType"));
@@ -331,6 +331,94 @@ namespace HexMap.Gvg.Tests
 
                 Assert.That(validation.IsValid, Is.False);
                 Assert.That(ContainsIssue(validation, "Start=0 and End=-1"), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+
+        [Test]
+        public void AuthoringClonePreservesAffiliatedCampId()
+        {
+            var plot = new GvgPlotAuthoringData(
+                12000,
+                new[] { 0, 1 },
+                PlotType.Normal,
+                0,
+                -1,
+                11000);
+
+            var clone = plot.Clone();
+
+            Assert.That(clone.AffiliatedCampId, Is.EqualTo(11000));
+        }
+
+        [Test]
+        public void RuntimeProjectionUsesCampPlotIdAsDefaultAffiliation()
+        {
+            var asset = CreateAsset(1);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(11000, new[] { 0, 1 }, PlotType.Camp, 0, -1),
+                    new GvgPlotAuthoringData(2, new[] { 2 }, PlotType.Normal, 0, -1),
+                    new GvgPlotAuthoringData(3, new[] { 3 }, PlotType.Normal, 0, -1),
+                    new GvgPlotAuthoringData(4, new[] { 4 }, PlotType.Normal, 0, -1),
+                    new GvgPlotAuthoringData(5, new[] { 5 }, PlotType.Normal, 0, -1),
+                    new GvgPlotAuthoringData(6, new[] { 6 }, PlotType.Normal, 0, -1)
+                });
+
+                var runtimePlot = GvgMapAuthoringUtility.CreateRuntimePlots(asset)[0];
+
+                Assert.That(runtimePlot.AffiliatedCampId, Is.EqualTo(11000));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+        [Test]
+        public void ValidationRejectsAffiliationOnTimedSingleCellPlot()
+        {
+            var asset = CreateAsset(0);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(0, new[] { 0 }, PlotType.Normal, 0, 100, 11000),
+                    new GvgPlotAuthoringData(400, new[] { 0 }, PlotType.Normal, 100, -1)
+                });
+
+                var validation = GvgMapAuthoringUtility.Validate(asset);
+
+                Assert.That(validation.IsValid, Is.False);
+                Assert.That(ContainsIssue(validation, "AffiliatedCampId"), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
+
+        [Test]
+        public void NormalizeRetainsCampPlotIdReferencedByAnAttachedPlot()
+        {
+            var asset = CreateAsset(1);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(11000, new[] { 0, 1 }, PlotType.Camp, 0, -1),
+                    new GvgPlotAuthoringData(12000, new[] { 2, 3 }, PlotType.Normal, 0, -1, 11000)
+                });
+
+                GvgMapAuthoringUtility.NormalizePlotIds(asset);
+
+                Assert.That(asset.Plots.Any(plot => plot.PlotId == 11000 && plot.PlotType == PlotType.Camp), Is.True);
             }
             finally
             {

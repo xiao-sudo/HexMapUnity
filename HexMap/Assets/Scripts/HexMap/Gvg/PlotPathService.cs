@@ -7,14 +7,21 @@ namespace HexMap.Gvg
     public sealed class PlotPathService
     {
         private readonly PlotRegistry m_Registry;
+        private readonly ICampFactionResolver m_CampFactionResolver;
         private readonly HexPathfinder m_Pathfinder;
         private readonly ReusablePathRequest m_Request;
         private readonly List<HexCell> m_StartCells;
         private readonly List<HexCell> m_TargetCells;
 
         public PlotPathService(PlotRegistry registry)
+            : this(registry, null)
+        {
+        }
+
+        public PlotPathService(PlotRegistry registry, ICampFactionResolver campFactionResolver)
         {
             m_Registry = registry ?? throw new ArgumentNullException(nameof(registry));
+            m_CampFactionResolver = campFactionResolver;
             var map = registry.Map;
             m_Pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
             m_StartCells = new List<HexCell>(map.Count);
@@ -22,7 +29,10 @@ namespace HexMap.Gvg
             m_Request = new ReusablePathRequest(
                 m_StartCells,
                 m_TargetCells,
-                new PlotPathPolicy(registry, FactionId.Neutral));
+                new PlotPathPolicy(
+                    registry,
+                    m_CampFactionResolver ?? new DefaultCampFactionResolver(),
+                    FactionId.Neutral));
         }
 
         public PlotRegistry Registry { get { return m_Registry; } }
@@ -56,8 +66,20 @@ namespace HexMap.Gvg
                 }
             }
 
-            m_Request.Policy = new PlotPathPolicy(m_Registry, movingFaction);
+            m_Request.Policy = new PlotPathPolicy(
+                m_Registry,
+                m_CampFactionResolver ?? new DefaultCampFactionResolver(),
+                movingFaction);
             return m_Pathfinder.FindPath(m_Request, result);
+        }
+
+        private sealed class DefaultCampFactionResolver : ICampFactionResolver
+        {
+            public bool TryGetFaction(int campId, out FactionId factionId)
+            {
+                factionId = FactionId.Neutral;
+                return false;
+            }
         }
     }
 }

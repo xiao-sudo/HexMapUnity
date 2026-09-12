@@ -22,11 +22,6 @@ namespace HexMap.Gvg
         Open = 1
     }
 
-    public enum OwnershipMode
-    {
-        Capturable = 0,
-        Fixed = 1
-    }
 
     public enum BlockingState
     {
@@ -43,13 +38,15 @@ namespace HexMap.Gvg
 
     public sealed class Plot
     {
+        public const int NoAffiliatedCampId = -1;
+
         private readonly int m_PlotId;
         private readonly IReadOnlyList<HexCell> m_Cells;
         private readonly PlotType m_PlotType;
         private PlotState m_PlotState;
         private readonly FactionId m_OwnerFaction;
-        private readonly OwnershipMode m_OwnershipMode;
         private readonly BlockingState m_BlockingState;
+        private readonly int m_AffiliatedCampId;
 
         public Plot(
             int plotId,
@@ -57,8 +54,8 @@ namespace HexMap.Gvg
             PlotType plotType,
             PlotState plotState,
             FactionId ownerFaction,
-            OwnershipMode ownershipMode,
-            BlockingState blockingState)
+            BlockingState blockingState,
+            int affiliatedCampId = NoAffiliatedCampId)
         {
             if (cells == null) throw new ArgumentNullException(nameof(cells));
             if (cells.Count == 0) throw new ArgumentException("A Plot must contain at least one cell.", nameof(cells));
@@ -66,6 +63,8 @@ namespace HexMap.Gvg
                 throw new ArgumentOutOfRangeException(nameof(plotType), plotType, "PlotType is not defined.");
             if (!Enum.IsDefined(typeof(PlotState), plotState))
                 throw new ArgumentOutOfRangeException(nameof(plotState), plotState, "PlotState is not defined.");
+            if (affiliatedCampId < NoAffiliatedCampId)
+                throw new ArgumentOutOfRangeException(nameof(affiliatedCampId), affiliatedCampId, "Affiliated CampId must be -1 or non-negative.");
 
             var copiedCells = new List<HexCell>(cells.Count);
             var cellIds = new HashSet<int>();
@@ -92,8 +91,8 @@ namespace HexMap.Gvg
             m_PlotType = plotType;
             m_PlotState = plotState;
             m_OwnerFaction = ownerFaction;
-            m_OwnershipMode = ownershipMode;
             m_BlockingState = blockingState;
+            m_AffiliatedCampId = affiliatedCampId;
         }
 
         public int PlotId { get { return m_PlotId; } }
@@ -101,8 +100,8 @@ namespace HexMap.Gvg
         public PlotType PlotType { get { return m_PlotType; } }
         public PlotState PlotState { get { return m_PlotState; } }
         public FactionId OwnerFaction { get { return m_OwnerFaction; } }
-        public OwnershipMode OwnershipMode { get { return m_OwnershipMode; } }
         public BlockingState BlockingState { get { return m_BlockingState; } }
+        public int AffiliatedCampId { get { return m_AffiliatedCampId; } }
 
         public bool IsOpenForPathfinding
         {

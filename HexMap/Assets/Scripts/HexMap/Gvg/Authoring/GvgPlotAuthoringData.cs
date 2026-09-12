@@ -12,6 +12,7 @@ namespace HexMap.Gvg.Authoring
         [SerializeField] private PlotType m_PlotType = PlotType.Normal;
         [SerializeField] private int m_Start;
         [SerializeField] private int m_End = -1;
+        [SerializeField] private int m_AffiliatedCampId = Plot.NoAffiliatedCampId;
 
         public GvgPlotAuthoringData() { }
 
@@ -26,13 +27,27 @@ namespace HexMap.Gvg.Authoring
             PlotType plotType,
             int start,
             int end)
+            : this(plotId, hexIds, plotType, start, end, Plot.NoAffiliatedCampId)
+        {
+        }
+
+        public GvgPlotAuthoringData(
+            int plotId,
+            IEnumerable<int> hexIds,
+            PlotType plotType,
+            int start,
+            int end,
+            int affiliatedCampId)
         {
             if (hexIds == null) throw new ArgumentNullException(nameof(hexIds));
+            if (affiliatedCampId < Plot.NoAffiliatedCampId)
+                throw new ArgumentOutOfRangeException(nameof(affiliatedCampId));
             m_PlotId = plotId;
             m_HexIds = new List<int>(hexIds);
             m_PlotType = plotType;
             m_Start = start;
             m_End = end;
+            m_AffiliatedCampId = affiliatedCampId;
         }
 
         public int PlotId
@@ -64,6 +79,17 @@ namespace HexMap.Gvg.Authoring
             set { m_End = value; }
         }
 
+        public int AffiliatedCampId
+        {
+            get { return m_AffiliatedCampId; }
+            set
+            {
+                if (value < Plot.NoAffiliatedCampId)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                m_AffiliatedCampId = value;
+            }
+        }
+
         public bool IsMultiCell
         {
             get { return m_HexIds != null && m_HexIds.Count > 1; }
@@ -71,7 +97,13 @@ namespace HexMap.Gvg.Authoring
 
         public GvgPlotAuthoringData Clone()
         {
-            return new GvgPlotAuthoringData(m_PlotId, m_HexIds, m_PlotType, m_Start, m_End);
+            return new GvgPlotAuthoringData(
+                m_PlotId,
+                m_HexIds,
+                m_PlotType,
+                m_Start,
+                m_End,
+                m_AffiliatedCampId);
         }
     }
 }

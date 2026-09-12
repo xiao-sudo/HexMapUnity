@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -21,7 +21,7 @@ namespace HexMap.Gvg.Authoring
 
             sortedPlots.Sort((left, right) => left.PlotId.CompareTo(right.PlotId));
             var builder = new StringBuilder();
-            builder.AppendLine("PlotId,HexIds,PlotType,Start,End");
+            builder.AppendLine("PlotId,HexIds,PlotType,Start,End,AffiliatedCampId");
 
             for (var index = 0; index < sortedPlots.Count; index++)
             {
@@ -30,7 +30,8 @@ namespace HexMap.Gvg.Authoring
                     .Append(Escape(FormatHexIds(plot.HexIds))).Append(',')
                     .Append(((int)plot.PlotType).ToString(CultureInfo.InvariantCulture)).Append(',')
                     .Append(plot.Start.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(plot.End.ToString(CultureInfo.InvariantCulture)).AppendLine();
+                    .Append(plot.End.ToString(CultureInfo.InvariantCulture)).Append(",")
+                    .Append(plot.AffiliatedCampId.ToString(CultureInfo.InvariantCulture)).AppendLine();
             }
 
             return builder.ToString();
@@ -65,9 +66,10 @@ namespace HexMap.Gvg.Authoring
             builder.AppendLine("One GVGMap_<MapId>.csv file is generated with one row per Plot.");
             builder.AppendLine();
             builder.AppendLine("The CSV is UTF-8 with BOM for Excel compatibility.");
-            builder.AppendLine("Header: PlotId,HexIds,PlotType,Start,End.");
+            builder.AppendLine("Header: PlotId,HexIds,PlotType,Start,End,AffiliatedCampId.");
             builder.AppendLine("HexIds uses a quoted JSON-like array with no spaces, for example [1,2,3].");
             builder.AppendLine("Start and End are seconds from GVG start; the interval is [Start, End), and End=-1 means forever.");
+            builder.AppendLine("AffiliatedCampId is -1 for ordinary Plots or the stable PlotId of the Camp Plot.");
             builder.AppendLine();
             builder.AppendLine("## PlotType");
             builder.AppendLine();
