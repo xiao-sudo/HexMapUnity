@@ -426,6 +426,30 @@ namespace HexMap.Gvg.Tests
             }
         }
 
+        [Test]
+        public void NormalizeRemapsAffiliatedCampIdWhenCampPlotIdChanges()
+        {
+            var asset = CreateAsset(1);
+            try
+            {
+                asset.ReplacePlots(new[]
+                {
+                    new GvgPlotAuthoringData(3, new[] { 0, 1 }, PlotType.Camp, 0, -1),
+                    new GvgPlotAuthoringData(12000, new[] { 2, 3 }, PlotType.Normal, 0, -1, 3)
+                });
+
+                GvgMapAuthoringUtility.NormalizePlotIds(asset);
+
+                var campPlot = asset.Plots.First(plot => plot.PlotType == PlotType.Camp);
+                var attachedPlot = asset.Plots.First(plot => plot.AffiliatedCampId != Plot.NoAffiliatedCampId);
+                Assert.That(campPlot.PlotId, Is.EqualTo(GvgMapAuthoringUtility.CalculateMultiPlotIdBase(PlotType.Camp)));
+                Assert.That(attachedPlot.AffiliatedCampId, Is.EqualTo(campPlot.PlotId));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
+        }
         private static GvgMapAuthoringAsset CreateAsset(int radius)
         {
             var asset = ScriptableObject.CreateInstance<GvgMapAuthoringAsset>();

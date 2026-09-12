@@ -139,6 +139,18 @@ namespace HexMap.Gvg.Editor
             }
 
             EditorGUILayout.BeginHorizontal();
+            var affiliatedSwatch = GUILayoutUtility.GetRect(18f, EditorGUIUtility.singleLineHeight, GUILayout.Width(18f));
+            EditorGUI.DrawRect(affiliatedSwatch, m_AffiliatedPlotOutlineColor);
+            var affiliatedInnerSwatch = new Rect(
+                affiliatedSwatch.x + 4f,
+                affiliatedSwatch.y + 4f,
+                affiliatedSwatch.width - 8f,
+                affiliatedSwatch.height - 8f);
+            EditorGUI.DrawRect(affiliatedInnerSwatch, Color.gray);
+            EditorGUILayout.LabelField("Affiliated Plot outline");
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
             var notOpenSwatch = GUILayoutUtility.GetRect(18f, EditorGUIUtility.singleLineHeight, GUILayout.Width(18f));
             EditorGUI.DrawRect(notOpenSwatch, m_NotOpenOverlayColor);
             EditorGUILayout.LabelField("NotOpen overlay");
@@ -156,6 +168,27 @@ namespace HexMap.Gvg.Editor
 
             EditorGUILayout.LabelField("PlotId", plot.PlotId.ToString());
             EditorGUILayout.LabelField("HexIds", string.Join(",", plot.HexIds.ConvertAll(value => value.ToString()).ToArray()));
+
+            EditorGUI.BeginChangeCheck();
+            var affiliatedCampId = EditorGUILayout.IntField("Affiliated Camp Id", plot.AffiliatedCampId);
+            if (EditorGUI.EndChangeCheck())
+            {
+                if (affiliatedCampId >= Plot.NoAffiliatedCampId)
+                {
+                    Undo.RecordObject(m_Asset, "Edit GVG Plot Affiliated Camp Id");
+                    plot.AffiliatedCampId = affiliatedCampId;
+                    EditorUtility.SetDirty(m_Asset);
+                    SceneView.RepaintAll();
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("Affiliated Camp Id must be -1 or non-negative.", MessageType.Error);
+                }
+            }
+            if (plot.PlotType == PlotType.Camp && plot.AffiliatedCampId == Plot.NoAffiliatedCampId)
+            {
+                EditorGUILayout.HelpBox("Camp Plot with -1 is affiliated with itself by default at runtime.", MessageType.Info);
+            }
 
             EditorGUI.BeginChangeCheck();
             var plotType = (PlotType)EditorGUILayout.EnumPopup("Plot Type", plot.PlotType);
@@ -447,7 +480,13 @@ namespace HexMap.Gvg.Editor
                     fill = Color.Lerp(fill, Color.yellow, 0.45f);
                 }
 
-                DrawHex(layout, cell.Coordinate, fill, hasPlot && GetInitialPlotState(plot) == PlotState.NotOpen);
+                var isAffiliated = hasPlot && plot.AffiliatedCampId != Plot.NoAffiliatedCampId;
+                DrawHex(
+                    layout,
+                    cell.Coordinate,
+                    fill,
+                    hasPlot && GetInitialPlotState(plot) == PlotState.NotOpen,
+                    isAffiliated);
                 Handles.Label(layout.HexToWorld(cell.Coordinate), FormatLabel(cell, plot, hasPlot), m_LabelStyle);
             }
         }
@@ -543,7 +582,7 @@ namespace HexMap.Gvg.Editor
             return map.TryGetCell(coordinate, out cell);
         }
 
-        private void DrawHex(HexLayout layout, HexCoord coordinate, Color fill, bool isNotOpen)
+        private void DrawHex(HexLayout layout, HexCoord coordinate, Color fill, bool isNotOpen, bool isAffiliated)
         {
             var center = layout.HexToWorld(coordinate);
             var corners = new Vector3[6];
@@ -569,6 +608,11 @@ namespace HexMap.Gvg.Editor
             if (isNotOpen)
             {
                 DrawNotOpenOverlay(layout, center, outline);
+            }
+            if (isAffiliated)
+            {
+                Handles.color = m_AffiliatedPlotOutlineColor;
+                Handles.DrawAAPolyLine(3.5f, outline);
             }
         }
 
@@ -614,6 +658,10 @@ namespace HexMap.Gvg.Editor
                 label += Environment.NewLine + plot.PlotType;
                 label += Environment.NewLine + "State: " + GetInitialPlotState(plot);
                 label += Environment.NewLine + "[" + plot.Start + "," + plot.End + ")";
+                label += Environment.NewLine +
+                    (plot.AffiliatedCampId == Plot.NoAffiliatedCampId
+                        ? "Affiliation: None"
+                        : "Affiliation: Camp " + plot.AffiliatedCampId);
             }
 
             return label;
@@ -646,6 +694,7 @@ namespace HexMap.Gvg.Editor
         }
 
         private static readonly Color m_NotOpenOverlayColor = new Color(1f, 0.82f, 0.1f, 0.95f);
+        private static readonly Color m_AffiliatedPlotOutlineColor = new Color(0.85f, 0.15f, 1f, 0.95f);
 
         private void CreateAsset()
         {

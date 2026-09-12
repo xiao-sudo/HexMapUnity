@@ -34,7 +34,7 @@
 - `Assets/Scripts/HexMap/Gvg/Authoring/GvgMapAuthoringUtility.cs`
   - 将编辑器字段投影到运行时 Plot。
   - 校验 CampId 引用和时间层约束。
-  - 保护已被 Camp 引用的稳定 PlotId 不被自动重编号。
+  - 归一化多格 PlotId 后，使用旧 CampId 到新 PlotId 的映射同步更新所有 AffiliatedCampId 引用。
 - `Assets/Tests/EditMode/HexMap/Gvg/PlotAndBattlefieldRulesTests.cs`
   - 覆盖运行时 Plot 和路径策略。
 - `Assets/Tests/EditMode/HexMap/Gvg/GvgMapAuthoringTests.cs`
@@ -165,13 +165,19 @@ CanEnter =
 
 `CanEnter` 和 `CanPass` 都是无副作用查询。进入后由外围系统决定是驻扎还是占领，但本次实现不包含这些动作。
 
+## 外部配置字段映射
+
+- GVGMap.xlsx 的 F 列外部名称是 Safe：Safe=0 映射为内部 AffiliatedCampId=-1，Safe>0 映射为对应的 CampId。
+- 第一版 CSV 导出继续使用内部字段名 AffiliatedCampId。
+- 当前版本不增加 Excel 导出；后续增加 Excel 导出时，才将内部值写回 xlsx 的 F 列 Safe。
+
 ## 编辑器与稳定 ID 约束
 
 - `AffiliatedCampId` 写入 `GvgPlotAuthoringData`，并由 `Clone` 保留。
 - 带多个时间层的单 Hex Plot 不配置附属大营；校验应拒绝这类配置。
-- Camp Plot 的 PlotId 一旦被其他 Plot 作为 `AffiliatedCampId` 引用，就不得被 `NormalizePlotIds` 静默重编号。
+- Camp Plot 的 PlotId 仍按现有 PlotType ID 规则归一化；如果发生重编号，`NormalizePlotIds` 必须同步更新引用它的 `AffiliatedCampId`。
 - 编辑器合并、拆分、删除 Camp Plot 时，必须显式处理附属引用；本次实现至少记录错误并阻止产生无法解析的配置。
-- 多 Hex Plot 的 ID 仍遵守现有 PlotType ID 区间规则，但已被 Camp 引用的 ID 需要保留。
+- 多 Hex Plot 的 ID 仍遵守现有 PlotType ID 区间规则，Camp 引用不阻止重编号，但引用必须跟随新 ID 更新。
 
 ## 约束与取舍
 
@@ -203,4 +209,4 @@ CanEnter =
 - 无效 CampId 记录错误并按普通 Plot 处理。
 - 多 Hex Plot 的每个 Hex 共享相同附属限制。
 - 时间层 Plot 不接受附属配置。
-- Camp Plot 的稳定 PlotId 不被自动重编号。
+- Camp Plot 重编号后，所有引用它的 AffiliatedCampId 同步为新的 PlotId。

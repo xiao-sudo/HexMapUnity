@@ -263,14 +263,17 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
             int end;
             if (!TryParseInt(values, "J", rowNumber, "End", out end, errors)) return false;
             var affiliatedCampId = Plot.NoAffiliatedCampId;
-            if (values.ContainsKey("K") && !string.IsNullOrWhiteSpace(values["K"]))
+            if (values.ContainsKey("F") && !string.IsNullOrWhiteSpace(values["F"]))
             {
-                if (!TryParseInt(values, "K", rowNumber, "AffiliatedCampId", out affiliatedCampId, errors)) return false;
-                if (affiliatedCampId < Plot.NoAffiliatedCampId)
+                int safe;
+                if (!TryParseInt(values, "F", rowNumber, "Safe", out safe, errors)) return false;
+                if (safe < Plot.NoAffiliatedCampId)
                 {
-                    errors.Add("Row " + rowNumber + " has an AffiliatedCampId smaller than -1.");
+                    errors.Add("Row " + rowNumber + " has a Safe value smaller than -1.");
                     return false;
                 }
+
+                affiliatedCampId = safe == 0 ? Plot.NoAffiliatedCampId : safe;
             }
 
             int generationType;
@@ -407,6 +410,7 @@ return plots;
                 PlotType = plotType;
                 Start = start;
                 End = end;
+                AffiliatedCampId = affiliatedCampId;
             }
 
             public int SourceId { get; private set; }
