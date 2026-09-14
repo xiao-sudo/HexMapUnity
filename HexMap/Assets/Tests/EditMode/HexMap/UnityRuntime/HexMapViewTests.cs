@@ -19,23 +19,6 @@ namespace HexMap.UnityRuntime.Tests
                 UnityEngine.Object.DestroyImmediate(m_ViewObject);
             }
         }
-
-        [Test]
-        public void DebugLabelsAreEnabledAndCoordinatesAreHiddenByDefault()
-        {
-            m_ViewObject = new GameObject("Hex Map View");
-            var mapView = m_ViewObject.AddComponent<HexMapView>();
-
-            Assert.That(mapView.Radius, Is.EqualTo(3));
-            Assert.That(mapView.ShowDebugLabels, Is.True);
-            Assert.That(mapView.ShowDebugCoordinates, Is.False);
-            Assert.That(mapView.ShowDebugBounds, Is.True);
-            Assert.That(mapView.SecondaryScale, Is.EqualTo(1f));
-
-            mapView.ShowDebugCoordinates = true;
-            Assert.That(mapView.ShowDebugCoordinates, Is.True);
-        }
-
         [Test]
         public void AppearanceEqualityUsesVisibleAndColor()
         {

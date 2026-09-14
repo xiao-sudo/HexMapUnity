@@ -430,9 +430,6 @@ MonoBehaviour:
   m_Origin: {x: 0, y: 0, z: 0}
   m_CellMaterial: {fileID: 0}
   m_CellLayer: 0
-  m_ShowDebugLabels: 1
-  m_ShowDebugCoordinates: 0
-  m_ShowDebugBounds: 1
 --- !u!114 &1700000003
 MonoBehaviour:
   m_ObjectHideFlags: 0
