@@ -7,6 +7,8 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml;
 using HexMap.Gvg.Authoring;
+using HexMap.Runtime;
+using RuntimeHexMap = HexMap.Runtime.HexMap;
 using UnityEngine;
 
 namespace HexMap.Gvg.Editor
@@ -41,10 +43,11 @@ namespace HexMap.Gvg.Editor
             "[0-9]+",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-        public static GvgMapExcelImportResult Import(string path, GvgMapAuthoringAsset targetAsset)
+        public static GvgMapExcelImportResult Import(string path, GvgMapAuthoringAsset targetAsset, RuntimeHexMap map)
         {
             if (string.IsNullOrEmpty(path)) throw new ArgumentException("Excel path is required.", nameof(path));
             if (targetAsset == null) throw new ArgumentNullException(nameof(targetAsset));
+            if (map == null) throw new ArgumentNullException(nameof(map));
 
             var errors = new List<string>();
             var warnings = new List<string>();
@@ -64,15 +67,10 @@ namespace HexMap.Gvg.Editor
             try
             {
                 candidate.MapId = targetAsset.MapId;
-                candidate.Radius = targetAsset.Radius;
-                candidate.Orientation = targetAsset.Orientation;
-                candidate.Plane = targetAsset.Plane;
-                candidate.OuterRadius = targetAsset.OuterRadius;
-                candidate.SecondaryScale = targetAsset.SecondaryScale;
                 candidate.ReplacePlots(importedPlots);
-                GvgMapAuthoringUtility.NormalizePlotIds(candidate);
+                GvgMapAuthoringUtility.NormalizePlotIds(candidate, map);
 
-                var validation = GvgMapAuthoringUtility.Validate(candidate);
+                var validation = GvgMapAuthoringUtility.Validate(candidate, map);
                 for (var index = 0; index < validation.Issues.Count; index++)
                 {
                     errors.Add(validation.Issues[index].Message);

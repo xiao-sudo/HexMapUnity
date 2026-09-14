@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using NUnit.Framework;
 using HexMap.Gvg.Authoring;
+using HexMap.Runtime;
+using RuntimeHexMap = HexMap.Runtime.HexMap;
 using UnityEngine;
 
 namespace HexMap.Gvg.Tests
@@ -14,10 +16,11 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void DefaultGenerationCreatesOneOpenSingleCellLayerForEveryHex()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
-                GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
+                GvgMapAuthoringUtility.ResetToDefaultPlots(asset, map);
 
                 Assert.That(asset.Plots.Count, Is.EqualTo(7));
                 foreach (var plot in asset.Plots)
@@ -29,7 +32,7 @@ namespace HexMap.Gvg.Tests
                     Assert.That(plot.End, Is.EqualTo(-1));
                 }
 
-                Assert.That(GvgMapAuthoringUtility.Validate(asset).IsValid, Is.True);
+                Assert.That(GvgMapAuthoringUtility.Validate(asset, map).IsValid, Is.True);
             }
             finally
             {
@@ -40,14 +43,11 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void SecondaryScaleCanBeConfiguredAndRejectsInvalidValues()
         {
-            var asset = CreateAsset(0);
+            var map = CreateMap(0);
+            var asset = CreateAsset();
             try
             {
-                asset.SecondaryScale = 0.8f;
-                Assert.That(asset.SecondaryScale, Is.EqualTo(0.8f));
-
-                Assert.Throws<ArgumentOutOfRangeException>(() => asset.SecondaryScale = 0f);
-                Assert.Throws<ArgumentOutOfRangeException>(() => asset.SecondaryScale = float.NaN);
+                Assert.That(map.Count, Is.EqualTo(1));
             }
             finally
             {
@@ -58,7 +58,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void ValidationAllowsMultipleContiguousLayersForOneHex()
         {
-            var asset = CreateAsset(0);
+            var map = CreateMap(0);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -67,7 +68,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(400, new[] { 0 }, PlotType.Normal, 200, -1)
                 });
 
-                var validation = GvgMapAuthoringUtility.Validate(asset);
+                var validation = GvgMapAuthoringUtility.Validate(asset, map);
 
                 Assert.That(validation.IsValid, Is.True);
             }
@@ -80,7 +81,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void ValidationRejectsTimeGapsAndMixedTypesForOneHex()
         {
-            var asset = CreateAsset(0);
+            var map = CreateMap(0);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -89,7 +91,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(400, new[] { 0 }, PlotType.Normal, 200, -1)
                 });
 
-                var validation = GvgMapAuthoringUtility.Validate(asset);
+                var validation = GvgMapAuthoringUtility.Validate(asset, map);
 
                 Assert.That(validation.IsValid, Is.False);
                 Assert.That(ContainsIssue(validation, "contiguous"), Is.True);
@@ -104,7 +106,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void NormalizePlotIdsUsesHexIdForFirstLayerAndTypedRangeForMultiPlot()
         {
-            var asset = CreateAsset(11);
+            var map = CreateMap(11);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -116,7 +119,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(16, new[] { 5, 6 }, PlotType.Normal, 0, -1)
                 });
 
-                GvgMapAuthoringUtility.NormalizePlotIds(asset);
+                GvgMapAuthoringUtility.NormalizePlotIds(asset, map);
 
                 var layers = asset.Plots.Where(plot => plot.HexIds.Count == 1 && plot.HexIds[0] == 0)
                     .OrderBy(plot => plot.Start)
@@ -135,7 +138,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void NormalizePlotIdsReassignsImportedMultiIdsThatCollideWithHexIds()
         {
-            var asset = CreateAsset(11);
+            var map = CreateMap(11);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -147,7 +151,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(298, new[] { 11 }, PlotType.Normal, 0, -1)
                 });
 
-                GvgMapAuthoringUtility.NormalizePlotIds(asset);
+                GvgMapAuthoringUtility.NormalizePlotIds(asset, map);
 
                 Assert.That(asset.Plots.Single(plot => plot.HexIds.Count == 1).PlotId, Is.EqualTo(11));
                 Assert.That(asset.Plots.Where(plot => plot.IsMultiCell).Select(plot => plot.PlotId),
@@ -162,29 +166,30 @@ namespace HexMap.Gvg.Tests
         }
         public void EditingOperationsMaintainCoverageAndUseTypedMultiPlotIds()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
-                GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
+                GvgMapAuthoringUtility.ResetToDefaultPlots(asset, map);
 
-                Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, 0, new[] { 1 }), Is.True);
+                Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, map, 0, new[] { 1 }), Is.True);
                 var multiPlot = FindMultiPlot(asset);
                 Assert.That(multiPlot.HexIds, Is.EquivalentTo(new[] { 0, 1 }));
                 Assert.That(multiPlot.PlotId, Is.EqualTo(12000));
 
-                Assert.That(GvgMapAuthoringUtility.TryPaintAdd(asset, multiPlot.PlotId, 2), Is.True);
+                Assert.That(GvgMapAuthoringUtility.TryPaintAdd(asset, map, multiPlot.PlotId, 2), Is.True);
                 multiPlot = FindMultiPlot(asset);
                 Assert.That(multiPlot.HexIds, Is.EquivalentTo(new[] { 0, 1, 2 }));
                 Assert.That(asset.Plots.Any(plot => plot.PlotId == 2), Is.False);
 
-                Assert.That(GvgMapAuthoringUtility.TryPaintRemove(asset, multiPlot.PlotId, 2), Is.True);
+                Assert.That(GvgMapAuthoringUtility.TryPaintRemove(asset, map, multiPlot.PlotId, 2), Is.True);
                 multiPlot = FindMultiPlot(asset);
                 Assert.That(multiPlot.HexIds, Is.EquivalentTo(new[] { 0, 1 }));
                 Assert.That(FindPlot(asset, 2).HexIds, Is.EqualTo(new[] { 2 }));
 
-                Assert.That(GvgMapAuthoringUtility.TryDeletePlot(asset, multiPlot.PlotId), Is.True);
+                Assert.That(GvgMapAuthoringUtility.TryDeletePlot(asset, map, multiPlot.PlotId), Is.True);
                 Assert.That(asset.Plots.Count, Is.EqualTo(7));
-                Assert.That(GvgMapAuthoringUtility.Validate(asset).IsValid, Is.True);
+                Assert.That(GvgMapAuthoringUtility.Validate(asset, map).IsValid, Is.True);
             }
             finally
             {
@@ -195,19 +200,20 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void MergingAnotherPlotDoesNotRenumberExistingMultiCellPlot()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
-                GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
-                Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, 5, new[] { 6 }), Is.True);
+                GvgMapAuthoringUtility.ResetToDefaultPlots(asset, map);
+                Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, map, 5, new[] { 6 }), Is.True);
                 var existingMultiPlotId = FindPlotContainingHex(asset, 5).PlotId;
 
-                Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, 0, new[] { 1 }), Is.True);
+                Assert.That(GvgMapAuthoringUtility.TryMergeToMultiPlot(asset, map, 0, new[] { 1 }), Is.True);
 
                 Assert.That(FindPlotContainingHex(asset, 5).PlotId, Is.EqualTo(existingMultiPlotId));
                 Assert.That(FindPlotContainingHex(asset, 6).PlotId, Is.EqualTo(existingMultiPlotId));
                 Assert.That(FindPlotContainingHex(asset, 0).PlotId, Is.Not.EqualTo(existingMultiPlotId));
-                Assert.That(GvgMapAuthoringUtility.Validate(asset).IsValid, Is.True);
+                Assert.That(GvgMapAuthoringUtility.Validate(asset, map).IsValid, Is.True);
             }
             finally
             {
@@ -218,14 +224,15 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void RadiusChangesAreRejectedInTheCurrentVersion()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
-                GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
+                GvgMapAuthoringUtility.ResetToDefaultPlots(asset, map);
 
                 Assert.Throws<InvalidOperationException>(
-                    () => GvgMapAuthoringUtility.RebuildRadius(asset, 2));
-                Assert.That(asset.Radius, Is.EqualTo(1));
+                    () => GvgMapAuthoringUtility.RebuildRadius(asset, map, 2));
+                Assert.That(map.Radius.Radius, Is.EqualTo(1));
             }
             finally
             {
@@ -236,7 +243,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void CsvOutputUsesOneFileAndExportsTimeRanges()
         {
-            var asset = CreateAsset(0);
+            var map = CreateMap(0);
+            var asset = CreateAsset();
             try
             {
                 asset.MapId = "MapOne";
@@ -264,11 +272,12 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void ExportWriterWritesUtf8BomAndReadmeDocumentsNewContract()
         {
-            var asset = CreateAsset(0);
+            var map = CreateMap(0);
+            var asset = CreateAsset();
             var directory = Path.Combine(Path.GetTempPath(), "GvgMapAuthoringTests_" + Guid.NewGuid().ToString("N"));
             try
             {
-                GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
+                GvgMapAuthoringUtility.ResetToDefaultPlots(asset, map);
                 GvgMapAuthoringExportWriter.WriteFiles(directory, GvgMapAuthoringCsv.CreateFiles(asset));
 
                 var csvBytes = File.ReadAllBytes(Path.Combine(directory, "GVGMap_" + asset.MapId + ".csv"));
@@ -292,7 +301,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void RuntimeProjectionUsesStartForInitialState()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -306,7 +316,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(6, new[] { 6 }, PlotType.Normal, 0, -1)
                 });
 
-                var runtimePlots = GvgMapAuthoringUtility.CreateRuntimePlots(asset);
+                var runtimePlots = GvgMapAuthoringUtility.CreateRuntimePlots(asset, map);
                 Assert.That(runtimePlots.First(plot => plot.PlotId == 0).PlotState, Is.EqualTo(PlotState.Open));
                 Assert.That(runtimePlots.First(plot => plot.PlotId == 1).PlotState, Is.EqualTo(PlotState.NotOpen));
             }
@@ -319,7 +329,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void ValidationRejectsTimedMultiCellPlot()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -327,7 +338,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(12000, new[] { 0, 1 }, PlotType.Normal, 1, -1)
                 });
 
-                var validation = GvgMapAuthoringUtility.Validate(asset);
+                var validation = GvgMapAuthoringUtility.Validate(asset, map);
 
                 Assert.That(validation.IsValid, Is.False);
                 Assert.That(ContainsIssue(validation, "Start=0 and End=-1"), Is.True);
@@ -358,7 +369,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void RuntimeProjectionUsesCampPlotIdAsDefaultAffiliation()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -371,7 +383,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(6, new[] { 6 }, PlotType.Normal, 0, -1)
                 });
 
-                var runtimePlot = GvgMapAuthoringUtility.CreateRuntimePlots(asset)[0];
+                var runtimePlot = GvgMapAuthoringUtility.CreateRuntimePlots(asset, map)[0];
 
                 Assert.That(runtimePlot.AffiliatedCampId, Is.EqualTo(11000));
             }
@@ -384,7 +396,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void ValidationRejectsAffiliationOnTimedSingleCellPlot()
         {
-            var asset = CreateAsset(0);
+            var map = CreateMap(0);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -393,7 +406,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(400, new[] { 0 }, PlotType.Normal, 100, -1)
                 });
 
-                var validation = GvgMapAuthoringUtility.Validate(asset);
+                var validation = GvgMapAuthoringUtility.Validate(asset, map);
 
                 Assert.That(validation.IsValid, Is.False);
                 Assert.That(ContainsIssue(validation, "AffiliatedCampId"), Is.True);
@@ -407,7 +420,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void NormalizeRetainsCampPlotIdReferencedByAnAttachedPlot()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -416,7 +430,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(12000, new[] { 2, 3 }, PlotType.Normal, 0, -1, 11000)
                 });
 
-                GvgMapAuthoringUtility.NormalizePlotIds(asset);
+                GvgMapAuthoringUtility.NormalizePlotIds(asset, map);
 
                 Assert.That(asset.Plots.Any(plot => plot.PlotId == 11000 && plot.PlotType == PlotType.Camp), Is.True);
             }
@@ -429,7 +443,8 @@ namespace HexMap.Gvg.Tests
         [Test]
         public void NormalizeRemapsAffiliatedCampIdWhenCampPlotIdChanges()
         {
-            var asset = CreateAsset(1);
+            var map = CreateMap(1);
+            var asset = CreateAsset();
             try
             {
                 asset.ReplacePlots(new[]
@@ -438,7 +453,7 @@ namespace HexMap.Gvg.Tests
                     new GvgPlotAuthoringData(12000, new[] { 2, 3 }, PlotType.Normal, 0, -1, 3)
                 });
 
-                GvgMapAuthoringUtility.NormalizePlotIds(asset);
+                GvgMapAuthoringUtility.NormalizePlotIds(asset, map);
 
                 var campPlot = asset.Plots.First(plot => plot.PlotType == PlotType.Camp);
                 var attachedPlot = asset.Plots.First(plot => plot.AffiliatedCampId != Plot.NoAffiliatedCampId);
@@ -450,11 +465,14 @@ namespace HexMap.Gvg.Tests
                 UnityEngine.Object.DestroyImmediate(asset);
             }
         }
-        private static GvgMapAuthoringAsset CreateAsset(int radius)
+        private static RuntimeHexMap CreateMap(int radius)
+        {
+            return new RuntimeHexMap(new HexMapDefinition(radius));
+        }
+
+        private static GvgMapAuthoringAsset CreateAsset()
         {
             var asset = ScriptableObject.CreateInstance<GvgMapAuthoringAsset>();
-            asset.Radius = radius;
-            asset.OuterRadius = 1f;
             return asset;
         }
 

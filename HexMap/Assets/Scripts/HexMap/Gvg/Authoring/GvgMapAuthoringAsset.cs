@@ -11,11 +11,7 @@ namespace HexMap.Gvg.Authoring
     public sealed class GvgMapAuthoringAsset : ScriptableObject
     {
         [SerializeField] private string m_MapId = string.Empty;
-        [SerializeField] private int m_Radius = 1;
-        [SerializeField] private HexOrientation m_Orientation = HexOrientation.Pointy;
-        [SerializeField] private HexPlane m_Plane = HexPlane.XZ;
-        [SerializeField] private float m_OuterRadius = 1f;
-        [SerializeField] private float m_SecondaryScale = 1f;
+
         [SerializeField] private List<GvgPlotAuthoringData> m_Plots = new List<GvgPlotAuthoringData>();
 
         public string MapId
@@ -24,55 +20,12 @@ namespace HexMap.Gvg.Authoring
             set { m_MapId = value ?? string.Empty; }
         }
 
-        public int Radius
-        {
-            get { return m_Radius; }
-            set { m_Radius = new HexMapRadius(value).Radius; }
-        }
-
-        public HexOrientation Orientation
-        {
-            get { return m_Orientation; }
-            set { m_Orientation = value; }
-        }
-
-        public HexPlane Plane
-        {
-            get { return m_Plane; }
-            set { m_Plane = value; }
-        }
-
-        public float OuterRadius
-        {
-            get { return m_OuterRadius; }
-            set
-            {
-                if (value <= 0f || float.IsNaN(value) || float.IsInfinity(value))
-                    throw new ArgumentOutOfRangeException(nameof(value), value, "Outer radius must be positive and finite.");
-                m_OuterRadius = value;
-            }
-        }
-
-        public float SecondaryScale
-        {
-            get { return m_SecondaryScale; }
-            set
-            {
-                if (value <= 0f || float.IsNaN(value) || float.IsInfinity(value))
-                    throw new ArgumentOutOfRangeException(nameof(value), value, "Secondary scale must be positive and finite.");
-                m_SecondaryScale = value;
-            }
-        }
 
         public IReadOnlyList<GvgPlotAuthoringData> Plots
         {
             get { return m_Plots; }
         }
 
-        public RuntimeHexMap CreateRuntimeMap()
-        {
-            return new RuntimeHexMap(new HexMapDefinition(m_Radius));
-        }
 
         public void ReplacePlots(IEnumerable<GvgPlotAuthoringData> plots)
         {
@@ -92,17 +45,6 @@ namespace HexMap.Gvg.Authoring
 
         private void OnValidate()
         {
-            if (m_Radius < 0) m_Radius = 0;
-            if (m_Radius > HexMapRadius.MaxSupportedRadius) m_Radius = HexMapRadius.MaxSupportedRadius;
-            if (m_OuterRadius <= 0f || float.IsNaN(m_OuterRadius) || float.IsInfinity(m_OuterRadius))
-            {
-                m_OuterRadius = 1f;
-            }
-
-            if (m_SecondaryScale <= 0f || float.IsNaN(m_SecondaryScale) || float.IsInfinity(m_SecondaryScale))
-            {
-                m_SecondaryScale = 1f;
-            }
 
             if (m_Plots == null)
             {

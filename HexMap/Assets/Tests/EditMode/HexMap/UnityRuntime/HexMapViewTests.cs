@@ -185,6 +185,44 @@ namespace HexMap.UnityRuntime.Tests
                 renderer.Dispose();
                 UnityEngine.Object.DestroyImmediate(parent);
             }
+        }        [Test]
+        public void SnapshotsUseSerializedSceneConfigurationWithoutBuild()
+        {
+            m_ViewObject = new GameObject("Hex Map View");
+            var mapView = m_ViewObject.AddComponent<HexMapView>();
+            mapView.Radius = 2;
+            mapView.Orientation = HexOrientation.Flat;
+            mapView.Plane = HexPlane.XY;
+            mapView.OuterRadius = 2f;
+            mapView.SecondaryScale = 0.75f;
+            mapView.Origin = new Vector3(0.5f, -0.25f, 1f);
+
+            Runtime.HexMap map;
+            HexLayout layout;
+            string error;
+            Assert.That(mapView.TryCreateSnapshots(out map, out layout, out error), Is.True);
+            Assert.That(error, Is.Empty);
+            Assert.That(map.Count, Is.EqualTo(19));
+            Assert.That(layout.Orientation, Is.EqualTo(HexOrientation.Flat));
+            Assert.That(layout.Plane, Is.EqualTo(HexPlane.XY));
+            Assert.That(layout.OuterRadius, Is.EqualTo(2f));
+            Assert.That(layout.SecondaryScale, Is.EqualTo(0.75f));
+            Assert.That(layout.Origin, Is.EqualTo(new Vector3(0.5f, -0.25f, 1f)));
         }
+
+        [Test]
+        public void SnapshotsReportInvalidSceneLayoutConfiguration()
+        {
+            m_ViewObject = new GameObject("Hex Map View");
+            var mapView = m_ViewObject.AddComponent<HexMapView>();
+            mapView.OuterRadius = 0f;
+
+            Runtime.HexMap map;
+            HexLayout layout;
+            string error;
+            Assert.That(mapView.TryCreateSnapshots(out map, out layout, out error), Is.False);
+            Assert.That(error, Does.Contain("Outer radius"));
+        }
+
     }
 }

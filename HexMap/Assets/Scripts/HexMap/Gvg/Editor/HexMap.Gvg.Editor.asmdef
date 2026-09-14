@@ -4,7 +4,8 @@
   "references": [
     "HexMap.Core",
     "HexMap.Runtime",
-    "HexMap.Gvg"
+    "HexMap.Gvg",
+    "HexMap.UnityRuntime"
   ],
   "includePlatforms": [
     "Editor"

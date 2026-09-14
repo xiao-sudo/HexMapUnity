@@ -4,6 +4,7 @@ using System.Linq;
 using HexMap.Core;
 using HexMap.Gvg.Authoring;
 using HexMap.Runtime;
+using HexMap.UnityRuntime;
 using RuntimeHexMap = HexMap.Runtime.HexMap;
 using UnityEditor;
 using UnityEngine;
@@ -22,6 +23,8 @@ namespace HexMap.Gvg.Editor
         private GUIStyle m_LabelStyle;
         private readonly List<int> m_SelectedHexIds = new List<int>();
         private GvgMapAuthoringAsset m_Asset;
+        private HexMapView m_MapView;
+        private string m_MapError = string.Empty;
         private ToolMode m_Mode;
         private int m_SelectedPlotId;
         private bool m_HasSelectedPlot;
@@ -82,38 +85,56 @@ namespace HexMap.Gvg.Editor
 
         private void DrawMapControls()
         {
-            EditorGUILayout.LabelField("Map", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Scene Map", EditorStyles.boldLabel);
+            m_MapView = (HexMapView)EditorGUILayout.ObjectField(
+                "HexMapView",
+                ResolveMapView(),
+                typeof(HexMapView),
+                true);
+
+            if (m_MapView == null)
+            {
+                EditorGUILayout.HelpBox("Assign or select a scene HexMapView before editing GVG data.", MessageType.Warning);
+                return;
+            }
+
+            RuntimeHexMap map;
+            HexLayout layout;
+            string error;
+            if (!m_MapView.TryCreateSnapshots(out map, out layout, out error))
+            {
+                m_MapError = error;
+                EditorGUILayout.HelpBox("Invalid scene map configuration: " + error, MessageType.Error);
+                return;
+            }
+
+            m_MapError = string.Empty;
+            EditorGUI.BeginDisabledGroup(true);
+            EditorGUILayout.IntField("Radius", m_MapView.Radius);
+            EditorGUILayout.EnumPopup("Orientation", m_MapView.Orientation);
+            EditorGUILayout.EnumPopup("Plane", m_MapView.Plane);
+            EditorGUILayout.FloatField("Outer Radius", m_MapView.OuterRadius);
+            EditorGUILayout.FloatField("Secondary Scale", m_MapView.SecondaryScale);
+            EditorGUILayout.Vector3Field("Origin", m_MapView.Origin);
+            EditorGUI.EndDisabledGroup();
+
             EditorGUI.BeginChangeCheck();
             var mapId = EditorGUILayout.TextField("Map Id", m_Asset.MapId);
-            EditorGUI.BeginDisabledGroup(true);
-            EditorGUILayout.IntField("Radius", m_Asset.Radius);
-            EditorGUI.EndDisabledGroup();
-            var orientation = (HexOrientation)EditorGUILayout.EnumPopup("Orientation", m_Asset.Orientation);
-            var plane = (HexPlane)EditorGUILayout.EnumPopup("Plane", m_Asset.Plane);
-            var outerRadius = EditorGUILayout.FloatField("Outer Radius", m_Asset.OuterRadius);
-            var secondaryScale = EditorGUILayout.FloatField("Secondary Scale", m_Asset.SecondaryScale);
             if (EditorGUI.EndChangeCheck())
             {
-                Undo.RecordObject(m_Asset, "Edit GVG Map Settings");
+                Undo.RecordObject(m_Asset, "Edit GVG Map Id");
                 m_Asset.MapId = mapId;
-                m_Asset.Orientation = orientation;
-                m_Asset.Plane = plane;
-                if (outerRadius > 0f) m_Asset.OuterRadius = outerRadius;
-                if (secondaryScale > 0f) m_Asset.SecondaryScale = secondaryScale;
                 EditorUtility.SetDirty(m_Asset);
-                SceneView.RepaintAll();
             }
 
             if (GUILayout.Button("Reset Default Plots"))
             {
                 Undo.RecordObject(m_Asset, "Reset GVG Map Plots");
-                GvgMapAuthoringUtility.ResetToDefaultPlots(m_Asset);
+                GvgMapAuthoringUtility.ResetToDefaultPlots(m_Asset, map);
                 ClearSelection();
                 EditorUtility.SetDirty(m_Asset);
                 SceneView.RepaintAll();
             }
-
-            EditorGUILayout.HelpBox("Radius changes and new Hex generation are disabled in the current GVG authoring version.", MessageType.Info);
         }
         private void DrawToolControls()
         {
@@ -158,6 +179,9 @@ namespace HexMap.Gvg.Editor
         }
         private void DrawSelectedPlotControls()
         {
+            RuntimeHexMap map;
+            HexLayout selectedLayout;
+            if (!TryCreatePreviewData(out map, out selectedLayout)) return;
             var plot = FindSelectedPlot();
             EditorGUILayout.LabelField("Selected Plot", EditorStyles.boldLabel);
             if (plot == null)
@@ -209,7 +233,7 @@ namespace HexMap.Gvg.Editor
                     }
                 }
 
-                GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+                GvgMapAuthoringUtility.NormalizePlotIds(m_Asset, map);
                 EditorUtility.SetDirty(m_Asset);
                 SceneView.RepaintAll();
             }
@@ -223,7 +247,7 @@ namespace HexMap.Gvg.Editor
                 Undo.RecordObject(m_Asset, "Edit GVG Plot Time Layer");
                 plot.Start = start;
                 plot.End = end;
-                GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+                GvgMapAuthoringUtility.NormalizePlotIds(m_Asset, map);
                 EditorUtility.SetDirty(m_Asset);
                 SceneView.RepaintAll();
             }
@@ -249,11 +273,11 @@ namespace HexMap.Gvg.Editor
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Merge Selected"))
             {
-                RecordAndApply("Merge GVG Plots", () => GvgMapAuthoringUtility.TryMergeToMultiPlot(m_Asset, plot.PlotId, m_SelectedHexIds));
+                RecordAndApply("Merge GVG Plots", () => GvgMapAuthoringUtility.TryMergeToMultiPlot(m_Asset, map, plot.PlotId, m_SelectedHexIds));
             }
             if (GUILayout.Button("Delete Plot"))
             {
-                RecordAndApply("Delete GVG Plot", () => GvgMapAuthoringUtility.TryDeletePlot(m_Asset, plot.PlotId));
+                RecordAndApply("Delete GVG Plot", () => GvgMapAuthoringUtility.TryDeletePlot(m_Asset, map, plot.PlotId));
                 ClearSelection();
             }
             EditorGUILayout.EndHorizontal();
@@ -261,11 +285,14 @@ namespace HexMap.Gvg.Editor
             m_PastedHexIds = EditorGUILayout.TextField("Paste HexIds", m_PastedHexIds);
             if (GUILayout.Button("Merge Pasted HexIds"))
             {
-                RecordAndApply("Paste GVG HexIds", () => GvgMapAuthoringUtility.TryPasteHexIdsToPlot(m_Asset, plot.PlotId, m_PastedHexIds));
+                RecordAndApply("Paste GVG HexIds", () => GvgMapAuthoringUtility.TryPasteHexIdsToPlot(m_Asset, map, plot.PlotId, m_PastedHexIds));
             }
         }
         private void DrawHexScheduleControls(int hexId)
         {
+            RuntimeHexMap map;
+            HexLayout scheduleLayout;
+            if (!TryCreatePreviewData(out map, out scheduleLayout)) return;
             var layers = GetLayersForHex(hexId);
             EditorGUILayout.LabelField("Hex Open Time Layers", EditorStyles.boldLabel);
 
@@ -283,7 +310,7 @@ namespace HexMap.Gvg.Editor
                     Undo.RecordObject(m_Asset, "Edit GVG Hex Open Time Layer");
                     layer.Start = start;
                     layer.End = end;
-                    GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+                    GvgMapAuthoringUtility.NormalizePlotIds(m_Asset, map);
                     EditorUtility.SetDirty(m_Asset);
                     SceneView.RepaintAll();
                     Repaint();
@@ -326,6 +353,9 @@ namespace HexMap.Gvg.Editor
 
         private void AddHexScheduleLayer(int hexId, List<GvgPlotAuthoringData> layers)
         {
+            RuntimeHexMap map;
+            HexLayout scheduleLayout;
+            if (!TryCreatePreviewData(out map, out scheduleLayout)) return;
             if (layers.Count == 0) return;
 
             var last = layers[layers.Count - 1];
@@ -339,7 +369,7 @@ namespace HexMap.Gvg.Editor
             Undo.RecordObject(m_Asset, "Add GVG Hex Open Time Layer");
             last.End = splitStart;
             m_Asset.ReplacePlots(CreatePlotsWithAdditionalLayer(hexId, layers, splitStart));
-            GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+            GvgMapAuthoringUtility.NormalizePlotIds(m_Asset, map);
             EditorUtility.SetDirty(m_Asset);
             SceneView.RepaintAll();
             Repaint();
@@ -347,6 +377,9 @@ namespace HexMap.Gvg.Editor
 
         private void DeleteHexScheduleLayer(int hexId, GvgPlotAuthoringData layerToDelete)
         {
+            RuntimeHexMap map;
+            HexLayout scheduleLayout;
+            if (!TryCreatePreviewData(out map, out scheduleLayout)) return;
             var layers = GetLayersForHex(hexId);
             if (layers.Count <= 1) return;
 
@@ -372,7 +405,7 @@ namespace HexMap.Gvg.Editor
 
             Undo.RecordObject(m_Asset, "Delete GVG Hex Open Time Layer");
             m_Asset.ReplacePlots(remaining);
-            GvgMapAuthoringUtility.NormalizePlotIds(m_Asset);
+            GvgMapAuthoringUtility.NormalizePlotIds(m_Asset, map);
             EditorUtility.SetDirty(m_Asset);
             SceneView.RepaintAll();
             Repaint();
@@ -404,7 +437,8 @@ namespace HexMap.Gvg.Editor
         }
         private void DrawValidationControls()
         {
-            var validation = GvgMapAuthoringUtility.Validate(m_Asset);
+            RuntimeHexMap validationMap; HexLayout validationLayout; if (!TryCreatePreviewData(out validationMap, out validationLayout)) return;
+            var validation = GvgMapAuthoringUtility.Validate(m_Asset, validationMap);
             EditorGUILayout.LabelField("Validation", EditorStyles.boldLabel);
             if (validation.IsValid)
             {
@@ -420,12 +454,15 @@ namespace HexMap.Gvg.Editor
 
         private void DrawExportControls()
         {
+            RuntimeHexMap map;
+            HexLayout exportLayout;
+            if (!TryCreatePreviewData(out map, out exportLayout)) return;
             if (GUILayout.Button("Import Excel"))
             {
                 var path = EditorUtility.OpenFilePanel("Import GVG Map Excel", string.Empty, "xlsx");
                 if (!string.IsNullOrEmpty(path))
                 {
-                    var result = GvgMapExcelImporter.Import(path, m_Asset);
+                    var result = GvgMapExcelImporter.Import(path, m_Asset, map);
                     if (result.Applied)
                     {
                         EditorUtility.SetDirty(m_Asset);
@@ -443,7 +480,7 @@ namespace HexMap.Gvg.Editor
             if (!GUILayout.Button("Export CSV")) return;
             try
             {
-                var path = GvgMapAuthoringExporter.Export(m_Asset);
+                var path = GvgMapAuthoringExporter.Export(m_Asset, map);
                 EditorUtility.DisplayDialog("GVG Map Export", "Exported to " + path, "OK");
             }
             catch (Exception exception)
@@ -454,14 +491,34 @@ namespace HexMap.Gvg.Editor
         private void OnSceneGui(SceneView sceneView)
         {
             if (m_Asset == null) return;
+            ResolveMapView();
 
             RuntimeHexMap map;
             HexLayout layout;
             if (!TryCreatePreviewData(out map, out layout)) return;
 
+            ClaimSceneViewInput(map, layout);
             var plotsByHexId = GvgMapAuthoringUtility.CreatePlotLookup(m_Asset, false);
             DrawCells(map, layout, plotsByHexId);
             HandleSceneInput(sceneView, map, layout);
+        }
+
+        private void ClaimSceneViewInput(RuntimeHexMap map, HexLayout layout)
+        {
+            var current = Event.current;
+            if (current == null || current.alt || current.type != EventType.Layout)
+            {
+                return;
+            }
+
+            HexCell cell;
+            if (!TryGetMouseCell(current, layout, map, out cell))
+            {
+                return;
+            }
+
+            HandleUtility.AddDefaultControl(
+                GUIUtility.GetControlID(FocusType.Passive));
         }
 
         private void DrawCells(RuntimeHexMap map, HexLayout layout, Dictionary<int, GvgPlotAuthoringData> plotsByHexId)
@@ -487,7 +544,7 @@ namespace HexMap.Gvg.Editor
                     fill,
                     hasPlot && GetInitialPlotState(plot) == PlotState.NotOpen,
                     isAffiliated);
-                Handles.Label(layout.HexToWorld(cell.Coordinate), FormatLabel(cell, plot, hasPlot), m_LabelStyle);
+                Handles.Label(MapPointToWorld(layout.HexToWorld(cell.Coordinate)), FormatLabel(cell, plot, hasPlot), m_LabelStyle);
             }
         }
 
@@ -527,12 +584,12 @@ namespace HexMap.Gvg.Editor
             }
             else if (m_HasSelectedPlot && m_Mode == ToolMode.PaintAdd)
             {
-                RecordAndApply("Paint Add GVG Hex", () => GvgMapAuthoringUtility.TryPaintAdd(m_Asset, m_SelectedPlotId, cell.Id));
+                RecordAndApply("Paint Add GVG Hex", () => GvgMapAuthoringUtility.TryPaintAdd(m_Asset, map, m_SelectedPlotId, cell.Id));
                 SelectPlotContaining(cell.Id);
             }
             else if (m_HasSelectedPlot && m_Mode == ToolMode.PaintRemove)
             {
-                RecordAndApply("Paint Remove GVG Hex", () => GvgMapAuthoringUtility.TryPaintRemove(m_Asset, m_SelectedPlotId, cell.Id));
+                RecordAndApply("Paint Remove GVG Hex", () => GvgMapAuthoringUtility.TryPaintRemove(m_Asset, map, m_SelectedPlotId, cell.Id));
                 if (FindSelectedPlot() == null)
                 {
                     SelectPlotContaining(cell.Id);
@@ -545,40 +602,43 @@ namespace HexMap.Gvg.Editor
 
         private bool TryCreatePreviewData(out RuntimeHexMap map, out HexLayout layout)
         {
-            try
-            {
-                map = m_Asset.CreateRuntimeMap();
-                layout = new HexLayout(
-                    m_Asset.Orientation,
-                    m_Asset.Plane,
-                    m_Asset.OuterRadius,
-                    Vector3.zero,
-                    m_Asset.SecondaryScale
-                    );
-                return true;
-            }
-            catch (Exception)
+            if (m_MapView == null)
             {
                 map = null;
                 layout = default(HexLayout);
+                m_MapError = "No scene HexMapView is assigned.";
                 return false;
             }
+
+            string error;
+            if (!m_MapView.TryCreateSnapshots(out map, out layout, out error))
+            {
+                m_MapError = error;
+                return false;
+            }
+
+            m_MapError = string.Empty;
+            return true;
         }
 
         private bool TryGetMouseCell(Event current, HexLayout layout, RuntimeHexMap map, out HexCell cell)
         {
-            var ray = HandleUtility.GUIPointToWorldRay(current.mousePosition);
-            var plane = m_Asset.Plane == HexPlane.XY
-                ? new Plane(Vector3.forward, Vector3.zero)
-                : new Plane(Vector3.up, Vector3.zero);
-            float distance;
-            if (!plane.Raycast(ray, out distance))
+            if (m_MapView == null)
             {
                 cell = default(HexCell);
                 return false;
             }
 
-            var coordinate = layout.WorldToHex(ray.GetPoint(distance));
+            var ray = HandleUtility.GUIPointToWorldRay(current.mousePosition);
+            float distance;
+            if (!m_MapView.WorldPlane.Raycast(ray, out distance))
+            {
+                cell = default(HexCell);
+                return false;
+            }
+
+            var localPoint = m_MapView.WorldToMapLocal(ray.GetPoint(distance));
+            var coordinate = layout.WorldToHex(localPoint);
             return map.TryGetCell(coordinate, out cell);
         }
 
@@ -596,8 +656,8 @@ namespace HexMap.Gvg.Editor
                 var corner = layout.Plane == HexPlane.XY
                     ? center + new Vector3(x, secondary, 0f)
                     : center + new Vector3(x, 0f, secondary);
-                corners[index] = corner;
-                outline[index] = corner;
+                corners[index] = MapPointToWorld(corner);
+                outline[index] = MapPointToWorld(corner);
             }
 
             outline[6] = outline[0];
@@ -627,17 +687,17 @@ namespace HexMap.Gvg.Editor
             var secondLine = new Vector3[2];
             if (layout.Plane == HexPlane.XY)
             {
-                firstLine[0] = center + new Vector3(-horizontalRadius, -verticalRadius, 0f);
-                firstLine[1] = center + new Vector3(horizontalRadius, verticalRadius, 0f);
-                secondLine[0] = center + new Vector3(-horizontalRadius, verticalRadius, 0f);
-                secondLine[1] = center + new Vector3(horizontalRadius, -verticalRadius, 0f);
+                firstLine[0] = MapPointToWorld(center + new Vector3(-horizontalRadius, -verticalRadius, 0f));
+                firstLine[1] = MapPointToWorld(center + new Vector3(horizontalRadius, verticalRadius, 0f));
+                secondLine[0] = MapPointToWorld(center + new Vector3(-horizontalRadius, verticalRadius, 0f));
+                secondLine[1] = MapPointToWorld(center + new Vector3(horizontalRadius, -verticalRadius, 0f));
             }
             else
             {
-                firstLine[0] = center + new Vector3(-horizontalRadius, 0f, -verticalRadius);
-                firstLine[1] = center + new Vector3(horizontalRadius, 0f, verticalRadius);
-                secondLine[0] = center + new Vector3(-horizontalRadius, 0f, verticalRadius);
-                secondLine[1] = center + new Vector3(horizontalRadius, 0f, -verticalRadius);
+                firstLine[0] = MapPointToWorld(center + new Vector3(-horizontalRadius, 0f, -verticalRadius));
+                firstLine[1] = MapPointToWorld(center + new Vector3(horizontalRadius, 0f, verticalRadius));
+                secondLine[0] = MapPointToWorld(center + new Vector3(-horizontalRadius, 0f, verticalRadius));
+                secondLine[1] = MapPointToWorld(center + new Vector3(horizontalRadius, 0f, -verticalRadius));
             }
 
             Handles.DrawAAPolyLine(2f, firstLine);
@@ -706,7 +766,15 @@ namespace HexMap.Gvg.Editor
             if (string.IsNullOrEmpty(path)) return;
 
             var asset = CreateInstance<GvgMapAuthoringAsset>();
-            GvgMapAuthoringUtility.ResetToDefaultPlots(asset);
+            RuntimeHexMap map;
+            HexLayout layout;
+            if (!TryCreatePreviewData(out map, out layout))
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+                EditorUtility.DisplayDialog("Create GVG Map Authoring Asset", "A valid scene HexMapView is required.", "OK");
+                return;
+            }
+            GvgMapAuthoringUtility.ResetToDefaultPlots(asset, map);
             AssetDatabase.CreateAsset(asset, path);
             Undo.RegisterCreatedObjectUndo(asset, "Create GVG Map Authoring Asset");
             AssetDatabase.SaveAssets();
@@ -714,6 +782,25 @@ namespace HexMap.Gvg.Editor
             Selection.activeObject = asset;
         }
 
+        private HexMapView ResolveMapView()
+        {
+            if (m_MapView != null) return m_MapView;
+
+            var selected = Selection.activeGameObject;
+            if (selected != null)
+            {
+                m_MapView = selected.GetComponentInParent<HexMapView>();
+                if (m_MapView != null) return m_MapView;
+            }
+
+            var views = UnityEngine.Object.FindObjectsOfType<HexMapView>();
+            if (views.Length == 1) m_MapView = views[0];
+            return m_MapView;
+        }
+        private Vector3 MapPointToWorld(Vector3 mapLocalPoint)
+        {
+            return m_MapView == null ? mapLocalPoint : m_MapView.transform.TransformPoint(mapLocalPoint);
+        }
         private void RecordAndApply(string undoName, Func<bool> action)
         {
             Undo.RecordObject(m_Asset, undoName);

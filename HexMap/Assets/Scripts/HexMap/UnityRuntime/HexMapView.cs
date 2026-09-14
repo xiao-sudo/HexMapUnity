@@ -101,6 +101,53 @@ namespace HexMap.UnityRuntime
             get { return m_Layout; }
         }
 
+        /// <summary>
+        /// Creates a validated map snapshot from this scene view's topology.
+        /// The snapshot does not depend on the renderer having been built.
+        /// </summary>
+        public RuntimeHexMap CreateMapSnapshot()
+        {
+            return new RuntimeHexMap(new HexMapDefinition(m_Radius));
+        }
+
+        /// <summary>
+        /// Creates a validated layout snapshot from this scene view's display configuration.
+        /// </summary>
+        public HexLayout CreateLayoutSnapshot()
+        {
+            return new HexLayout(
+                m_Orientation,
+                m_Plane,
+                m_OuterRadius,
+                m_Origin,
+                m_SecondaryScale);
+        }
+
+        /// <summary>
+        /// Creates the map and layout used by editor and runtime consumers without
+        /// requiring a renderer or Unity lifecycle callback.
+        /// </summary>
+        public bool TryCreateSnapshots(
+            out RuntimeHexMap map,
+            out HexLayout layout,
+            out string error)
+        {
+            try
+            {
+                map = CreateMapSnapshot();
+                layout = CreateLayoutSnapshot();
+                error = string.Empty;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                map = null;
+                layout = default(HexLayout);
+                error = exception.Message;
+                return false;
+            }
+        }
+
         public void Awake()
         {
             Build();
@@ -111,16 +158,8 @@ namespace HexMap.UnityRuntime
             ValidateTransformScale();
             DisposeRenderer();
 
-            var definition = new HexMapDefinition(m_Radius);
-
-            m_Map = new RuntimeHexMap(definition);
-            m_Layout = new HexLayout(
-                m_Orientation,
-                m_Plane,
-                m_OuterRadius,
-                m_Origin,
-                m_SecondaryScale
-                );
+            m_Map = CreateMapSnapshot();
+            m_Layout = CreateLayoutSnapshot();
             var renderConfig = new HexMapRenderConfig(transform, m_CellMaterial, m_CellLayer);
             m_Renderer = new HexMapRenderer(m_Map, m_Layout, renderConfig);
         }
@@ -175,10 +214,11 @@ namespace HexMap.UnityRuntime
             {
                 ValidateTransformScale();
 
-                var localNormal = m_Layout.Plane == HexPlane.XY
+                var layout = CreateLayoutSnapshot();
+                var localNormal = layout.Plane == HexPlane.XY
                     ? Vector3.forward
                     : Vector3.up;
-                var worldPoint = transform.TransformPoint(m_Layout.Origin);
+                var worldPoint = transform.TransformPoint(layout.Origin);
                 var worldNormal = transform.TransformDirection(localNormal).normalized;
                 return new Plane(worldNormal, worldPoint);
             }

@@ -1,17 +1,20 @@
 using System;
 using System.IO;
 using HexMap.Gvg.Authoring;
+using HexMap.Runtime;
+using RuntimeHexMap = HexMap.Runtime.HexMap;
 using UnityEditor;
 
 namespace HexMap.Gvg.Editor
 {
     public static class GvgMapAuthoringExporter
     {
-        public static string Export(GvgMapAuthoringAsset asset)
+        public static string Export(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             if (asset == null) throw new ArgumentNullException(nameof(asset));
+            if (map == null) throw new ArgumentNullException(nameof(map));
 
-            var validation = GvgMapAuthoringUtility.Validate(asset);
+            var validation = GvgMapAuthoringUtility.Validate(asset, map);
             if (!validation.IsValid)
             {
                 throw new InvalidOperationException(validation.Issues[0].Message);

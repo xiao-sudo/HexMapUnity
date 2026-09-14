@@ -8,9 +8,9 @@ namespace HexMap.Gvg.Authoring
 {
     public static class GvgMapAuthoringUtility
     {
-        public static List<GvgPlotAuthoringData> CreateDefaultPlots(int radius)
+        public static List<GvgPlotAuthoringData> CreateDefaultPlots(RuntimeHexMap map)
         {
-            var map = new RuntimeHexMap(new HexMapDefinition(radius));
+            ValidateMap(map);
             var plots = new List<GvgPlotAuthoringData>(map.Count);
             for (var index = 0; index < map.Cells.Count; index++)
             {
@@ -40,23 +40,25 @@ namespace HexMap.Gvg.Authoring
             return plotId >= baseId && plotId < baseId + 1000;
         }
 
-        public static void ResetToDefaultPlots(GvgMapAuthoringAsset asset)
+        public static void ResetToDefaultPlots(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             ValidateAsset(asset);
-            asset.ReplacePlots(CreateDefaultPlots(asset.Radius));
+            ValidateMap(map);
+            asset.ReplacePlots(CreateDefaultPlots(map));
         }
 
-        public static void RebuildRadius(GvgMapAuthoringAsset asset, int radius)
+        public static void RebuildRadius(GvgMapAuthoringAsset asset, RuntimeHexMap map, int radius)
         {
             ValidateAsset(asset);
-            if (radius != asset.Radius)
-                throw new InvalidOperationException("Changing Radius and generating new Hexes is not supported in the current GVG authoring version.");
+            ValidateMap(map);
+            if (radius != map.Radius.Radius)
+                throw new InvalidOperationException("Changing the scene map topology from Radius " + map.Radius.Radius + " is not supported by the current GVG authoring version.");
         }
 
-        public static bool TryPaintAdd(GvgMapAuthoringAsset asset, int plotId, int hexId)
+        public static bool TryPaintAdd(GvgMapAuthoringAsset asset, RuntimeHexMap map, int plotId, int hexId)
         {
             ValidateAsset(asset);
-            var map = asset.CreateRuntimeMap();
+            ValidateMap(map);
             if (!map.TryGetCell(hexId, out _)) return false;
 
             var plot = FindPlot(asset.MutablePlots, plotId);
@@ -76,13 +78,14 @@ namespace HexMap.Gvg.Authoring
             }
 
             RemoveEmptyPlots(asset.MutablePlots);
-            NormalizePlotIds(asset);
+            NormalizePlotIds(asset, map);
             return true;
         }
 
-        public static bool TryPaintRemove(GvgMapAuthoringAsset asset, int plotId, int hexId)
+        public static bool TryPaintRemove(GvgMapAuthoringAsset asset, RuntimeHexMap map, int plotId, int hexId)
         {
             ValidateAsset(asset);
+            ValidateMap(map);
             var plot = FindPlot(asset.MutablePlots, plotId);
             if (plot == null || !plot.HexIds.Contains(hexId) || plot.HexIds.Count <= 1) return false;
 
@@ -92,13 +95,14 @@ namespace HexMap.Gvg.Authoring
                 asset.MutablePlots.Add(new GvgPlotAuthoringData(hexId, new[] { hexId }, PlotType.Normal, 0, -1));
             }
 
-            NormalizePlotIds(asset);
+            NormalizePlotIds(asset, map);
             return true;
         }
 
-        public static bool TryDeletePlot(GvgMapAuthoringAsset asset, int plotId)
+        public static bool TryDeletePlot(GvgMapAuthoringAsset asset, RuntimeHexMap map, int plotId)
         {
             ValidateAsset(asset);
+            ValidateMap(map);
             var plot = FindPlot(asset.MutablePlots, plotId);
             if (plot == null || IsPlotReferenced(asset.MutablePlots, plotId, plot)) return false;
 
@@ -113,11 +117,11 @@ namespace HexMap.Gvg.Authoring
                 }
             }
 
-            NormalizePlotIds(asset);
+            NormalizePlotIds(asset, map);
             return true;
         }
 
-        public static bool TryMergeToMultiPlot(GvgMapAuthoringAsset asset, int primaryPlotId, IEnumerable<int> hexIds)
+        public static bool TryMergeToMultiPlot(GvgMapAuthoringAsset asset, RuntimeHexMap map, int primaryPlotId, IEnumerable<int> hexIds)
         {
             ValidateAsset(asset);
             if (hexIds == null) throw new ArgumentNullException(nameof(hexIds));
@@ -127,7 +131,7 @@ namespace HexMap.Gvg.Authoring
 
             var mergedHexIds = new HashSet<int>(primary.HexIds);
             var plotsToRemove = new HashSet<GvgPlotAuthoringData>();
-            var map = asset.CreateRuntimeMap();
+            ValidateMap(map);
 
             foreach (var hexId in hexIds)
             {
@@ -175,13 +179,13 @@ namespace HexMap.Gvg.Authoring
             primary.Start = 0;
             primary.End = -1;
             RemoveEmptyPlots(asset.MutablePlots);
-            NormalizePlotIds(asset);
+            NormalizePlotIds(asset, map);
             return primary.HexIds.Count > 1;
         }
 
-        public static bool TryPasteHexIdsToPlot(GvgMapAuthoringAsset asset, int primaryPlotId, string text)
+        public static bool TryPasteHexIdsToPlot(GvgMapAuthoringAsset asset, RuntimeHexMap map, int primaryPlotId, string text)
         {
-            return TryMergeToMultiPlot(asset, primaryPlotId, ParseHexIds(text));
+            return TryMergeToMultiPlot(asset, map, primaryPlotId, ParseHexIds(text));
         }
 
         public static IEnumerable<int> ParseHexIds(string text)
@@ -199,16 +203,16 @@ namespace HexMap.Gvg.Authoring
             }
         }
 
-        public static List<Plot> CreateRuntimePlots(GvgMapAuthoringAsset asset)
+        public static List<Plot> CreateRuntimePlots(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             ValidateAsset(asset);
-            var validation = Validate(asset);
+            var validation = Validate(asset, map);
             if (!validation.IsValid)
             {
                 throw new InvalidOperationException(validation.Issues[0].Message);
             }
 
-            var map = asset.CreateRuntimeMap();
+            ValidateMap(map);
             var campPlotIds = new HashSet<int>();
             for (var campIndex = 0; campIndex < asset.Plots.Count; campIndex++)
             {
@@ -258,22 +262,11 @@ namespace HexMap.Gvg.Authoring
             return plots;
         }
 
-        public static GvgMapAuthoringValidationResult Validate(GvgMapAuthoringAsset asset)
+        public static GvgMapAuthoringValidationResult Validate(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             ValidateAsset(asset);
+            ValidateMap(map);
             var issues = new List<GvgMapAuthoringValidationIssue>();
-            RuntimeHexMap map;
-            try
-            {
-                map = asset.CreateRuntimeMap();
-            }
-            catch (Exception exception)
-            {
-                issues.Add(new GvgMapAuthoringValidationIssue(
-                    GvgMapAuthoringValidationSeverity.Error,
-                    exception.Message));
-                return new GvgMapAuthoringValidationResult(issues);
-            }
 
             var plotIds = new HashSet<int>();
             var singlePlotsByHex = new Dictionary<int, List<GvgPlotAuthoringData>>();
@@ -448,10 +441,11 @@ namespace HexMap.Gvg.Authoring
             return new GvgMapAuthoringValidationResult(issues);
         }
 
-        public static void RepairForCurrentRadius(GvgMapAuthoringAsset asset)
+        public static void RepairForCurrentMap(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             ValidateAsset(asset);
-            throw new InvalidOperationException("Repairing coverage after a Radius change is not supported in the current GVG authoring version.");
+            ValidateMap(map);
+            throw new InvalidOperationException("Repairing coverage after a scene map topology change is not supported in the current GVG authoring version.");
         }
 
         public static Dictionary<int, GvgPlotAuthoringData> CreatePlotLookup(
@@ -485,10 +479,10 @@ namespace HexMap.Gvg.Authoring
             return lookup;
         }
 
-        public static void NormalizePlotIds(GvgMapAuthoringAsset asset)
+        public static void NormalizePlotIds(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             ValidateAsset(asset);
-            var map = asset.CreateRuntimeMap();
+            ValidateMap(map);
             var timedBase = map.Cells.Count == 0 ? 0 : CalculateTimedSinglePlotIdBase(MaxHexId(map));
             var usedIds = new HashSet<int>();
             var retainedPlots = new HashSet<GvgPlotAuthoringData>();
@@ -838,6 +832,10 @@ namespace HexMap.Gvg.Authoring
         private static void ValidateAsset(GvgMapAuthoringAsset asset)
         {
             if (asset == null) throw new ArgumentNullException(nameof(asset));
+        }
+        private static void ValidateMap(RuntimeHexMap map)
+        {
+            if (map == null) throw new ArgumentNullException(nameof(map));
         }
     }
 }
