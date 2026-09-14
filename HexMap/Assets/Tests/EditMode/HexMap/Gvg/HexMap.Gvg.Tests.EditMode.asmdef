@@ -6,7 +6,10 @@
     "HexMap.Runtime",
     "HexMap.Gvg",
     "UnityEngine.TestRunner",
-    "UnityEditor.TestRunner"
+    "UnityEditor.TestRunner",
+    "HexMap.Gvg.Authoring",
+    "HexMap.UnityRuntime",
+    "HexMap.Gvg.Editor"
   ],
   "includePlatforms": [
     "Editor"

@@ -262,6 +262,20 @@ namespace HexMap.Gvg.Authoring
             return plots;
         }
 
+        /// <summary>
+        /// Fast topology check: verifies every authored HexId fits inside the given map.
+        /// A map is compatible when its cell count covers the largest authored HexId.
+        /// </summary>
+        public static bool IsCompatibleWithMap(GvgMapAuthoringAsset asset, RuntimeHexMap map)
+        {
+            ValidateAsset(asset);
+            ValidateMap(map);
+            if (asset.Plots.Count == 0) return true;
+            var mapMaxHexId = MaxHexId(map);
+            var assetMaxHexId = MaxHexIdFromPlots(asset.Plots);
+            return assetMaxHexId <= mapMaxHexId;
+        }
+
         public static GvgMapAuthoringValidationResult Validate(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             ValidateAsset(asset);

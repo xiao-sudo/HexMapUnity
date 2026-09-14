@@ -60,7 +60,8 @@ namespace HexMap.Gvg
         }
 
         public bool TryGetPlot(HexCell cell, out Plot plot)
-        {HexCell mapCell;
+        {
+            HexCell mapCell;
             if (!m_Map.TryGetCell(cell.Coordinate, out mapCell) || mapCell.Id != cell.Id)
             {
                 plot = null;

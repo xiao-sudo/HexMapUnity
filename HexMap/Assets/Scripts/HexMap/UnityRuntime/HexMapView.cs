@@ -17,6 +17,10 @@ namespace HexMap.UnityRuntime
         [SerializeField] private Material m_CellMaterial;
         [SerializeField] private int m_CellLayer;
 
+#if UNITY_EDITOR
+        [SerializeField] private HexMap.Gvg.Authoring.GvgMapAuthoringAsset m_GvgMapAuthoringAsset;
+#endif
+
         private RuntimeHexMap m_Map;
         private HexLayout m_Layout;
         private HexMapRenderer m_Renderer;
@@ -57,6 +61,13 @@ namespace HexMap.UnityRuntime
             set { m_Origin = value; }
         }
 
+#if UNITY_EDITOR
+        public HexMap.Gvg.Authoring.GvgMapAuthoringAsset GvgMapAuthoringAssetEditorOnly
+        {
+            get { return m_GvgMapAuthoringAsset; }
+            set { m_GvgMapAuthoringAsset = value; }
+        }
+#endif
 
         public RuntimeHexMap Map
         {

@@ -3,7 +3,8 @@
   "rootNamespace": "HexMap.UnityRuntime",
   "references": [
     "HexMap.Core",
-    "HexMap.Runtime"
+    "HexMap.Runtime",
+    "HexMap.Gvg.Authoring"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

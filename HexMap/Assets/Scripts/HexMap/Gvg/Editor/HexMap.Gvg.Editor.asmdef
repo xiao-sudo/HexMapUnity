@@ -5,7 +5,8 @@
     "HexMap.Core",
     "HexMap.Runtime",
     "HexMap.Gvg",
-    "HexMap.UnityRuntime"
+    "HexMap.UnityRuntime",
+    "HexMap.Gvg.Authoring"
   ],
   "includePlatforms": [
     "Editor"

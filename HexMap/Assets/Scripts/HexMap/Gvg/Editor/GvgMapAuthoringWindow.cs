@@ -37,7 +37,8 @@ namespace HexMap.Gvg.Editor
         [MenuItem("Tools/Hex Map/GVG Map Authoring")]
         public static void Open()
         {
-            GetWindow<GvgMapAuthoringWindow>("GVG Map Authoring");
+            var window = GetWindow<GvgMapAuthoringWindow>("GVG Map Authoring");
+            window.InitializeFromScene();
         }
 
         private void OnEnable()
@@ -786,16 +787,47 @@ namespace HexMap.Gvg.Editor
         {
             if (m_MapView != null) return m_MapView;
 
+            m_MapView = ResolveSceneMapView();
+            return m_MapView;
+        }
+
+        /// <summary>
+        /// Resolves the scene's HexMapView without mutating the window: selection first,
+        /// then a single scene view. Returns null when ambiguous or absent.
+        /// </summary>
+        private HexMapView ResolveSceneMapView()
+        {
             var selected = Selection.activeGameObject;
             if (selected != null)
             {
-                m_MapView = selected.GetComponentInParent<HexMapView>();
-                if (m_MapView != null) return m_MapView;
+                var fromSelection = selected.GetComponentInParent<HexMapView>();
+                if (fromSelection != null) return fromSelection;
             }
 
             var views = UnityEngine.Object.FindObjectsOfType<HexMapView>();
-            if (views.Length == 1) m_MapView = views[0];
-            return m_MapView;
+            if (views.Length == 1) return views[0];
+            return null;
+        }
+
+        /// <summary>
+        /// Initializes the window from the current scene's HexMapView when opening via
+        /// the Tools menu: adopts the view's configuration and, when the view is bound,
+        /// loads its authoring asset so the window is immediately usable.
+        /// </summary>
+        private void InitializeFromScene()
+        {
+            m_MapView = ResolveSceneMapView();
+            if (m_MapView == null)
+            {
+                return;
+            }
+
+            var boundAsset = m_MapView.GvgMapAuthoringAssetEditorOnly;
+            if (boundAsset != null && m_Asset != boundAsset)
+            {
+                m_Asset = boundAsset;
+                ClearSelection();
+            }
         }
         private Vector3 MapPointToWorld(Vector3 mapLocalPoint)
         {
