@@ -1,0 +1,2110 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cc4fc1764d6f4895af67773f15219223, type: 3}
+  m_Name: GvgMapAuthoring2
+  m_EditorClassIdentifier: 
+  m_MapId: test
+  m_Plots:
+  - m_PlotId: 11000
+    m_HexIds: 0f0100004b0100004c01000057010000
+    m_PlotType: 1
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 11001
+    m_HexIds: 19010000550100005601000058010000
+    m_PlotType: 1
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 11002
+    m_HexIds: 2d0100006a0100006c0100006e010000
+    m_PlotType: 1
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 11003
+    m_HexIds: 4a010000800100008b0100008c010000
+    m_PlotType: 1
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 11004
+    m_HexIds: 400100007f0100008101000082010000
+    m_PlotType: 1
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 11005
+    m_HexIds: 2c010000690100006b0100006d010000
+    m_PlotType: 1
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 16000
+    m_HexIds: 00000000010000000200000003000000040000000500000006000000
+    m_PlotType: 6
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 11
+    m_HexIds: 0b000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 10
+    m_HexIds: 0a000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 17
+    m_HexIds: 11000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 15000
+    m_HexIds: 660000008b0000008d000000b8000000
+    m_PlotType: 5
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 15001
+    m_HexIds: 730000009a0000009c000000c9000000
+    m_PlotType: 5
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 15002
+    m_HexIds: 5e0000008200000083000000
+    m_PlotType: 5
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 15003
+    m_HexIds: 670000008c0000008e000000
+    m_PlotType: 5
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 15004
+    m_HexIds: 72000000990000009b000000
+    m_PlotType: 5
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 15005
+    m_HexIds: 7b000000a4000000a5000000
+    m_PlotType: 5
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 169
+    m_HexIds: a9000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 220
+    m_HexIds: dc000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 223
+    m_HexIds: df000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 177
+    m_HexIds: b1000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 232
+    m_HexIds: e8000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 238
+    m_HexIds: ee000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 193
+    m_HexIds: c1000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 250
+    m_HexIds: fa000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 256
+    m_HexIds: 00010000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 216
+    m_HexIds: d8000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 267
+    m_HexIds: 0b010000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 264
+    m_HexIds: 08010000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 208
+    m_HexIds: d0000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 255
+    m_HexIds: ff000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 249
+    m_HexIds: f9000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 192
+    m_HexIds: c0000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 237
+    m_HexIds: ed000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 231
+    m_HexIds: e7000000
+    m_PlotType: 4
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 17000
+    m_HexIds: 070000000800000009000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 17001
+    m_HexIds: 0c0000000e00000010000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 17002
+    m_HexIds: 0d0000000f00000012000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 351
+    m_HexIds: 5f010000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 233
+    m_HexIds: e9000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 71
+    m_HexIds: 47000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 25
+    m_HexIds: 19000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 32
+    m_HexIds: 20000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 80
+    m_HexIds: 50000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 254
+    m_HexIds: fe000000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 374
+    m_HexIds: 76010000
+    m_PlotType: 7
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 288
+    m_HexIds: 20010000
+    m_PlotType: 2
+    m_Start: 338400
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 46
+    m_HexIds: 2e000000
+    m_PlotType: 2
+    m_Start: 338400
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 53
+    m_HexIds: 35000000
+    m_PlotType: 2
+    m_Start: 338400
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 311
+    m_HexIds: 37010000
+    m_PlotType: 2
+    m_Start: 338400
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 347
+    m_HexIds: 5b010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 345
+    m_HexIds: 59010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 284
+    m_HexIds: 1c010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 282
+    m_HexIds: 1a010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 227
+    m_HexIds: e3000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 217
+    m_HexIds: d9000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 218
+    m_HexIds: da000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 272
+    m_HexIds: 10010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 273
+    m_HexIds: 11010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 333
+    m_HexIds: 4d010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 334
+    m_HexIds: 4e010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11000
+  - m_PlotId: 339
+    m_HexIds: 53010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 340
+    m_HexIds: 54010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 279
+    m_HexIds: 17010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 280
+    m_HexIds: 18010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 225
+    m_HexIds: e1000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 226
+    m_HexIds: e2000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 283
+    m_HexIds: 1b010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 228
+    m_HexIds: e4000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 346
+    m_HexIds: 5a010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 285
+    m_HexIds: 1d010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 348
+    m_HexIds: 5c010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11001
+  - m_PlotId: 358
+    m_HexIds: 66010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 360
+    m_HexIds: 68010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 297
+    m_HexIds: 29010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 299
+    m_HexIds: 2b010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 242
+    m_HexIds: f2000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 244
+    m_HexIds: f4000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 303
+    m_HexIds: 2f010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 368
+    m_HexIds: 70010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 246
+    m_HexIds: f6000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 305
+    m_HexIds: 31010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 370
+    m_HexIds: 72010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11002
+  - m_PlotId: 380
+    m_HexIds: 7c010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 317
+    m_HexIds: 3d010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 382
+    m_HexIds: 7e010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 260
+    m_HexIds: 04010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 319
+    m_HexIds: 3f010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 270
+    m_HexIds: 0e010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 269
+    m_HexIds: 0d010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 329
+    m_HexIds: 49010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 328
+    m_HexIds: 48010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 394
+    m_HexIds: 8a010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 393
+    m_HexIds: 89010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11003
+  - m_PlotId: 388
+    m_HexIds: 84010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 322
+    m_HexIds: 42010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 262
+    m_HexIds: 06010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 387
+    m_HexIds: 83010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 321
+    m_HexIds: 41010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 261
+    m_HexIds: 05010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 259
+    m_HexIds: 03010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 318
+    m_HexIds: 3e010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 316
+    m_HexIds: 3c010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 381
+    m_HexIds: 7d010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 379
+    m_HexIds: 7b010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11004
+  - m_PlotId: 357
+    m_HexIds: 65010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 296
+    m_HexIds: 28010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 241
+    m_HexIds: f1000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 359
+    m_HexIds: 67010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 298
+    m_HexIds: 2a010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 243
+    m_HexIds: f3000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 245
+    m_HexIds: f5000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 302
+    m_HexIds: 2e010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 304
+    m_HexIds: 30010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 367
+    m_HexIds: 6f010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 369
+    m_HexIds: 71010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: 11005
+  - m_PlotId: 19
+    m_HexIds: 13000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 20
+    m_HexIds: 14000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 21
+    m_HexIds: 15000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 22
+    m_HexIds: 16000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 23
+    m_HexIds: 17000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 24
+    m_HexIds: 18000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 26
+    m_HexIds: 1a000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 27
+    m_HexIds: 1b000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 28
+    m_HexIds: 1c000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 29
+    m_HexIds: 1d000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 30
+    m_HexIds: 1e000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 31
+    m_HexIds: 1f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 33
+    m_HexIds: 21000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 34
+    m_HexIds: 22000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 35
+    m_HexIds: 23000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 36
+    m_HexIds: 24000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 37
+    m_HexIds: 25000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 38
+    m_HexIds: 26000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 39
+    m_HexIds: 27000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 40
+    m_HexIds: 28000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 41
+    m_HexIds: 29000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 42
+    m_HexIds: 2a000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 43
+    m_HexIds: 2b000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 44
+    m_HexIds: 2c000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 45
+    m_HexIds: 2d000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 47
+    m_HexIds: 2f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 48
+    m_HexIds: 30000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 49
+    m_HexIds: 31000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 50
+    m_HexIds: 32000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 51
+    m_HexIds: 33000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 52
+    m_HexIds: 34000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 54
+    m_HexIds: 36000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 55
+    m_HexIds: 37000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 56
+    m_HexIds: 38000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 57
+    m_HexIds: 39000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 58
+    m_HexIds: 3a000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 59
+    m_HexIds: 3b000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 60
+    m_HexIds: 3c000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 61
+    m_HexIds: 3d000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 62
+    m_HexIds: 3e000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 63
+    m_HexIds: 3f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 64
+    m_HexIds: 40000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 65
+    m_HexIds: 41000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 66
+    m_HexIds: 42000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 67
+    m_HexIds: 43000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 68
+    m_HexIds: 44000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 69
+    m_HexIds: 45000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 70
+    m_HexIds: 46000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 72
+    m_HexIds: 48000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 73
+    m_HexIds: 49000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 74
+    m_HexIds: 4a000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 75
+    m_HexIds: 4b000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 76
+    m_HexIds: 4c000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 77
+    m_HexIds: 4d000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 78
+    m_HexIds: 4e000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 79
+    m_HexIds: 4f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 81
+    m_HexIds: 51000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 82
+    m_HexIds: 52000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 83
+    m_HexIds: 53000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 13000
+    m_HexIds: 540000005a000000770000007e0000007d000000
+    m_PlotType: 3
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 85
+    m_HexIds: 55000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 86
+    m_HexIds: 56000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 87
+    m_HexIds: 57000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 88
+    m_HexIds: 58000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 89
+    m_HexIds: 59000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 91
+    m_HexIds: 5b000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 92
+    m_HexIds: 5c000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 93
+    m_HexIds: 5d000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 95
+    m_HexIds: 5f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 96
+    m_HexIds: 60000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 97
+    m_HexIds: 61000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 98
+    m_HexIds: 62000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 99
+    m_HexIds: 63000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 100
+    m_HexIds: 64000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 101
+    m_HexIds: 65000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 104
+    m_HexIds: 68000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 105
+    m_HexIds: 69000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 106
+    m_HexIds: 6a000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 107
+    m_HexIds: 6b000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 108
+    m_HexIds: 6c000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 109
+    m_HexIds: 6d000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 110
+    m_HexIds: 6e000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 111
+    m_HexIds: 6f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 112
+    m_HexIds: 70000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 113
+    m_HexIds: 71000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 116
+    m_HexIds: 74000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 117
+    m_HexIds: 75000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 118
+    m_HexIds: 76000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 120
+    m_HexIds: 78000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 121
+    m_HexIds: 79000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 122
+    m_HexIds: 7a000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 124
+    m_HexIds: 7c000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 127
+    m_HexIds: 7f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 128
+    m_HexIds: 80000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 129
+    m_HexIds: 81000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 132
+    m_HexIds: 84000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 133
+    m_HexIds: 85000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 134
+    m_HexIds: 86000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 135
+    m_HexIds: 87000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 136
+    m_HexIds: 88000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 137
+    m_HexIds: 89000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 138
+    m_HexIds: 8a000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 143
+    m_HexIds: 8f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 144
+    m_HexIds: 90000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 145
+    m_HexIds: 91000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 146
+    m_HexIds: 92000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 147
+    m_HexIds: 93000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 148
+    m_HexIds: 94000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 149
+    m_HexIds: 95000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 150
+    m_HexIds: 96000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 151
+    m_HexIds: 97000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 152
+    m_HexIds: 98000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 157
+    m_HexIds: 9d000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 158
+    m_HexIds: 9e000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 159
+    m_HexIds: 9f000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 161
+    m_HexIds: a1000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 162
+    m_HexIds: a2000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 163
+    m_HexIds: a3000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 166
+    m_HexIds: a6000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 168
+    m_HexIds: a8000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 170
+    m_HexIds: aa000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 171
+    m_HexIds: ab000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 172
+    m_HexIds: ac000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 173
+    m_HexIds: ad000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 174
+    m_HexIds: ae000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 175
+    m_HexIds: af000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 176
+    m_HexIds: b0000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 178
+    m_HexIds: b2000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 179
+    m_HexIds: b3000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 180
+    m_HexIds: b4000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 181
+    m_HexIds: b5000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 182
+    m_HexIds: b6000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 183
+    m_HexIds: b7000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 185
+    m_HexIds: b9000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 186
+    m_HexIds: ba000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 187
+    m_HexIds: bb000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 188
+    m_HexIds: bc000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 189
+    m_HexIds: bd000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 190
+    m_HexIds: be000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 191
+    m_HexIds: bf000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 194
+    m_HexIds: c2000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 195
+    m_HexIds: c3000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 196
+    m_HexIds: c4000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 197
+    m_HexIds: c5000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 198
+    m_HexIds: c6000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 199
+    m_HexIds: c7000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 200
+    m_HexIds: c8000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 202
+    m_HexIds: ca000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 203
+    m_HexIds: cb000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 204
+    m_HexIds: cc000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 205
+    m_HexIds: cd000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 206
+    m_HexIds: ce000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 207
+    m_HexIds: cf000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 209
+    m_HexIds: d1000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 210
+    m_HexIds: d2000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 211
+    m_HexIds: d3000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 212
+    m_HexIds: d4000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 213
+    m_HexIds: d5000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 214
+    m_HexIds: d6000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 215
+    m_HexIds: d7000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 219
+    m_HexIds: db000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 221
+    m_HexIds: dd000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 222
+    m_HexIds: de000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 224
+    m_HexIds: e0000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 229
+    m_HexIds: e5000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 230
+    m_HexIds: e6000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 234
+    m_HexIds: ea000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 235
+    m_HexIds: eb000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 236
+    m_HexIds: ec000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 239
+    m_HexIds: ef000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 240
+    m_HexIds: f0000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 247
+    m_HexIds: f7000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 248
+    m_HexIds: f8000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 251
+    m_HexIds: fb000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 252
+    m_HexIds: fc000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 253
+    m_HexIds: fd000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 257
+    m_HexIds: 01010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 258
+    m_HexIds: 02010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 263
+    m_HexIds: 07010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 265
+    m_HexIds: 09010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 266
+    m_HexIds: 0a010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 268
+    m_HexIds: 0c010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 274
+    m_HexIds: 12010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 275
+    m_HexIds: 13010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 276
+    m_HexIds: 14010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 277
+    m_HexIds: 15010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 278
+    m_HexIds: 16010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 286
+    m_HexIds: 1e010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 287
+    m_HexIds: 1f010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 289
+    m_HexIds: 21010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 290
+    m_HexIds: 22010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 291
+    m_HexIds: 23010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 292
+    m_HexIds: 24010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 293
+    m_HexIds: 25010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 294
+    m_HexIds: 26010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 295
+    m_HexIds: 27010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 306
+    m_HexIds: 32010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 307
+    m_HexIds: 33010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 308
+    m_HexIds: 34010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 309
+    m_HexIds: 35010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 310
+    m_HexIds: 36010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 312
+    m_HexIds: 38010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 313
+    m_HexIds: 39010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 314
+    m_HexIds: 3a010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 315
+    m_HexIds: 3b010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 323
+    m_HexIds: 43010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 324
+    m_HexIds: 44010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 325
+    m_HexIds: 45010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 326
+    m_HexIds: 46010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 327
+    m_HexIds: 47010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 335
+    m_HexIds: 4f010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 336
+    m_HexIds: 50010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 337
+    m_HexIds: 51010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 338
+    m_HexIds: 52010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 349
+    m_HexIds: 5d010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 350
+    m_HexIds: 5e010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 352
+    m_HexIds: 60010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 353
+    m_HexIds: 61010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 354
+    m_HexIds: 62010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 355
+    m_HexIds: 63010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 356
+    m_HexIds: 64010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 371
+    m_HexIds: 73010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 372
+    m_HexIds: 74010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 373
+    m_HexIds: 75010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 375
+    m_HexIds: 77010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 376
+    m_HexIds: 78010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 377
+    m_HexIds: 79010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 378
+    m_HexIds: 7a010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 389
+    m_HexIds: 85010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 390
+    m_HexIds: 86010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 391
+    m_HexIds: 87010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 392
+    m_HexIds: 88010000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 167
+    m_HexIds: a7000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
+  - m_PlotId: 160
+    m_HexIds: a0000000
+    m_PlotType: 2
+    m_Start: 0
+    m_End: -1
+    m_AffiliatedCampId: -1
