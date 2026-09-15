@@ -25,6 +25,8 @@ namespace HexMap.Gvg.Editor
         private GvgMapAuthoringAsset m_Asset;
         private HexMapView m_MapView;
         private string m_MapError = string.Empty;
+        private bool m_SceneEditing = true;
+        private GvgMapBindingDiagnostic m_BindingDiagnostic = GvgMapBindingDiagnostic.NotBound;
         private ToolMode m_Mode;
         private int m_SelectedPlotId;
         private bool m_HasSelectedPlot;
@@ -45,11 +47,19 @@ namespace HexMap.Gvg.Editor
         {
             m_LabelStyle = CreateLabelStyle();
             SceneView.duringSceneGui += OnSceneGui;
+            Undo.undoRedoPerformed += OnUndoRedoPerformed;
         }
 
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGui;
+            Undo.undoRedoPerformed -= OnUndoRedoPerformed;
+        }
+
+        private void OnUndoRedoPerformed()
+        {
+            SceneView.RepaintAll();
+            Repaint();
         }
 
         private void OnGUI()
@@ -99,6 +109,16 @@ namespace HexMap.Gvg.Editor
                 return;
             }
 
+            GvgMapAuthoringAsset boundAsset;
+            if (TryResolveHealthyBinding(out boundAsset))
+            {
+                EditorGUILayout.LabelField("Bound Asset", boundAsset != null ? boundAsset.name : "(none)");
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(DescribeBinding(m_BindingDiagnostic), MessageType.Warning);
+            }
+
             RuntimeHexMap map;
             HexLayout layout;
             string error;
@@ -140,6 +160,7 @@ namespace HexMap.Gvg.Editor
         private void DrawToolControls()
         {
             EditorGUILayout.LabelField("Scene Tool", EditorStyles.boldLabel);
+            m_SceneEditing = EditorGUILayout.Toggle("Scene Editing", m_SceneEditing);
             m_Mode = (ToolMode)GUILayout.Toolbar((int)m_Mode, new[] { "Select Plot", "Paint Add", "Paint Remove" });
             m_ShowHexIds = EditorGUILayout.Toggle("Show HexId", m_ShowHexIds);
             m_ShowCoordinates = EditorGUILayout.Toggle("Show Coordinates", m_ShowCoordinates);
@@ -458,6 +479,14 @@ namespace HexMap.Gvg.Editor
             RuntimeHexMap map;
             HexLayout exportLayout;
             if (!TryCreatePreviewData(out map, out exportLayout)) return;
+
+            GvgMapAuthoringAsset boundAsset;
+            if (!TryResolveHealthyBinding(out boundAsset))
+            {
+                EditorGUILayout.HelpBox("Bind the scene map to the authoring asset to enable scene-topology import/export.", MessageType.Warning);
+                return;
+            }
+
             if (GUILayout.Button("Import Excel"))
             {
                 var path = EditorUtility.OpenFilePanel("Import GVG Map Excel", string.Empty, "xlsx");
@@ -491,8 +520,22 @@ namespace HexMap.Gvg.Editor
         }
         private void OnSceneGui(SceneView sceneView)
         {
-            if (m_Asset == null) return;
             ResolveMapView();
+
+            GvgMapAuthoringAsset boundAsset;
+            if (!TryResolveHealthyBinding(out boundAsset))
+            {
+                return;
+            }
+
+            // SceneView editing always targets the bound asset.
+            if (m_Asset != boundAsset)
+            {
+                m_Asset = boundAsset;
+                ClearSelection();
+            }
+
+            if (!m_SceneEditing) return;
 
             RuntimeHexMap map;
             HexLayout layout;
@@ -829,6 +872,51 @@ namespace HexMap.Gvg.Editor
                 ClearSelection();
             }
         }
+
+        /// <summary>
+        /// Resolves the bound authoring asset for the current scene map and refreshes
+        /// m_BindingDiagnostic so the window can explain why scene editing is off.
+        /// Read-only; never mutates the view or the asset.
+        /// </summary>
+        private bool TryResolveHealthyBinding(out GvgMapAuthoringAsset boundAsset)
+        {
+            boundAsset = null;
+            if (m_MapView == null)
+            {
+                m_BindingDiagnostic = GvgMapBindingDiagnostic.ViewMissing;
+                return false;
+            }
+
+            GvgMapBindingDiagnostic diagnostic;
+            if (!GvgMapBindingResolver.TryResolve(m_MapView, out boundAsset, out diagnostic))
+            {
+                m_BindingDiagnostic = diagnostic;
+                return false;
+            }
+
+            m_BindingDiagnostic = GvgMapBindingDiagnostic.None;
+            return true;
+        }
+
+        private static string DescribeBinding(GvgMapBindingDiagnostic diagnostic)
+        {
+            switch (diagnostic)
+            {
+                case GvgMapBindingDiagnostic.None:
+                    return "Binding is healthy. Scene editing is enabled.";
+                case GvgMapBindingDiagnostic.ViewMissing:
+                    return "No scene HexMapView found. Select a map root or child object.";
+                case GvgMapBindingDiagnostic.AssetMissing:
+                    return "Bound authoring asset is missing or broken. Rebind it in the HexMapView inspector.";
+                case GvgMapBindingDiagnostic.TopologyMismatch:
+                    return "Bound asset topology (max HexId) does not match the map radius.";
+                case GvgMapBindingDiagnostic.NotBound:
+                    return "Map is not bound. Bind the authoring asset in the HexMapView inspector to enable scene editing.";
+                default:
+                    return string.Empty;
+            }
+        }
+
         private Vector3 MapPointToWorld(Vector3 mapLocalPoint)
         {
             return m_MapView == null ? mapLocalPoint : m_MapView.transform.TransformPoint(mapLocalPoint);

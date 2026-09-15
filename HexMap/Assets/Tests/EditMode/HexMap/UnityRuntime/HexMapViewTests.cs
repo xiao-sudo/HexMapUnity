@@ -94,6 +94,26 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
+        public void SceneEditingDrawAndPickPathsRoundTripEveryCell()
+        {
+            m_ViewObject = new GameObject("Hex Map View");
+            m_ViewObject.transform.position = new Vector3(4f, 2f, -3f);
+            m_ViewObject.transform.rotation = Quaternion.Euler(0f, 37f, 0f);
+            m_ViewObject.transform.localScale = Vector3.one * 2f;
+            var mapView = m_ViewObject.AddComponent<HexMapView>();
+            mapView.Radius = 2;
+            mapView.Build();
+
+            foreach (var cell in mapView.Map.Cells)
+            {
+                // Draw path: layout.HexToWorld(coord) + view TransformPoint.
+                var worldCenter = mapView.transform.TransformPoint(mapView.Layout.HexToWorld(cell.Coordinate));
+                // Pick path: WorldToMapLocal (InverseTransformPoint) + layout.WorldToHex.
+                Assert.That(mapView.WorldToHex(worldCenter), Is.EqualTo(cell.Coordinate));
+            }
+        }
+
+        [Test]
         public void NonUniformScaleIsRejected()
         {
             m_ViewObject = new GameObject("Hex Map View");
