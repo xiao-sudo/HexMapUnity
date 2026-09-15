@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using HexMap.Runtime;
 using RuntimeHexMap = HexMap.Runtime.HexMap;
 using UnityEngine;
@@ -493,7 +494,14 @@ namespace HexMap.Gvg.Authoring
             return lookup;
         }
 
-        public static void NormalizePlotIds(GvgMapAuthoringAsset asset, RuntimeHexMap map)
+        /// <summary>
+        /// Normalizes every PlotId and returns an old-to-new PlotId mapping. The
+        /// mapping lets Excel redundancy rows follow a Plot when the editor merges,
+        /// splits, or re-times layers. Excel redundancy rows are reconciled in place:
+        /// rows re-key through the mapping, rows for deleted Plots are dropped, and
+        /// rows for brand-new Plots are created with per-column defaults.
+        /// </summary>
+        public static Dictionary<int, int> NormalizePlotIds(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             ValidateAsset(asset);
             ValidateMap(map);
@@ -588,6 +596,57 @@ namespace HexMap.Gvg.Authoring
                 usedIds.Add(nextId);
             }
             RemapAffiliatedCampIds(asset.MutablePlots, originalPlotIds);
+            var mapping = BuildPlotIdMapping(asset.MutablePlots, originalPlotIds);
+            ReconcileExcelRedundancy(asset, mapping);
+            return mapping;
+        }
+
+        private static Dictionary<int, int> BuildPlotIdMapping(
+            IReadOnlyList<GvgPlotAuthoringData> plots,
+            IReadOnlyDictionary<GvgPlotAuthoringData, int> originalPlotIds)
+        {
+            var mapping = new Dictionary<int, int>();
+            for (var index = 0; index < plots.Count; index++)
+            {
+                var plot = plots[index];
+                if (plot == null) continue;
+
+                int originalPlotId;
+                if (!originalPlotIds.TryGetValue(plot, out originalPlotId)) continue;
+                if (mapping.ContainsKey(originalPlotId)) continue;
+                mapping.Add(originalPlotId, plot.PlotId);
+            }
+
+            return mapping;
+        }
+
+        private static void ReconcileExcelRedundancy(
+            GvgMapAuthoringAsset asset,
+            IReadOnlyDictionary<int, int> mapping)
+        {
+            var redundancy = asset.ExcelRedundancy;
+            if (redundancy == null) return;
+
+            redundancy.ReKey(mapping);
+            redundancy.RetainOnly(asset.Plots.Select(plot => plot.PlotId));
+
+            for (var index = 0; index < asset.Plots.Count; index++)
+            {
+                var plot = asset.Plots[index];
+                if (redundancy.ContainsRow(plot.PlotId)) continue;
+
+                var row = new GvgExcelRowData();
+                row.PlotId = plot.PlotId;
+                for (var columnIndex = 0; columnIndex < redundancy.Columns.Count; columnIndex++)
+                {
+                    var column = redundancy.Columns[columnIndex];
+                    row.MutableColumns.Add(new GvgExcelColumnContent(
+                        column.Name,
+                        redundancy.DefaultContent(column.Kind)));
+                }
+
+                redundancy.AddRow(row);
+            }
         }
         private static Dictionary<GvgPlotAuthoringData, int> CaptureOriginalPlotIds(
             IReadOnlyList<GvgPlotAuthoringData> plots)

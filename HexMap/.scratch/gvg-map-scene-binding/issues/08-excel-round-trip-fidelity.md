@@ -5,7 +5,7 @@ Excel 导入按列名读取（不对列序号做假设）；导出生成与导�
 
 **Blocked by:** 02 — 建立 GVG 逻辑 Asset 与场景地图的绑定。
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## 设计约束（2026-09-15 grilling 确认）
 
@@ -62,16 +62,16 @@ Excel 导入按列名读取（不对列序号做假设）；导出生成与导�
 
 ## Requirements
 
-- [ ] 导入改为按列名读取，删除现有按列字母（A/C/D/E/F/I/J）的假设。
-- [ ] 逻辑列名常量表 + 缺失列/重复列报错。
-- [ ] 冗余信息（表头 5 行文本+颜色+批注、列名行、列类型、数据行各列内容）记录进 Asset，每次导入整体覆盖。
-- [ ] `NormalizePlotIds` 回传旧→新 PlotId 映射，冗余数据跟随重挂。
-- [ ] 新增 Plot 冗余列按类型填默认；删除 Plot 不再导出。
-- [ ] Export Excel (.xlsx) 全量重建：前 5 行表头块 + 排序后的数据区。
-- [ ] 逻辑列回写规则：Type 按 Start 重算、Safe 写 AffiliatedCampId（-1 表示未归属）。
-- [ ] 冗余列按记录原样回写，列名保持。
-- [ ] CSV 保留作调试用途，与 Excel 格式互不约束。
-- [ ] 样例 fixture xlsx + 往返断言测试（import(export(import(x))) 稳定；列名/内容一致；列顺序变化不影响导入；新冗余列自动识别）。
+- [x] 导入改为按列名读取，删除现有按列字母（A/C/D/E/F/I/J）的假设。
+- [x] 逻辑列名常量表 + 缺失列/重复列报错。
+- [x] 冗余信息（表头 5 行文本+颜色+批注、列名行、列类型、数据行各列内容）记录进 Asset，每次导入整体覆盖。
+- [x] `NormalizePlotIds` 回传旧→新 PlotId 映射，冗余数据跟随重挂。
+- [x] 新增 Plot 冗余列按类型填默认；删除 Plot 不再导出。
+- [x] Export Excel (.xlsx) 全量重建：前 5 行表头块 + 排序后的数据区。
+- [x] 逻辑列回写规则：Type 按 Start 重算、Safe 写 AffiliatedCampId（-1 表示未归属）。
+- [x] 冗余列按记录原样回写，列名保持。
+- [x] CSV 保留作调试用途，与 Excel 格式互不约束。
+- [x] 样例 fixture xlsx + 往返断言测试（import(export(import(x))) 稳定；列名/内容一致；列顺序变化不影响导入；新冗余列自动识别）。
 
 ## Verification
 
@@ -83,3 +83,6 @@ Excel 导入按列名读取（不对列序号做假设）；导出生成与导�
 
 ## Comments
 
+- 字体：全表使用微软雅黑，表头加粗（xlsx 全量重建的样式表按 字体名+加粗+颜色 生成）。
+- 排序：多格 Plot 最前；单格 Plot 按 PlotType 升序，Normal 类型放到最后，同类型按 PlotId。
+- 导出位置：Export Excel / Export CSV 不再写入固定 `Assets/HexMap/Gvg/Exports/...` 目录，改为 `EditorUtility.SaveFilePanel` 由用户选择目录与文件名（默认名 `GVGMap_<MapId>.xlsx/.csv`）。

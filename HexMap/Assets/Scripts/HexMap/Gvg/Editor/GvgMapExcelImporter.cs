@@ -37,11 +37,54 @@ namespace HexMap.Gvg.Editor
         public bool IsValid { get { return Errors.Count == 0; } }
     }
 
+    /// <summary>
+    /// Imports a GVG map Excel workbook by column name. The column-name row is the
+    /// row within the first 5 rows that contains the <see cref="ColumnHexIds"/>
+    /// header; every data row is then read through a name-to-column mapping, so no
+    /// column-letter assumptions are made. Columns not in the logical constant table
+    /// are redundant and are recorded verbatim so the exporter can write them back.
+    /// </summary>
     public static class GvgMapExcelImporter
     {
         private static readonly Regex s_HexIdPattern = new Regex(
             "[0-9]+",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        private static readonly Regex s_ArrayPattern = new Regex(
+            "^\\s*\\[.*\\]\\s*$",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
+
+        /// <summary>Logical PlotId column header name.</summary>
+        public const string ColumnPlotId = "ID";
+
+        /// <summary>Logical HexIds column header name.</summary>
+        public const string ColumnHexIds = "Coordinates";
+
+        /// <summary>Legacy GenerationType column header name (recomputed from Start).</summary>
+        public const string ColumnGenerationType = "Type";
+
+        /// <summary>Logical PlotType column header name.</summary>
+        public const string ColumnPlotType = "GridType";
+
+        /// <summary>Logical AffiliatedCampId column header name.</summary>
+        public const string ColumnAffiliatedCampId = "Safe";
+
+        /// <summary>Logical Start column header name.</summary>
+        public const string ColumnStart = "Start";
+
+        /// <summary>Logical End column header name.</summary>
+        public const string ColumnEnd = "End";
+
+        private static readonly string[] s_LogicalColumns =
+        {
+            ColumnPlotId,
+            ColumnHexIds,
+            ColumnGenerationType,
+            ColumnPlotType,
+            ColumnAffiliatedCampId,
+            ColumnStart,
+            ColumnEnd
+        };
 
         public static GvgMapExcelImportResult Import(string path, GvgMapAuthoringAsset targetAsset, RuntimeHexMap map)
         {
@@ -51,16 +94,16 @@ namespace HexMap.Gvg.Editor
 
             var errors = new List<string>();
             var warnings = new List<string>();
-            var rows = ReadRows(path, errors, warnings);
+            var document = ReadDocument(path, errors, warnings);
             if (errors.Count > 0)
             {
-                return new GvgMapExcelImportResult(path, rows.Count, errors, warnings, false);
+                return new GvgMapExcelImportResult(path, document.Rows.Count, errors, warnings, false);
             }
 
-            var importedPlots = NormalizeRows(rows, targetAsset, errors, warnings);
+            var importedPlots = BuildPlots(document, errors, warnings);
             if (errors.Count > 0)
             {
-                return new GvgMapExcelImportResult(path, rows.Count, errors, warnings, false);
+                return new GvgMapExcelImportResult(path, document.Rows.Count, errors, warnings, false);
             }
 
             var candidate = ScriptableObject.CreateInstance<GvgMapAuthoringAsset>();
@@ -68,6 +111,8 @@ namespace HexMap.Gvg.Editor
             {
                 candidate.MapId = targetAsset.MapId;
                 candidate.ReplacePlots(importedPlots);
+                candidate.ReplaceExcelRedundancy(BuildRedundancy(document));
+
                 GvgMapAuthoringUtility.NormalizePlotIds(candidate, map);
 
                 var validation = GvgMapAuthoringUtility.Validate(candidate, map);
@@ -78,7 +123,7 @@ namespace HexMap.Gvg.Editor
 
                 if (errors.Count > 0)
                 {
-                    return new GvgMapExcelImportResult(path, rows.Count, errors, warnings, false);
+                    return new GvgMapExcelImportResult(path, document.Rows.Count, errors, warnings, false);
                 }
 
                 for (var index = 0; index < candidate.Plots.Count; index++)
@@ -91,7 +136,8 @@ namespace HexMap.Gvg.Editor
                 }
 
                 targetAsset.ReplacePlots(candidate.Plots);
-                return new GvgMapExcelImportResult(path, rows.Count, errors, warnings, true);
+                targetAsset.ReplaceExcelRedundancy(candidate.ExcelRedundancy);
+                return new GvgMapExcelImportResult(path, document.Rows.Count, errors, warnings, true);
             }
             finally
             {
@@ -99,55 +145,99 @@ namespace HexMap.Gvg.Editor
             }
         }
 
-        private static List<ImportedRow> ReadRows(
+        private sealed class RawCell
+        {
+            public string Text = string.Empty;
+            public string FillColor = string.Empty;
+            public string FontColor = string.Empty;
+            public string Comment = string.Empty;
+            public int ColumnIndex;
+        }
+
+        private sealed class RawRow
+        {
+            public int Number;
+            public readonly Dictionary<int, RawCell> ByColumn = new Dictionary<int, RawCell>();
+        }
+
+        private sealed class ParsedRow
+        {
+            public int SourceId;
+            public List<int> HexIds = new List<int>();
+            public PlotType PlotType;
+            public int Start;
+            public int End;
+            public int AffiliatedCampId;
+            public Dictionary<string, string> ColumnContent = new Dictionary<string, string>();
+        }
+
+        private sealed class ExcelDocument
+        {
+            public readonly List<string> ColumnOrder = new List<string>();
+            public readonly Dictionary<string, int> NameToIndex = new Dictionary<string, int>();
+            public readonly Dictionary<string, GvgExcelColumnKind> Kinds = new Dictionary<string, GvgExcelColumnKind>();
+            public readonly List<List<RawCell>> HeaderBlock = new List<List<RawCell>>();
+            public readonly List<ParsedRow> Rows = new List<ParsedRow>();
+        }
+
+        private sealed class WorkbookStyles
+        {
+            public readonly List<string> FontColors = new List<string>();
+            public readonly List<string> FillColors = new List<string>();
+            public readonly List<int> XfFontIds = new List<int>();
+            public readonly List<int> XfFillIds = new List<int>();
+
+            public void Resolve(int styleIndex, out string fillColor, out string fontColor)
+            {
+                fillColor = string.Empty;
+                fontColor = string.Empty;
+                if (styleIndex < 0 || styleIndex >= XfFillIds.Count || styleIndex >= XfFontIds.Count) return;
+
+                var fillId = XfFillIds[styleIndex];
+                var fontId = XfFontIds[styleIndex];
+                if (fillId >= 0 && fillId < FillColors.Count) fillColor = FillColors[fillId];
+                if (fontId >= 0 && fontId < FontColors.Count) fontColor = FontColors[fontId];
+            }
+        }
+
+        private static ExcelDocument ReadDocument(
             string path,
             List<string> errors,
             List<string> warnings)
         {
-            var headerFound = false;
-            var rows = new List<ImportedRow>();
+            var document = new ExcelDocument();
             try
             {
                 using (var archive = ZipFile.OpenRead(path))
                 {
                     var sharedStrings = ReadSharedStrings(archive);
+                    var styles = ReadStyles(archive);
+                    var comments = ReadComments(archive);
                     var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml");
                     if (worksheet == null)
                     {
                         errors.Add("The workbook does not contain xl/worksheets/sheet1.xml.");
-                        return rows;
+                        return document;
                     }
 
-                    var document = new XmlDocument();
+                    var xml = new XmlDocument();
                     using (var stream = worksheet.Open())
                     {
-                        document.Load(stream);
+                        xml.Load(stream);
                     }
 
-                    var rowNodes = document.GetElementsByTagName("row");
-                    for (var rowIndex = 0; rowIndex < rowNodes.Count; rowIndex++)
+                    var rows = new List<RawRow>();
+                    var rowNodes = xml.GetElementsByTagName("row");
+                    for (var index = 0; index < rowNodes.Count; index++)
                     {
-                        var rowNode = rowNodes[rowIndex] as XmlElement;
+                        var rowNode = rowNodes[index] as XmlElement;
                         if (rowNode == null) continue;
-
-                        var values = ReadRow(rowNode, sharedStrings);
-                        if (!headerFound)
-                        {
-                            if (values.ContainsKey("C") && values["C"] == "Coordinates")
-                            {
-                                headerFound = true;
-                            }
-
-                            continue;
-                        }
-
-                        if (!values.ContainsKey("C") || string.IsNullOrWhiteSpace(values["C"])) continue;
-                        if (values.ContainsKey("A") && string.Equals(values["A"], "c/s", StringComparison.OrdinalIgnoreCase)) continue;
-
-                        ImportedRow row;
-                        if (!TryParseRow(values, rowIndex + 1, warnings, out row, errors)) continue;
-                        rows.Add(row);
+                        rows.Add(ReadRow(rowNode, index + 1, sharedStrings, styles, comments));
                     }
+
+                    BuildHeaderBlock(document, rows, errors);
+                    if (errors.Count > 0) return document;
+                    BuildDataRows(document, rows, errors, warnings);
                 }
             }
             catch (Exception exception)
@@ -155,20 +245,211 @@ namespace HexMap.Gvg.Editor
                 errors.Add("Failed to read Excel workbook: " + exception.Message);
             }
 
-            if (!headerFound)
+            return document;
+        }
+
+        private static void BuildHeaderBlock(ExcelDocument document, List<RawRow> rows, List<string> errors)
+        {
+            // The column-name row is the row within the first 5 rows that contains the
+            // Coordinates header.
+            RawRow headerRow = null;
+            for (var index = 0; index < rows.Count && index < 5; index++)
             {
-                errors.Add("The workbook does not contain the expected Coordinates header row.");
+                if (rows[index].ByColumn.Values.Any(cell =>
+                    string.Equals(cell.Text, ColumnHexIds, StringComparison.OrdinalIgnoreCase)))
+                {
+                    headerRow = rows[index];
+                    break;
+                }
             }
 
-            if (rows.Count == 0)
+            if (headerRow == null)
+            {
+                errors.Add("The workbook does not contain the expected " + ColumnHexIds + " header row within the first 5 rows.");
+                return;
+            }
+
+            var nameToIndex = new Dictionary<string, int>();
+            var ordered = headerRow.ByColumn.OrderBy(pair => pair.Key).ToList();
+            for (var index = 0; index < ordered.Count; index++)
+            {
+                var columnIndex = ordered[index].Key;
+                var name = ordered[index].Value.Text;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                if (nameToIndex.ContainsKey(name))
+                {
+                    errors.Add("Duplicate column name: " + name + ".");
+                }
+                else
+                {
+                    nameToIndex.Add(name, columnIndex);
+                    document.ColumnOrder.Add(name);
+                    document.NameToIndex.Add(name, columnIndex);
+                }
+            }
+
+            for (var index = 0; index < s_LogicalColumns.Length; index++)
+            {
+                if (!nameToIndex.ContainsKey(s_LogicalColumns[index]))
+                {
+                    errors.Add("缺少列：" + s_LogicalColumns[index]);
+                }
+            }
+
+            if (errors.Count > 0) return;
+
+            // Per-column types come from the explicit type row (a row among the first 5
+            // whose cells are all type tokens); otherwise they are inferred from data.
+            var typeRow = FindTypeRow(rows, headerRow);
+            for (var index = 0; index < document.ColumnOrder.Count; index++)
+            {
+                var name = document.ColumnOrder[index];
+                var columnIndex = nameToIndex[name];
+                document.Kinds[name] = typeRow != null
+                    ? TypeTokenToKind(GetCellText(typeRow, columnIndex))
+                    : GvgExcelColumnKind.String;
+            }
+
+            // Header block: first 5 rows, one cell per column in column order.
+            for (var rowIndex = 0; rowIndex < 5; rowIndex++)
+            {
+                var cells = new List<RawCell>();
+                for (var index = 0; index < document.ColumnOrder.Count; index++)
+                {
+                    var name = document.ColumnOrder[index];
+                    var columnIndex = nameToIndex[name];
+                    var cell = rowIndex < rows.Count && rows[rowIndex].ByColumn.TryGetValue(columnIndex, out var raw)
+                        ? raw
+                        : null;
+                    cells.Add(cell ?? new RawCell { ColumnIndex = columnIndex });
+                }
+
+                document.HeaderBlock.Add(cells);
+            }
+        }
+
+        private static void BuildDataRows(ExcelDocument document, List<RawRow> rows, List<string> errors, List<string> warnings)
+        {
+            // Data starts after the 5-row header block.
+            for (var index = 5; index < rows.Count; index++)
+            {
+                var raw = rows[index];
+                var valuesByName = new Dictionary<string, string>();
+                for (var columnIndex = 0; columnIndex < document.ColumnOrder.Count; columnIndex++)
+                {
+                    var name = document.ColumnOrder[columnIndex];
+                    var cell = raw.ByColumn.TryGetValue(document.NameToIndex[name], out var rawCell)
+                        ? rawCell
+                        : null;
+                    valuesByName[name] = cell == null ? string.Empty : cell.Text;
+                }
+
+                string idValue;
+                if (valuesByName.TryGetValue(ColumnPlotId, out idValue) &&
+                    string.Equals(idValue.Trim(), "c/s", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string coordinatesValue;
+                if (!valuesByName.TryGetValue(ColumnHexIds, out coordinatesValue) ||
+                    string.IsNullOrWhiteSpace(coordinatesValue))
+                {
+                    continue;
+                }
+
+                ParsedRow row;
+                if (!TryParseRow(valuesByName, raw.Number, warnings, out row, errors)) continue;
+                document.Rows.Add(row);
+            }
+
+            if (document.Rows.Count == 0)
             {
                 errors.Add("The workbook contains no importable Plot rows.");
             }
-
-            return rows;
         }
 
-private static List<string> ReadSharedStrings(ZipArchive archive)
+        private static string GetCellText(RawRow row, int columnIndex)
+        {
+            RawCell cell;
+            return row.ByColumn.TryGetValue(columnIndex, out cell) ? cell.Text : string.Empty;
+        }
+
+        private static RawRow FindTypeRow(List<RawRow> rows, RawRow headerRow)
+        {
+            for (var index = 0; index < rows.Count && index < 5; index++)
+            {
+                var row = rows[index];
+                if (ReferenceEquals(row, headerRow)) continue;
+
+                var hasToken = false;
+                var allTokens = true;
+                foreach (var pair in row.ByColumn)
+                {
+                    var value = pair.Value.Text.Trim();
+                    if (value.Length == 0) continue;
+                    if (!IsTypeToken(value))
+                    {
+                        allTokens = false;
+                        break;
+                    }
+
+                    hasToken = true;
+                }
+
+                if (hasToken && allTokens) return row;
+            }
+
+            return null;
+        }
+
+        private static bool IsTypeToken(string value)
+        {
+            switch (value.ToLowerInvariant())
+            {
+                case "int":
+                case "integer":
+                case "int32":
+                case "int64":
+                case "long":
+                case "short":
+                case "byte":
+                case "float":
+                case "double":
+                case "bool":
+                case "boolean":
+                case "string":
+                case "note":
+                case "list":
+                case "array":
+                case "int[]":
+                case "string[]":
+                    return true;
+                default:
+                    return value.EndsWith("[]", StringComparison.Ordinal);
+            }
+        }
+
+        private static GvgExcelColumnKind TypeTokenToKind(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return GvgExcelColumnKind.String;
+            var value = token.Trim().ToLowerInvariant();
+            if (value == "int[]" || value == "string[]" || value == "list" || value == "array" || value.EndsWith("[]", StringComparison.Ordinal))
+            {
+                return GvgExcelColumnKind.IntArray;
+            }
+
+            if (value == "int" || value == "integer" || value == "int32" || value == "int64" ||
+                value == "long" || value == "short" || value == "byte" ||
+                value == "float" || value == "double" || value == "bool" || value == "boolean")
+            {
+                return GvgExcelColumnKind.Int;
+            }
+
+            return GvgExcelColumnKind.String;
+        }
+
+        private static List<string> ReadSharedStrings(ZipArchive archive)
         {
             var strings = new List<string>();
             var entry = archive.GetEntry("xl/sharedStrings.xml");
@@ -189,9 +470,106 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
             return strings;
         }
 
-        private static Dictionary<string, string> ReadRow(XmlElement rowNode, List<string> sharedStrings)
+        private static WorkbookStyles ReadStyles(ZipArchive archive)
         {
-            var values = new Dictionary<string, string>();
+            var styles = new WorkbookStyles();
+            var entry = archive.GetEntry("xl/styles.xml");
+            if (entry == null) return styles;
+
+            var document = new XmlDocument();
+            using (var stream = entry.Open())
+            {
+                document.Load(stream);
+            }
+
+            var fonts = document.GetElementsByTagName("font");
+            for (var index = 0; index < fonts.Count; index++)
+            {
+                var colors = ((XmlElement)fonts[index]).GetElementsByTagName("color");
+                styles.FontColors.Add(colors.Count > 0 ? ((XmlElement)colors[0]).GetAttribute("rgb") : string.Empty);
+            }
+
+            var fills = document.GetElementsByTagName("fill");
+            for (var index = 0; index < fills.Count; index++)
+            {
+                var patterns = ((XmlElement)fills[index]).GetElementsByTagName("patternFill");
+                var color = string.Empty;
+                if (patterns.Count > 0)
+                {
+                    var fgColors = ((XmlElement)patterns[0]).GetElementsByTagName("fgColor");
+                    if (fgColors.Count > 0) color = ((XmlElement)fgColors[0]).GetAttribute("rgb");
+                }
+
+                styles.FillColors.Add(color);
+            }
+
+            var cellXfs = document.GetElementsByTagName("cellXfs");
+            if (cellXfs.Count > 0)
+            {
+                var xfs = ((XmlElement)cellXfs[0]).GetElementsByTagName("xf");
+                for (var index = 0; index < xfs.Count; index++)
+                {
+                    var xf = (XmlElement)xfs[index];
+                    int fontId;
+                    int fillId;
+                    if (!int.TryParse(xf.GetAttribute("fontId"), NumberStyles.Integer, CultureInfo.InvariantCulture, out fontId)) fontId = 0;
+                    if (!int.TryParse(xf.GetAttribute("fillId"), NumberStyles.Integer, CultureInfo.InvariantCulture, out fillId)) fillId = 0;
+                    styles.XfFontIds.Add(fontId);
+                    styles.XfFillIds.Add(fillId);
+                }
+            }
+
+            return styles;
+        }
+
+        private static Dictionary<int, Dictionary<int, string>> ReadComments(ZipArchive archive)
+        {
+            var comments = new Dictionary<int, Dictionary<int, string>>();
+            var entry = archive.GetEntry("xl/comments1.xml");
+            if (entry == null) return comments;
+
+            var document = new XmlDocument();
+            using (var stream = entry.Open())
+            {
+                document.Load(stream);
+            }
+
+            var nodes = document.GetElementsByTagName("comment");
+            for (var index = 0; index < nodes.Count; index++)
+            {
+                var comment = nodes[index] as XmlElement;
+                if (comment == null) continue;
+
+                var reference = comment.GetAttribute("ref");
+                var textNodes = comment.GetElementsByTagName("text");
+                var text = textNodes.Count > 0 ? textNodes[0].InnerText : string.Empty;
+
+                var columnIndex = ColumnIndexFromReference(reference, -1);
+                var digits = new string(reference.SkipWhile(ch => !char.IsDigit(ch)).ToArray());
+                int rowNumber;
+                if (columnIndex < 0 || !int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out rowNumber)) continue;
+
+                Dictionary<int, string> byColumn;
+                if (!comments.TryGetValue(rowNumber, out byColumn))
+                {
+                    byColumn = new Dictionary<int, string>();
+                    comments.Add(rowNumber, byColumn);
+                }
+
+                byColumn[columnIndex] = text;
+            }
+
+            return comments;
+        }
+
+        private static RawRow ReadRow(
+            XmlElement rowNode,
+            int fallbackRowNumber,
+            List<string> sharedStrings,
+            WorkbookStyles styles,
+            Dictionary<int, Dictionary<int, string>> comments)
+        {
+            var row = new RawRow { Number = ReadRowNumber(rowNode, fallbackRowNumber) };
             var cells = rowNode.GetElementsByTagName("c");
             for (var index = 0; index < cells.Count; index++)
             {
@@ -199,41 +577,114 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
                 if (cell == null) continue;
 
                 var reference = cell.GetAttribute("r");
-                var column = new string(reference.TakeWhile(char.IsLetter).ToArray());
-                var valueNode = cell.GetElementsByTagName("v").Count == 0
-                    ? null
-                    : cell.GetElementsByTagName("v")[0];
+                var columnIndex = ColumnIndexFromReference(reference, index);
+                var text = ReadCellValue(cell, sharedStrings);
 
-                var value = valueNode == null ? string.Empty : valueNode.InnerText;
-                if (cell.GetAttribute("t") == "s" && value.Length > 0)
+                string fillColor;
+                string fontColor;
+                styles.Resolve(ReadStyleIndex(cell), out fillColor, out fontColor);
+
+                var raw = new RawCell
                 {
-                    int sharedIndex;
-                    if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out sharedIndex) &&
-                        sharedIndex >= 0 && sharedIndex < sharedStrings.Count)
-                    {
-                        value = sharedStrings[sharedIndex];
-                    }
-                }
-
-                values[column] = value;
+                    Text = text,
+                    FillColor = fillColor,
+                    FontColor = fontColor,
+                    Comment = ReadComment(comments, row.Number, columnIndex),
+                    ColumnIndex = columnIndex
+                };
+                row.ByColumn[columnIndex] = raw;
             }
 
-            return values;
+            return row;
+        }
+
+        private static int ReadRowNumber(XmlElement rowNode, int fallback)
+        {
+            int number;
+            return int.TryParse(rowNode.GetAttribute("r"), NumberStyles.Integer, CultureInfo.InvariantCulture, out number)
+                ? number
+                : fallback;
+        }
+
+        private static int ReadStyleIndex(XmlElement cell)
+        {
+            int styleIndex;
+            return int.TryParse(cell.GetAttribute("s"), NumberStyles.Integer, CultureInfo.InvariantCulture, out styleIndex)
+                ? styleIndex
+                : -1;
+        }
+
+        private static int ColumnIndexFromReference(string reference, int fallback)
+        {
+            var letters = new string(reference.TakeWhile(char.IsLetter).ToArray());
+            if (letters.Length == 0) return fallback;
+
+            var index = 0;
+            for (var i = 0; i < letters.Length; i++)
+            {
+                index = index * 26 + (char.ToUpperInvariant(letters[i]) - 'A' + 1);
+            }
+
+            return index - 1;
+        }
+
+        private static string ReadComment(Dictionary<int, Dictionary<int, string>> comments, int rowNumber, int columnIndex)
+        {
+            Dictionary<int, string> byColumn;
+            if (comments != null && comments.TryGetValue(rowNumber, out byColumn))
+            {
+                string text;
+                if (byColumn.TryGetValue(columnIndex, out text)) return text;
+            }
+
+            return string.Empty;
+        }
+
+        private static string ReadCellValue(XmlElement cell, List<string> sharedStrings)
+        {
+            var type = cell.GetAttribute("t");
+            var valueNodes = cell.GetElementsByTagName("v");
+
+            if (type == "s")
+            {
+                if (valueNodes.Count == 0) return string.Empty;
+                int sharedIndex;
+                if (int.TryParse(valueNodes[0].InnerText, NumberStyles.Integer, CultureInfo.InvariantCulture, out sharedIndex) &&
+                    sharedIndex >= 0 && sharedIndex < sharedStrings.Count)
+                {
+                    return sharedStrings[sharedIndex];
+                }
+
+                return string.Empty;
+            }
+
+            if (type == "str" || type == "inlineStr")
+            {
+                var inlineNodes = cell.GetElementsByTagName("is");
+                return inlineNodes.Count > 0 ? inlineNodes[0].InnerText : string.Empty;
+            }
+
+            if (valueNodes.Count > 0) return valueNodes[0].InnerText;
+
+            var inline = cell.GetElementsByTagName("is");
+            return inline.Count > 0 ? inline[0].InnerText : string.Empty;
         }
 
         private static bool TryParseRow(
             Dictionary<string, string> values,
             int rowNumber,
             List<string> warnings,
-            out ImportedRow row,
+            out ParsedRow row,
             List<string> errors)
         {
             row = null;
             int sourceId;
-            if (!TryParseInt(values, "A", rowNumber, "ID", out sourceId, errors)) return false;
+            if (!TryParseInt(values, ColumnPlotId, rowNumber, "ID", out sourceId, errors)) return false;
 
             var hexIds = new List<int>();
-            foreach (Match match in s_HexIdPattern.Matches(values["C"]))
+            string coordinates;
+            if (!values.TryGetValue(ColumnHexIds, out coordinates)) coordinates = string.Empty;
+            foreach (Match match in s_HexIdPattern.Matches(coordinates))
             {
                 int hexId;
                 if (int.TryParse(match.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out hexId))
@@ -249,7 +700,7 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
             }
 
             int plotTypeValue;
-            if (!TryParseInt(values, "E", rowNumber, "PlotType", out plotTypeValue, errors)) return false;
+            if (!TryParseInt(values, ColumnPlotType, rowNumber, "PlotType", out plotTypeValue, errors)) return false;
             if (!Enum.IsDefined(typeof(PlotType), plotTypeValue))
             {
                 errors.Add("Row " + rowNumber + " has undefined PlotType: " + plotTypeValue + ".");
@@ -257,14 +708,16 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
             }
 
             int start;
-            if (!TryParseInt(values, "I", rowNumber, "Start", out start, errors)) return false;
+            if (!TryParseInt(values, ColumnStart, rowNumber, "Start", out start, errors)) return false;
             int end;
-            if (!TryParseInt(values, "J", rowNumber, "End", out end, errors)) return false;
+            if (!TryParseInt(values, ColumnEnd, rowNumber, "End", out end, errors)) return false;
+
             var affiliatedCampId = Plot.NoAffiliatedCampId;
-            if (values.ContainsKey("F") && !string.IsNullOrWhiteSpace(values["F"]))
+            string safeText;
+            if (values.TryGetValue(ColumnAffiliatedCampId, out safeText) && !string.IsNullOrWhiteSpace(safeText))
             {
                 int safe;
-                if (!TryParseInt(values, "F", rowNumber, "Safe", out safe, errors)) return false;
+                if (!TryParseInt(values, ColumnAffiliatedCampId, rowNumber, "Safe", out safe, errors)) return false;
                 if (safe < Plot.NoAffiliatedCampId)
                 {
                     errors.Add("Row " + rowNumber + " has a Safe value smaller than -1.");
@@ -275,7 +728,7 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
             }
 
             int generationType;
-            if (TryParseInt(values, "D", rowNumber, "legacy GenerationType", out generationType, errors))
+            if (TryParseInt(values, ColumnGenerationType, rowNumber, "legacy GenerationType", out generationType, errors))
             {
                 var expectedInitial = start == 0 ? 0 : 1;
                 if (generationType != expectedInitial)
@@ -284,13 +737,16 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
                 }
             }
 
-            row = new ImportedRow(
-                sourceId,
-                hexIds,
-                (PlotType)plotTypeValue,
-                start,
-                end,
-                affiliatedCampId);
+            row = new ParsedRow
+            {
+                SourceId = sourceId,
+                HexIds = hexIds,
+                PlotType = (PlotType)plotTypeValue,
+                Start = start,
+                End = end,
+                AffiliatedCampId = affiliatedCampId,
+                ColumnContent = new Dictionary<string, string>(values)
+            };
             return true;
         }
 
@@ -314,18 +770,17 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
             return true;
         }
 
-        private static List<GvgPlotAuthoringData> NormalizeRows(
-            List<ImportedRow> rows,
-            GvgMapAuthoringAsset targetAsset,
+        private static List<GvgPlotAuthoringData> BuildPlots(
+            ExcelDocument document,
             List<string> errors,
             List<string> warnings)
         {
-            var plots = new List<GvgPlotAuthoringData>(rows.Count);
+            var plots = new List<GvgPlotAuthoringData>(document.Rows.Count);
             var singleRowsByHex = new Dictionary<int, List<GvgPlotAuthoringData>>();
 
-            for (var index = 0; index < rows.Count; index++)
+            for (var index = 0; index < document.Rows.Count; index++)
             {
-                var row = rows[index];
+                var row = document.Rows[index];
                 var plot = new GvgPlotAuthoringData(
                     row.SourceId,
                     row.HexIds,
@@ -390,33 +845,73 @@ private static List<string> ReadSharedStrings(ZipArchive archive)
                     errors.Add("HexId " + pair.Key + " final time layer must use End=-1.");
                 }
             }
-return plots;
+
+            return plots;
+        }
+
+        private static GvgExcelDocumentRedundancy BuildRedundancy(ExcelDocument document)
+        {
+            var redundancy = new GvgExcelDocumentRedundancy();
+
+            var headerRows = new List<GvgExcelHeaderRow>();
+            for (var rowIndex = 0; rowIndex < document.HeaderBlock.Count; rowIndex++)
+            {
+                var blockRow = document.HeaderBlock[rowIndex];
+                var headerRow = new GvgExcelHeaderRow();
+                var cells = new List<GvgExcelHeaderCell>();
+                for (var columnIndex = 0; columnIndex < document.ColumnOrder.Count; columnIndex++)
+                {
+                    var cell = blockRow[columnIndex];
+                    cells.Add(new GvgExcelHeaderCell(
+                        document.ColumnOrder[columnIndex],
+                        cell.Text,
+                        cell.FillColor,
+                        cell.FontColor,
+                        cell.Comment));
+                }
+
+                headerRow.ReplaceCells(cells);
+                headerRows.Add(headerRow);
+            }
+
+            redundancy.ReplaceHeaderRows(headerRows);
+
+            var columns = new List<GvgExcelColumnInfo>();
+            for (var index = 0; index < document.ColumnOrder.Count; index++)
+            {
+                var name = document.ColumnOrder[index];
+                columns.Add(new GvgExcelColumnInfo(name, document.Kinds[name]));
+            }
+
+            redundancy.ReplaceColumns(columns);
+
+            var dataRows = new List<GvgExcelRowData>();
+            for (var index = 0; index < document.Rows.Count; index++)
+            {
+                var parsed = document.Rows[index];
+                var data = new GvgExcelRowData { PlotId = parsed.SourceId };
+                var contents = new List<GvgExcelColumnContent>();
+                for (var columnIndex = 0; columnIndex < document.ColumnOrder.Count; columnIndex++)
+                {
+                    var name = document.ColumnOrder[columnIndex];
+                    string content;
+                    contents.Add(new GvgExcelColumnContent(
+                        name,
+                        parsed.ColumnContent.TryGetValue(name, out content) ? content : string.Empty));
+                }
+
+                data.ReplaceColumns(contents);
+                dataRows.Add(data);
+            }
+
+            redundancy.ReplaceRows(dataRows);
+            return redundancy;
         }
 
         private static int CompareLayers(GvgPlotAuthoringData left, GvgPlotAuthoringData right)
         {
             var result = left.Start.CompareTo(right.Start);
             return result != 0 ? result : left.PlotId.CompareTo(right.PlotId);
-        }
-
-        private sealed class ImportedRow
-        {
-            public ImportedRow(int sourceId, List<int> hexIds, PlotType plotType, int start, int end, int affiliatedCampId)
-            {
-                SourceId = sourceId;
-                HexIds = hexIds;
-                PlotType = plotType;
-                Start = start;
-                End = end;
-                AffiliatedCampId = affiliatedCampId;
-            }
-
-            public int SourceId { get; private set; }
-            public List<int> HexIds { get; private set; }
-            public PlotType PlotType { get; private set; }
-            public int Start { get; private set; }
-            public int End { get; private set; }
-            public int AffiliatedCampId { get; private set; }
         }
     }
 }

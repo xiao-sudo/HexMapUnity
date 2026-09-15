@@ -14,6 +14,8 @@ namespace HexMap.Gvg.Authoring
 
         [SerializeField] private List<GvgPlotAuthoringData> m_Plots = new List<GvgPlotAuthoringData>();
 
+        [SerializeField] private GvgExcelDocumentRedundancy m_ExcelRedundancy;
+
         public string MapId
         {
             get { return string.IsNullOrEmpty(m_MapId) ? name : m_MapId; }
@@ -27,6 +29,16 @@ namespace HexMap.Gvg.Authoring
         }
 
 
+        /// <summary>
+        /// Excel round-trip redundancy captured by the last import. Null when the
+        /// asset has never been imported from Excel.
+        /// </summary>
+        public GvgExcelDocumentRedundancy ExcelRedundancy
+        {
+            get { return m_ExcelRedundancy; }
+        }
+
+
         public void ReplacePlots(IEnumerable<GvgPlotAuthoringData> plots)
         {
             if (plots == null) throw new ArgumentNullException(nameof(plots));
@@ -36,6 +48,19 @@ namespace HexMap.Gvg.Authoring
                 if (plot == null) throw new ArgumentException("Plot list cannot contain null entries.", nameof(plots));
                 m_Plots.Add(plot.Clone());
             }
+        }
+
+        /// <summary>
+        /// Replaces the entire Excel redundancy document. Passing null clears it.
+        /// </summary>
+        public void ReplaceExcelRedundancy(GvgExcelDocumentRedundancy redundancy)
+        {
+            m_ExcelRedundancy = redundancy == null ? null : redundancy.Clone();
+        }
+
+        public void ClearExcelRedundancy()
+        {
+            m_ExcelRedundancy = null;
         }
 
         internal List<GvgPlotAuthoringData> MutablePlots

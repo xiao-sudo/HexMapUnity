@@ -507,15 +507,44 @@ namespace HexMap.Gvg.Editor
                 }
             }
 
-            if (!GUILayout.Button("Export CSV")) return;
-            try
+            if (GUILayout.Button("Export Excel (.xlsx)"))
             {
-                var path = GvgMapAuthoringExporter.Export(m_Asset, map);
-                EditorUtility.DisplayDialog("GVG Map Export", "Exported to " + path, "OK");
+                try
+                {
+                    var path = EditorUtility.SaveFilePanel(
+                        "Export GVG Map Excel",
+                        string.Empty,
+                        "GVGMap_" + m_Asset.MapId + ".xlsx",
+                        "xlsx");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    var exportedPath = GvgMapExcelExporter.ExportExcelToFile(m_Asset, map, path);
+                    EditorUtility.DisplayDialog("GVG Map Export", "Exported to " + exportedPath, "OK");
+                }
+                catch (Exception exception)
+                {
+                    EditorUtility.DisplayDialog("GVG Map Export Failed", exception.Message, "OK");
+                }
             }
-            catch (Exception exception)
+
+            if (GUILayout.Button("Export CSV"))
             {
-                EditorUtility.DisplayDialog("GVG Map Export Failed", exception.Message, "OK");
+                try
+                {
+                    var path = EditorUtility.SaveFilePanel(
+                        "Export GVG Map CSV",
+                        string.Empty,
+                        "GVGMap_" + m_Asset.MapId + ".csv",
+                        "csv");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    var exportedPath = GvgMapAuthoringExporter.ExportToFile(m_Asset, map, path);
+                    EditorUtility.DisplayDialog("GVG Map Export", "Exported to " + exportedPath, "OK");
+                }
+                catch (Exception exception)
+                {
+                    EditorUtility.DisplayDialog("GVG Map Export Failed", exception.Message, "OK");
+                }
             }
         }
         private void OnSceneGui(SceneView sceneView)
