@@ -15,7 +15,6 @@ namespace HexMap.UnityRuntime
         private HexLayout m_Layout;
         private Transform m_GeneratedRoot;
         private Mesh m_SharedMesh;
-        private Material m_FallbackMaterial;
         private int m_Generation;
         private bool m_IsDisposed;
 
@@ -96,7 +95,7 @@ namespace HexMap.UnityRuntime
             }
 
             m_SharedMesh = CreateCellMesh();
-            var material = m_Config.SharedMaterial ?? CreateFallbackMaterial();
+            var material = m_Config.SharedMaterial;
 
             foreach (var cell in m_Map.Cells)
             {
@@ -153,27 +152,6 @@ namespace HexMap.UnityRuntime
             return mesh;
         }
 
-        private Material CreateFallbackMaterial()
-        {
-            var shader = Shader.Find("Standard");
-            if (shader == null)
-            {
-                shader = Shader.Find("Universal Render Pipeline/Lit");
-            }
-
-            if (shader == null)
-            {
-                return null;
-            }
-
-            m_FallbackMaterial = new Material(shader)
-            {
-                name = "Generated Hex Map Material",
-                color = new Color(0.2f, 0.65f, 0.9f, 1f)
-            };
-            return m_FallbackMaterial;
-        }
-
         private void InvalidateCurrentViews()
         {
             foreach (var view in m_Views.Values)
@@ -197,12 +175,7 @@ namespace HexMap.UnityRuntime
                 DestroyObject(m_SharedMesh);
                 m_SharedMesh = null;
             }
-
-            if (m_FallbackMaterial != null)
-            {
-                DestroyObject(m_FallbackMaterial);
-                m_FallbackMaterial = null;
-            }
+      
         }
 
         private static void DestroyObject(UnityEngine.Object target)
