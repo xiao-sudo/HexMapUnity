@@ -166,6 +166,25 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
+        public void PlotPolicyCanSwitchMovingFactionOnReusedInstance()
+        {
+            var map = new RuntimeHexMap(new HexMapDefinition(0));
+            var cell = CellAt(map, 0, 0);
+            var plot = CreatePlot(1, new[] { cell }, RedFaction);
+            var policy = new PlotPathPolicy(new PlotRegistry(map, new[] { plot }), BlueFaction);
+
+            Assert.That(policy.CanPass(cell), Is.False);
+
+            policy.SetMovingFaction(RedFaction);
+
+            Assert.That(policy.CanPass(cell), Is.True);
+
+            policy.SetMovingFaction(BlueFaction);
+
+            Assert.That(policy.CanPass(cell), Is.False);
+        }
+
+        [Test]
         public void PlotPathServiceWithoutResolverRejectsAffiliatedTarget()
         {
             var map = new RuntimeHexMap(new HexMapDefinition(1));
@@ -254,6 +273,31 @@ namespace HexMap.Gvg.Tests
 
             Assert.That(result.IsSuccess, Is.True);
             Assert.That(result.ReachedTarget, Is.EqualTo(targetCell));
+        }
+
+        [Test]
+        public void PlotPathServiceReusesOnePolicyAcrossMovingFactions()
+        {
+            var map = new RuntimeHexMap(new HexMapDefinition(1));
+            var startCell = CellAt(map, 0, 0);
+            var targetCell = CellAt(map, 1, 0);
+            var plots = new List<Plot>
+            {
+                CreatePlot(1, new[] { startCell }, RedFaction),
+                CreatePlot(2, new[] { targetCell }, RedFaction, affiliatedCampId: 12000)
+            };
+            var resolver = new TestCampFactionResolver();
+            resolver.Set(12000, RedFaction);
+            var service = new PlotPathService(new PlotRegistry(map, plots), resolver);
+            var result = new PathResult(new List<HexCell>(map.Count));
+
+            service.FindPath(1, 2, RedFaction, result);
+
+            Assert.That(result.IsSuccess, Is.True);
+
+            service.FindPath(1, 2, BlueFaction, result);
+
+            Assert.That(result.IsSuccess, Is.False);
         }
 
         [Test]

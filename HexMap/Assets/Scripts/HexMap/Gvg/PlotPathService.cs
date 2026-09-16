@@ -10,29 +10,23 @@ namespace HexMap.Gvg
         private readonly ICampFactionResolver m_CampFactionResolver;
         private readonly HexPathfinder m_Pathfinder;
         private readonly ReusablePathRequest m_Request;
+        private readonly PlotPathPolicy m_Policy;
         private readonly List<HexCell> m_StartCells;
         private readonly List<HexCell> m_TargetCells;
 
-        public PlotPathService(PlotRegistry registry)
-            : this(registry, null)
-        {
-        }
-
-        public PlotPathService(PlotRegistry registry, ICampFactionResolver campFactionResolver)
+        public PlotPathService(PlotRegistry registry, ICampFactionResolver campFactionResolver = null)
         {
             m_Registry = registry ?? throw new ArgumentNullException(nameof(registry));
-            m_CampFactionResolver = campFactionResolver;
+            m_CampFactionResolver = campFactionResolver ?? DefaultCampFactionResolver.Instance;
             var map = registry.Map;
             m_Pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
             m_StartCells = new List<HexCell>(map.Count);
             m_TargetCells = new List<HexCell>(map.Count);
+            m_Policy = new PlotPathPolicy(m_Registry, m_CampFactionResolver, Plot.NoFactionId);
             m_Request = new ReusablePathRequest(
                 m_StartCells,
                 m_TargetCells,
-                new PlotPathPolicy(
-                    registry,
-                    m_CampFactionResolver ?? new DefaultCampFactionResolver(),
-                    Plot.NoFactionId));
+                m_Policy);
         }
 
         public PlotRegistry Registry { get { return m_Registry; } }
@@ -66,15 +60,14 @@ namespace HexMap.Gvg
                 }
             }
 
-            m_Request.Policy = new PlotPathPolicy(
-                m_Registry,
-                m_CampFactionResolver ?? new DefaultCampFactionResolver(),
-                movingFactionId);
+            m_Policy.SetMovingFaction(movingFactionId);
             return m_Pathfinder.FindPath(m_Request, result);
         }
 
         private sealed class DefaultCampFactionResolver : ICampFactionResolver
         {
+            public static readonly DefaultCampFactionResolver Instance = new DefaultCampFactionResolver();
+
             public bool TryGetFaction(int campId, out int factionId)
             {
                 factionId = Plot.NoFactionId;

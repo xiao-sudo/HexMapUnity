@@ -17,7 +17,7 @@ namespace HexMap.Gvg
     {
         private readonly PlotRegistry m_Registry;
         private readonly ICampFactionResolver m_CampFactionResolver;
-        private readonly int m_MovingFactionId;
+        private int m_MovingFactionId;
 
         public PlotPathPolicy(PlotRegistry registry, int movingFactionId)
             : this(registry, NoCampFactionResolver.Instance, movingFactionId)
@@ -35,6 +35,15 @@ namespace HexMap.Gvg
         }
 
         public int MovingFactionId { get { return m_MovingFactionId; } }
+
+        /// <summary>
+        /// Updates the moving faction on a reused policy instance. The registry and
+        /// camp resolver never change between searches; only the faction id varies.
+        /// </summary>
+        public void SetMovingFaction(int movingFactionId)
+        {
+            m_MovingFactionId = movingFactionId;
+        }
 
         public bool CanPass(HexCell cell)
         {

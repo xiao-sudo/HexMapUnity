@@ -26,7 +26,7 @@
   - 保持 `CanPass` 与 `CanEnter` 的现有语义，并追加附属阵营判断。
 - `Assets/Scripts/HexMap/Gvg/PlotPathService.cs`
   - 持有 `PlotRegistry`、`HexPathfinder` 和 Camp/Faction 解析器。
-  - 每次寻路为当前移动阵营创建 `PlotPathPolicy`。
+  - 构造时创建一次 `PlotPathPolicy`，每次寻路仅更新移动阵营，避免热路径分配。
 - `Assets/Scripts/HexMap/Gvg/PlotRegistry.cs`
   - 保持 Hex 到当前开放 Plot 的查询职责，不承载 Camp 运行时状态。
 - `Assets/Scripts/HexMap/Gvg/Authoring/GvgPlotAuthoringData.cs`
@@ -48,7 +48,7 @@
 PlotPathService
     -> 根据 startPlotId / targetPlotId 获取 Plot
     -> 收集两个 Plot 的 HexCell
-    -> 创建包含 movingFaction 的 PlotPathPolicy
+    -> 复用 PlotPathPolicy，仅更新 movingFaction
     -> HexPathfinder.FindPath
 
 HexPathfinder
