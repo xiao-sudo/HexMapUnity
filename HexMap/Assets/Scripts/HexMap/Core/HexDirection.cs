@@ -5,11 +5,11 @@ namespace HexMap.Core
     public enum HexDirection
     {
         East = 0,
-        NorthEast = 1,
-        NorthWest = 2,
+        SouthEast = 1,
+        SouthWest = 2,
         West = 3,
-        SouthWest = 4,
-        SouthEast = 5
+        NorthWest = 4,
+        NorthEast = 5
     }
 
     public static class HexDirectionExtensions
@@ -20,16 +20,16 @@ namespace HexMap.Core
             {
                 case HexDirection.East:
                     return HexDirection.West;
-                case HexDirection.NorthEast:
-                    return HexDirection.SouthWest;
-                case HexDirection.NorthWest:
-                    return HexDirection.SouthEast;
-                case HexDirection.West:
-                    return HexDirection.East;
-                case HexDirection.SouthWest:
-                    return HexDirection.NorthEast;
                 case HexDirection.SouthEast:
                     return HexDirection.NorthWest;
+                case HexDirection.SouthWest:
+                    return HexDirection.NorthEast;
+                case HexDirection.West:
+                    return HexDirection.East;
+                case HexDirection.NorthWest:
+                    return HexDirection.SouthEast;
+                case HexDirection.NorthEast:
+                    return HexDirection.SouthWest;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(direction), direction, null);
             }
@@ -41,15 +41,15 @@ namespace HexMap.Core
             {
                 case HexDirection.East:
                     return new HexCoord(1, 0);
-                case HexDirection.NorthEast:
+                case HexDirection.SouthEast:
                     return new HexCoord(1, -1);
-                case HexDirection.NorthWest:
+                case HexDirection.SouthWest:
                     return new HexCoord(0, -1);
                 case HexDirection.West:
                     return new HexCoord(-1, 0);
-                case HexDirection.SouthWest:
+                case HexDirection.NorthWest:
                     return new HexCoord(-1, 1);
-                case HexDirection.SouthEast:
+                case HexDirection.NorthEast:
                     return new HexCoord(0, 1);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(direction), direction, null);
