@@ -1,6 +1,6 @@
 # Remove redundant HexMapView editor Debug Draw
 
-Status: ready-for-agent
+Status: done
 
 ## Goal
 

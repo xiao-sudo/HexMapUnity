@@ -5,7 +5,7 @@ GVG 编辑窗口使用绑定的 `HexMapView` 配置和场景坐标绘制逻辑 H
 
 **Blocked by:** 02 — 建立 GVG 逻辑 Asset 与场景地图的绑定。
 
-**Status:** ready-for-human
+**Status:** done
 
 - [x] Handles 使用绑定地图的 Radius、Plane、Orientation、OuterRadius、SecondaryScale、Origin 和场景 Transform。
 - [x] 逻辑 Hex 与背景、地形和其他场景表现正确对齐。

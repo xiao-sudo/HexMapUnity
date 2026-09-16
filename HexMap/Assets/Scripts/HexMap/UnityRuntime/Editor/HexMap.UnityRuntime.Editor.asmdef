@@ -1,13 +1,16 @@
 {
-  "name": "HexMap.UnityRuntime",
-  "rootNamespace": "HexMap.UnityRuntime",
+  "name": "HexMap.UnityRuntime.Editor",
+  "rootNamespace": "HexMap.UnityRuntime.Editor",
   "references": [
     "HexMap.Core",
     "HexMap.Runtime",
     "HexMap.Gvg",
-    "HexMap.Gvg.Authoring"
+    "HexMap.Gvg.Authoring",
+    "HexMap.UnityRuntime"
   ],
-  "includePlatforms": [],
+  "includePlatforms": [
+    "Editor"
+  ],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,

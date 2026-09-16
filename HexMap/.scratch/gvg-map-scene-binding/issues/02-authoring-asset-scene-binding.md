@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — 让 HexMapView 成为场景地图配置来源。
 
-**Status:** verified
+**Status:** done
 **Verification (2026-09-14 spike):** 直接引用方案已验证通过，进入实现。
 
 ## 设计约束（2026-09-14 grilling 确认）

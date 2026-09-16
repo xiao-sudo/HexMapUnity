@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using HexMap.Runtime;
 using RuntimeHexMap = HexMap.Runtime.HexMap;
-using UnityEngine;
 
 namespace HexMap.Gvg.Authoring
 {
@@ -207,60 +206,22 @@ namespace HexMap.Gvg.Authoring
         public static List<Plot> CreateRuntimePlots(GvgMapAuthoringAsset asset, RuntimeHexMap map)
         {
             ValidateAsset(asset);
+            ValidateMap(map);
             var validation = Validate(asset, map);
             if (!validation.IsValid)
             {
                 throw new InvalidOperationException(validation.Issues[0].Message);
             }
 
-            ValidateMap(map);
-            var campPlotIds = new HashSet<int>();
-            for (var campIndex = 0; campIndex < asset.Plots.Count; campIndex++)
+            var rows = GvgMapAuthoringRuntimeAdapter.ToRuntimeData(asset);
+            PlotRegistry registry;
+            string error;
+            if (!GvgMapRuntimeComposer.TryCompose(map, rows, out registry, out error))
             {
-                var campPlot = asset.Plots[campIndex];
-                if (campPlot != null && campPlot.PlotType == PlotType.Camp)
-                {
-                    campPlotIds.Add(campPlot.PlotId);
-                }
-            }
-            var plots = new List<Plot>(asset.Plots.Count);
-            for (var index = 0; index < asset.Plots.Count; index++)
-            {
-                var authoredPlot = asset.Plots[index];
-                var cells = new List<HexCell>(authoredPlot.HexIds.Count);
-                for (var hexIndex = 0; hexIndex < authoredPlot.HexIds.Count; hexIndex++)
-                {
-                    cells.Add(map.Query(authoredPlot.HexIds[hexIndex]).Cell);
-                }
-
-                var blockingState = authoredPlot.PlotType == PlotType.Obstacle
-                    ? BlockingState.Blocked
-                    : BlockingState.Passable;
-                var plotState = authoredPlot.Start == 0
-                    ? PlotState.Open
-                    : PlotState.NotOpen;
-                var affiliatedCampId = authoredPlot.AffiliatedCampId;
-                if (authoredPlot.PlotType == PlotType.Camp && affiliatedCampId == Plot.NoAffiliatedCampId)
-                {
-                    affiliatedCampId = authoredPlot.PlotId;
-                }
-                if (affiliatedCampId != Plot.NoAffiliatedCampId && !campPlotIds.Contains(affiliatedCampId))
-                {
-                    Debug.LogError("Plot " + authoredPlot.PlotId + " references missing Camp PlotId " + affiliatedCampId + ". It will be treated as a normal Plot.");
-                    affiliatedCampId = Plot.NoAffiliatedCampId;
-                }
-
-                plots.Add(new Plot(
-                    authoredPlot.PlotId,
-                    cells,
-                    authoredPlot.PlotType,
-                    plotState,
-                    FactionId.Neutral,
-                    blockingState,
-                    affiliatedCampId));
+                throw new InvalidOperationException(error);
             }
 
-            return plots;
+            return new List<Plot>(registry.Plots);
         }
 
         /// <summary>

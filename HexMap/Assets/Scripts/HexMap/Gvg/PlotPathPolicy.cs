@@ -5,31 +5,36 @@ namespace HexMap.Gvg
 {
     public interface ICampFactionResolver
     {
-        bool TryGetFaction(int campId, out FactionId factionId);
+        /// <summary>
+        /// Resolves a camp to the faction id that currently owns it.
+        /// Returns false when the camp has no known faction; factionId is then
+        /// <see cref="Plot.NoFactionId"/> (neutral).
+        /// </summary>
+        bool TryGetFaction(int campId, out int factionId);
     }
 
     public sealed class PlotPathPolicy : IHexPathPolicy
     {
         private readonly PlotRegistry m_Registry;
         private readonly ICampFactionResolver m_CampFactionResolver;
-        private readonly FactionId m_MovingFaction;
+        private readonly int m_MovingFactionId;
 
-        public PlotPathPolicy(PlotRegistry registry, FactionId movingFaction)
-            : this(registry, NoCampFactionResolver.Instance, movingFaction)
+        public PlotPathPolicy(PlotRegistry registry, int movingFactionId)
+            : this(registry, NoCampFactionResolver.Instance, movingFactionId)
         {
         }
 
         public PlotPathPolicy(
             PlotRegistry registry,
             ICampFactionResolver campFactionResolver,
-            FactionId movingFaction)
+            int movingFactionId)
         {
             m_Registry = registry ?? throw new ArgumentNullException(nameof(registry));
             m_CampFactionResolver = campFactionResolver ?? throw new ArgumentNullException(nameof(campFactionResolver));
-            m_MovingFaction = movingFaction;
+            m_MovingFactionId = movingFactionId;
         }
 
-        public FactionId MovingFaction { get { return m_MovingFaction; } }
+        public int MovingFactionId { get { return m_MovingFactionId; } }
 
         public bool CanPass(HexCell cell)
         {
@@ -37,7 +42,7 @@ namespace HexMap.Gvg
             if (!m_Registry.TryGetPlot(cell, out plot)) return false;
             return plot.IsOpenForPathfinding &&
                 plot.BlockingState == BlockingState.Passable &&
-                plot.OwnerFaction == m_MovingFaction &&
+                plot.OwnerFactionId == m_MovingFactionId &&
                 IsAffiliatedFactionAllowed(plot);
         }
 
@@ -53,18 +58,18 @@ namespace HexMap.Gvg
         {
             if (plot.AffiliatedCampId == Plot.NoAffiliatedCampId) return true;
 
-            FactionId affiliatedFaction;
-            return m_CampFactionResolver.TryGetFaction(plot.AffiliatedCampId, out affiliatedFaction) &&
-                affiliatedFaction == m_MovingFaction;
+            int affiliatedFactionId;
+            return m_CampFactionResolver.TryGetFaction(plot.AffiliatedCampId, out affiliatedFactionId) &&
+                affiliatedFactionId == m_MovingFactionId;
         }
 
         private sealed class NoCampFactionResolver : ICampFactionResolver
         {
             public static readonly NoCampFactionResolver Instance = new NoCampFactionResolver();
 
-            public bool TryGetFaction(int campId, out FactionId factionId)
+            public bool TryGetFaction(int campId, out int factionId)
             {
-                factionId = FactionId.Neutral;
+                factionId = Plot.NoFactionId;
                 return false;
             }
         }

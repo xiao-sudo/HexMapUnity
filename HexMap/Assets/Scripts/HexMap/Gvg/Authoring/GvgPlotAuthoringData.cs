@@ -13,6 +13,7 @@ namespace HexMap.Gvg.Authoring
         [SerializeField] private int m_Start;
         [SerializeField] private int m_End = -1;
         [SerializeField] private int m_AffiliatedCampId = Plot.NoAffiliatedCampId;
+        [SerializeField] private int m_OwnerFactionId = Plot.NoFactionId;
 
         public GvgPlotAuthoringData() { }
 
@@ -37,17 +38,21 @@ namespace HexMap.Gvg.Authoring
             PlotType plotType,
             int start,
             int end,
-            int affiliatedCampId)
+            int affiliatedCampId,
+            int ownerFactionId = Plot.NoFactionId)
         {
             if (hexIds == null) throw new ArgumentNullException(nameof(hexIds));
             if (affiliatedCampId < Plot.NoAffiliatedCampId)
                 throw new ArgumentOutOfRangeException(nameof(affiliatedCampId));
+            if (ownerFactionId < Plot.NoFactionId)
+                throw new ArgumentOutOfRangeException(nameof(ownerFactionId));
             m_PlotId = plotId;
             m_HexIds = new List<int>(hexIds);
             m_PlotType = plotType;
             m_Start = start;
             m_End = end;
             m_AffiliatedCampId = affiliatedCampId;
+            m_OwnerFactionId = ownerFactionId;
         }
 
         public int PlotId
@@ -90,6 +95,17 @@ namespace HexMap.Gvg.Authoring
             }
         }
 
+        public int OwnerFactionId
+        {
+            get { return m_OwnerFactionId; }
+            set
+            {
+                if (value < Plot.NoFactionId)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                m_OwnerFactionId = value;
+            }
+        }
+
         public bool IsMultiCell
         {
             get { return m_HexIds != null && m_HexIds.Count > 1; }
@@ -103,7 +119,8 @@ namespace HexMap.Gvg.Authoring
                 m_PlotType,
                 m_Start,
                 m_End,
-                m_AffiliatedCampId);
+                m_AffiliatedCampId,
+                m_OwnerFactionId);
         }
     }
 }

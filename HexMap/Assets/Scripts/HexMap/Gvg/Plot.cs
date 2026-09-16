@@ -29,22 +29,16 @@ namespace HexMap.Gvg
         Blocked = 1
     }
 
-    public enum FactionId
-    {
-        Neutral = 0,
-        Red = 1,
-        Blue = 2
-    }
-
     public sealed class Plot
     {
         public const int NoAffiliatedCampId = -1;
+        public const int NoFactionId = -1;
 
         private readonly int m_PlotId;
         private readonly IReadOnlyList<HexCell> m_Cells;
         private readonly PlotType m_PlotType;
         private PlotState m_PlotState;
-        private readonly FactionId m_OwnerFaction;
+        private readonly int m_OwnerFactionId;
         private readonly BlockingState m_BlockingState;
         private readonly int m_AffiliatedCampId;
 
@@ -53,8 +47,8 @@ namespace HexMap.Gvg
             IReadOnlyList<HexCell> cells,
             PlotType plotType,
             PlotState plotState,
-            FactionId ownerFaction,
             BlockingState blockingState,
+            int ownerFactionId = NoFactionId,
             int affiliatedCampId = NoAffiliatedCampId)
         {
             if (cells == null) throw new ArgumentNullException(nameof(cells));
@@ -63,6 +57,8 @@ namespace HexMap.Gvg
                 throw new ArgumentOutOfRangeException(nameof(plotType), plotType, "PlotType is not defined.");
             if (!Enum.IsDefined(typeof(PlotState), plotState))
                 throw new ArgumentOutOfRangeException(nameof(plotState), plotState, "PlotState is not defined.");
+            if (ownerFactionId < NoFactionId)
+                throw new ArgumentOutOfRangeException(nameof(ownerFactionId), ownerFactionId, "Owner FactionId must be -1 or non-negative.");
             if (affiliatedCampId < NoAffiliatedCampId)
                 throw new ArgumentOutOfRangeException(nameof(affiliatedCampId), affiliatedCampId, "Affiliated CampId must be -1 or non-negative.");
 
@@ -90,7 +86,7 @@ namespace HexMap.Gvg
             m_Cells = new ReadOnlyCollection<HexCell>(copiedCells);
             m_PlotType = plotType;
             m_PlotState = plotState;
-            m_OwnerFaction = ownerFaction;
+            m_OwnerFactionId = ownerFactionId;
             m_BlockingState = blockingState;
             m_AffiliatedCampId = affiliatedCampId;
         }
@@ -99,7 +95,7 @@ namespace HexMap.Gvg
         public IReadOnlyList<HexCell> Cells { get { return m_Cells; } }
         public PlotType PlotType { get { return m_PlotType; } }
         public PlotState PlotState { get { return m_PlotState; } }
-        public FactionId OwnerFaction { get { return m_OwnerFaction; } }
+        public int OwnerFactionId { get { return m_OwnerFactionId; } }
         public BlockingState BlockingState { get { return m_BlockingState; } }
         public int AffiliatedCampId { get { return m_AffiliatedCampId; } }
 

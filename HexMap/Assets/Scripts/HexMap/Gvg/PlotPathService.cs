@@ -32,7 +32,7 @@ namespace HexMap.Gvg
                 new PlotPathPolicy(
                     registry,
                     m_CampFactionResolver ?? new DefaultCampFactionResolver(),
-                    FactionId.Neutral));
+                    Plot.NoFactionId));
         }
 
         public PlotRegistry Registry { get { return m_Registry; } }
@@ -40,7 +40,7 @@ namespace HexMap.Gvg
         public PathResult FindPath(
             int startPlotId,
             int targetPlotId,
-            FactionId movingFaction,
+            int movingFactionId,
             PathResult result)
         {
             if (result == null) throw new ArgumentNullException(nameof(result));
@@ -69,15 +69,15 @@ namespace HexMap.Gvg
             m_Request.Policy = new PlotPathPolicy(
                 m_Registry,
                 m_CampFactionResolver ?? new DefaultCampFactionResolver(),
-                movingFaction);
+                movingFactionId);
             return m_Pathfinder.FindPath(m_Request, result);
         }
 
         private sealed class DefaultCampFactionResolver : ICampFactionResolver
         {
-            public bool TryGetFaction(int campId, out FactionId factionId)
+            public bool TryGetFaction(int campId, out int factionId)
             {
-                factionId = FactionId.Neutral;
+                factionId = Plot.NoFactionId;
                 return false;
             }
         }

@@ -4,6 +4,7 @@
   "references": [
     "HexMap.Core",
     "HexMap.Runtime",
+    "HexMap.Gvg",
     "HexMap.UnityRuntime",
     "HexMap.Sample",
     "UnityEngine.TestRunner"

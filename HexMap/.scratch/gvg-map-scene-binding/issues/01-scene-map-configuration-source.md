@@ -5,7 +5,7 @@
 
 **Blocked by:** 无，可立即开始。
 
-**Status:** ready-for-human
+**Status:** done
 
 - [x] `HexMapView` 成为 Radius、Orientation、Plane、OuterRadius、SecondaryScale、Origin 的权威来源。
 - [x] `GvgMapAuthoringAsset` 不再序列化或独立维护 Radius。
