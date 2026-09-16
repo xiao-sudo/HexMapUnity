@@ -10,11 +10,13 @@ namespace HexMap.Gvg
     {
         private readonly RuntimeHexMap m_Map;
         private readonly Dictionary<int, Plot> m_PlotsById;
+        // Reverse index from a Cell to every Plot that contains it. A Plot may
+        // cover multiple Cells, and the same Cell may appear in multiple Plot
+        // records when the runtime data contains temporal/layered Plot entries.
+        // Pathfinding still requires at most one open Plot for a Cell; see
+        // TryGetOpenPlot.
         private readonly Dictionary<int, List<Plot>> m_PlotsByCellId;
         private IReadOnlyList<Plot> m_Plots;
-
-        public PlotRegistry(RuntimeHexMap map)
-            : this(map, new List<Plot>()) { }
 
         public PlotRegistry(RuntimeHexMap map, IReadOnlyList<Plot> plots)
         {
@@ -36,15 +38,6 @@ namespace HexMap.Gvg
         public RuntimeHexMap Map { get { return m_Map; } }
         public int Count { get { return m_Plots.Count; } }
         public IReadOnlyList<Plot> Plots { get { return m_Plots; } }
-
-        public void Add(Plot plot)
-        {
-            var mutablePlots = new List<Plot>(m_Plots);
-            RegisterCore(plot, mutablePlots);
-            m_Plots = new ReadOnlyCollection<Plot>(mutablePlots);
-        }
-
-        public void Register(Plot plot) { Add(plot); }
 
         public bool TryGetPlot(int plotId, out Plot plot)
         {
@@ -105,14 +98,6 @@ namespace HexMap.Gvg
             return true;
         }
 
-        public IReadOnlyList<Plot> GetPlotsForCell(int cellId)
-        {
-            IReadOnlyList<Plot> plots;
-            if (!TryGetPlotsForCell(cellId, out plots))
-                throw new KeyNotFoundException("The cell is not assigned to a Plot: " + cellId);
-            return plots;
-        }
-
         private bool TryGetOpenPlot(int cellId, out Plot plot)
         {
             List<Plot> cellPlots;
@@ -126,6 +111,10 @@ namespace HexMap.Gvg
             for (var index = 0; index < cellPlots.Count; index++)
             {
                 if (!cellPlots[index].IsOpenForPathfinding) continue;
+
+                // Multiple Plot records for a Cell are valid for temporal or
+                // layered data, but there must be exactly one open Plot for
+                // the Cell to have an unambiguous pathfinding meaning.
                 if (plot != null)
                 {
                     plot = null;
