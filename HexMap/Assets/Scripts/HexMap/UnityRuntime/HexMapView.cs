@@ -17,6 +17,9 @@ namespace HexMap.UnityRuntime
         [SerializeField] private Material m_CellMaterial;
         [SerializeField] private int m_CellLayer;
 
+        [SerializeField]
+        private bool m_AutoBuildHexMap = false;
+
 #if UNITY_EDITOR
         [SerializeField] private HexMap.Gvg.Authoring.GvgMapAuthoringAsset m_GvgMapAuthoringAsset;
 #endif
@@ -133,7 +136,8 @@ namespace HexMap.UnityRuntime
 
         public void Awake()
         {
-            Build();
+            if(m_AutoBuildHexMap)
+                Build();
         }
 
         public void Build()
