@@ -4,11 +4,6 @@ namespace HexMap.Runtime
 {
     public readonly struct HexCell
     {
-        internal HexCell(HexCoord coordinate)
-            : this(0, coordinate)
-        {
-        }
-
         public HexCell(int id, HexCoord coordinate)
         {
             if (id < 0)

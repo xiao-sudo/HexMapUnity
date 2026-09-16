@@ -100,5 +100,54 @@ namespace HexMap.Runtime.Tests
             Assert.Throws<ArgumentOutOfRangeException>(
                 () => new HexMapDefinition(HexMapRadius.MaxSupportedRadius + 1));
         }
+
+        [Test]
+        public void SimplifiedCellIdFormulaMatchesHexMapAtRadiusEleven()
+        {
+            const int radius = 11;
+            var map = new HexMap(new HexMapDefinition(radius));
+
+            foreach (var cell in map.Cells)
+            {
+                var expected = ComputeCellId(cell.Coordinate);
+                Assert.That(cell.Id, Is.EqualTo(expected),
+                    "CellId mismatch for coordinate ({0},{1})",
+                    cell.Coordinate.Q, cell.Coordinate.R);
+            }
+        }
+
+        private static int ComputeCellId(HexCoord coordinate)
+        {
+            var distance = HexCoord.Distance(new HexCoord(0, 0), coordinate);
+
+            if (distance == 0)
+            {
+                return 0;
+            }
+
+            var firstIdInRing = 1 + 3 * distance * (distance - 1);
+            return firstIdInRing + ComputeRingOffset(coordinate, distance);
+        }
+
+        private static int ComputeRingOffset(HexCoord coordinate, int distance)
+        {
+            if (coordinate.Q == -distance)
+            {
+                return coordinate.R;
+            }
+
+            if (coordinate.Q == distance)
+            {
+                return 5 * distance - 1 + coordinate.R + distance;
+            }
+
+            var offset = distance + 1 + 2 * (coordinate.Q + distance - 1);
+            if (coordinate.R > 0)
+            {
+                offset++;
+            }
+
+            return offset;
+        }
     }
 }
