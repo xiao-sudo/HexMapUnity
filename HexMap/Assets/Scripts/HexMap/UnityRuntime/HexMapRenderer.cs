@@ -119,9 +119,11 @@ namespace HexMap.UnityRuntime
             var mesh = new Mesh { name = "Generated Hex Cell" };
             var vertices = new Vector3[7];
             var borderDistances = new Vector2[7];
+            var normalizedPositions = new Vector2[7];
             var triangles = new int[18];
             vertices[0] = Vector3.zero;
             borderDistances[0] = Vector2.right;
+            normalizedPositions[0] = Vector2.zero;
 
             for (var index = 0; index < 6; index++)
             {
@@ -133,6 +135,9 @@ namespace HexMap.UnityRuntime
                     ? new Vector3(x, secondary, 0f)
                     : new Vector3(x, 0f, secondary);
                 borderDistances[index + 1] = Vector2.zero;
+                // Keep shader-space edge normals fixed for Pointy and Flat layouts.
+                var normalizedRadians = index * 60f * Mathf.Deg2Rad;
+                normalizedPositions[index + 1] = new Vector2(Mathf.Cos(normalizedRadians), Mathf.Sin(normalizedRadians));
 
                 var triangleIndex = index * 3;
                 triangles[triangleIndex] = 0;
@@ -150,6 +155,7 @@ namespace HexMap.UnityRuntime
 
             mesh.vertices = vertices;
             mesh.uv = borderDistances;
+            mesh.uv2 = normalizedPositions;
             mesh.triangles = triangles;
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();

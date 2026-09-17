@@ -22,8 +22,8 @@ namespace HexMap.UnityRuntime.Tests
         [Test]
         public void AppearanceEqualityUsesVisibleColorAndBorderSettings()
         {
-            var first = new HexAppearance(true, Color.red);
-            var same = new HexAppearance(true, Color.red);
+            var first = new HexAppearance(true, Color.red, 0.05f, false, 1f);
+            var same = new HexAppearance(true, Color.red, 0.05f, false, 1f);
             var different = new HexAppearance(false, Color.red);
             var differentBorderWidth = new HexAppearance(true, Color.red, 0.1f, false, 1f);
             var differentGradientEnabled = new HexAppearance(true, Color.red, 0.05f, true, 1f);
@@ -203,7 +203,11 @@ namespace HexMap.UnityRuntime.Tests
                             new HexMapRenderConfig(parent.transform, null, 0));
                         try
                         {
-                            var uv = parent.GetComponentInChildren<MeshFilter>().sharedMesh.uv;
+                            var mesh = parent.GetComponentInChildren<MeshFilter>().sharedMesh;
+                            var uv = mesh.uv;
+                            var normalizedPositions = mesh.uv2;
+                            Assert.That(normalizedPositions.Length, Is.EqualTo(7));
+                            Assert.That(normalizedPositions[0], Is.EqualTo(Vector2.zero));
                             Assert.That(uv.Length, Is.EqualTo(7));
                             Assert.That(uv[0].x, Is.EqualTo(1f));
                             Assert.That(uv[0].y, Is.EqualTo(0f));
@@ -211,6 +215,9 @@ namespace HexMap.UnityRuntime.Tests
                             {
                                 Assert.That(uv[index].x, Is.EqualTo(0f));
                                 Assert.That(uv[index].y, Is.EqualTo(0f));
+                                var angle = (index - 1) * 60f * Mathf.Deg2Rad;
+                                Assert.That(normalizedPositions[index].x, Is.EqualTo(Mathf.Cos(angle)).Within(0.00001f));
+                                Assert.That(normalizedPositions[index].y, Is.EqualTo(Mathf.Sin(angle)).Within(0.00001f));
                             }
                         }
                         finally
@@ -230,6 +237,7 @@ namespace HexMap.UnityRuntime.Tests
         {
             var shader = Shader.Find("HexMap/InstancedColor");
             Assert.That(shader, Is.Not.Null);
+            Assert.That(UnityEditor.ShaderUtil.ShaderHasError(shader), Is.False);
 
 
             var material = new Material(shader);
@@ -240,13 +248,16 @@ namespace HexMap.UnityRuntime.Tests
                 Assert.That(material.HasProperty("_BorderWidth"), Is.True);
                 Assert.That(material.HasProperty("_GradientEnabled"), Is.True);
                 Assert.That(material.HasProperty("_GradientPower"), Is.True);
+                Assert.That(material.HasProperty("_GradientStartAlpha"), Is.True);
+                Assert.That(material.GetFloat("_GradientStartAlpha"), Is.EqualTo(0.5f));
                 Assert.That(material.HasProperty("_InteriorAlpha"), Is.True);
-                Assert.That(material.HasProperty("_AntiAliasing"), Is.True);
+                Assert.That(material.HasProperty("_InnerRadius"), Is.True);
+                Assert.That(material.GetFloat("_InnerRadius"), Is.EqualTo(0.4275f).Within(0.00001f));
+                Assert.That(material.HasProperty("_AntiAliasing"), Is.False);
                 Assert.That(material.GetFloat("_BorderWidth"), Is.EqualTo(0.05f));
                 Assert.That(material.GetFloat("_GradientEnabled"), Is.EqualTo(0f));
                 Assert.That(material.GetFloat("_GradientPower"), Is.EqualTo(1f));
                 Assert.That(material.GetFloat("_InteriorAlpha"), Is.EqualTo(0f));
-                Assert.That(material.GetFloat("_AntiAliasing"), Is.EqualTo(1f));
             }
             finally
             {
@@ -259,7 +270,8 @@ namespace HexMap.UnityRuntime.Tests
             var shader = Shader.Find("HexMap/InstancedColor");
             Assert.That(shader, Is.Not.Null);
             var material = new Material(shader);
-            var map = new Runtime.HexMap(new HexMapDefinition(1));
+            // A single cell ensures the inspected Renderer belongs to the target view.
+            var map = new Runtime.HexMap(new HexMapDefinition(0));
             var parent = new GameObject("Renderer Parent");
 
             try

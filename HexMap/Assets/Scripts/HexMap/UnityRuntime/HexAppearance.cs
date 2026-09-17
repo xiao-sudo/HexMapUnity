@@ -6,7 +6,7 @@ namespace HexMap.UnityRuntime
     public readonly struct HexAppearance : IEquatable<HexAppearance>
     {
         public HexAppearance(bool visible, Color color)
-            : this(visible, color, 0.05f, false, 1f)
+            : this(visible, color, 0.02f, true, 8f)
         {
         }
 

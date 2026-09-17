@@ -20,3 +20,7 @@ This is a single-context repository using root `CONTEXT.md` and `docs/adr/`. See
 ### C# member naming
 
 Private and instance member fields in `HexMap` must use the `m_` prefix, for example `m_Radius`, `m_CellsByCoordinate`, and `m_Cells`. Keep local variables and method parameters without this prefix
+
+### Unity meta files
+
+Do not manually create or modify Unity `.meta` files. Leave `.meta` file generation to Unity. Avoid including unrelated `.meta` changes when editing project files unless the user explicitly requests `.meta` file changes.
