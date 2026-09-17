@@ -12,6 +12,9 @@ namespace HexMap.UnityRuntime
         private bool m_HasAppearance;
         private HexAppearance m_Appearance;
 
+        private static readonly int s_BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int s_GradientEnabledId = Shader.PropertyToID("_GradientEnabled");
+
         public HexRenderHandle(MeshRenderer renderer, int generation)
         {
             m_Renderer = renderer;
@@ -39,36 +42,14 @@ namespace HexMap.UnityRuntime
             m_Appearance = appearance;
             m_HasAppearance = true;
             m_Renderer.enabled = appearance.Visible;
-            m_PropertyBlock.Clear();
-
-            var material = m_Renderer.sharedMaterial;
-            if (material != null)
+            if (!appearance.Visible)
             {
-                if (material.HasProperty("_BaseColor"))
-                {
-                    m_PropertyBlock.SetColor("_BaseColor", appearance.Color);
-                }
-
-                if (material.HasProperty("_BorderWidth"))
-                {
-                    m_PropertyBlock.SetFloat("_BorderWidth", appearance.BorderWidth);
-                }
-
-                if (material.HasProperty("_GradientEnabled"))
-                {
-                    m_PropertyBlock.SetFloat("_GradientEnabled", appearance.GradientEnabled ? 1f : 0f);
-                }
-
-                if (material.HasProperty("_GradientPower"))
-                {
-                    m_PropertyBlock.SetFloat("_GradientPower", appearance.GradientPower);
-                }
-
-                if (material.HasProperty("_Color"))
-                {
-                    m_PropertyBlock.SetColor("_Color", appearance.Color);
-                }
+                return;
             }
+
+            m_PropertyBlock.Clear();
+            m_PropertyBlock.SetColor(s_BaseColorId, appearance.Color);
+            m_PropertyBlock.SetFloat(s_GradientEnabledId, appearance.GradientEnabled ? 1f : 0f);
 
             m_Renderer.SetPropertyBlock(m_PropertyBlock);
         }

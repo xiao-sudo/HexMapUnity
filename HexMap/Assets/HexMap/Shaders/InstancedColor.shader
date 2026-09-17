@@ -58,12 +58,12 @@ Shader "HexMap/InstancedColor"
 
             UNITY_INSTANCING_BUFFER_START(Props)
                 UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
-                UNITY_DEFINE_INSTANCED_PROP(float, _BorderWidth)
                 UNITY_DEFINE_INSTANCED_PROP(float, _GradientEnabled)
-                UNITY_DEFINE_INSTANCED_PROP(float, _GradientPower)
             UNITY_INSTANCING_BUFFER_END(Props)
 
             CBUFFER_START(UnityPerMaterial)
+                float _BorderWidth;
+                float _GradientPower;
                 float _InteriorAlpha;
                 float _InnerRadius;
                 float _GradientStartAlpha;
@@ -112,9 +112,9 @@ Shader "HexMap/InstancedColor"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
                 float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(Props, _BaseColor);
-                float borderWidth = clamp(UNITY_ACCESS_INSTANCED_PROP(Props, _BorderWidth), 0.001, 0.5);
+                float borderWidth = clamp(_BorderWidth, 0.001, 0.5);
                 float gradientEnabled = UNITY_ACCESS_INSTANCED_PROP(Props, _GradientEnabled);
-                float gradientPower = max(UNITY_ACCESS_INSTANCED_PROP(Props, _GradientPower), 0.1);
+                float gradientPower = max(_GradientPower, 0.1);
                 float distanceFromOuterEdge = saturate(input.borderDistance);
                 float centerRadius = length(input.normalizedPosition);
                 float insetApothem = 0.8660254 * (1.0 - borderWidth);

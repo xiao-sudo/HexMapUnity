@@ -20,35 +20,27 @@ namespace HexMap.UnityRuntime.Tests
             }
         }
         [Test]
-        public void AppearanceEqualityUsesVisibleColorAndBorderSettings()
+        public void AppearanceEqualityUsesVisibleColorAndGradientEnabled()
         {
-            var first = new HexAppearance(true, Color.red, 0.05f, false, 1f);
-            var same = new HexAppearance(true, Color.red, 0.05f, false, 1f);
+            var first = new HexAppearance(true, Color.red, false);
+            var same = new HexAppearance(true, Color.red, false);
             var different = new HexAppearance(false, Color.red);
-            var differentBorderWidth = new HexAppearance(true, Color.red, 0.1f, false, 1f);
-            var differentGradientEnabled = new HexAppearance(true, Color.red, 0.05f, true, 1f);
-            var differentGradientPower = new HexAppearance(true, Color.red, 0.05f, false, 2f);
+            var differentGradientEnabled = new HexAppearance(true, Color.red, true);
 
             Assert.That(first, Is.EqualTo(same));
             Assert.That(first, Is.Not.EqualTo(different));
-            Assert.That(first, Is.Not.EqualTo(differentBorderWidth));
             Assert.That(first, Is.Not.EqualTo(differentGradientEnabled));
-            Assert.That(first, Is.Not.EqualTo(differentGradientPower));
-            Assert.That(first.BorderWidth, Is.EqualTo(0.05f));
             Assert.That(first.GradientEnabled, Is.False);
-            Assert.That(first.GradientPower, Is.EqualTo(1f));
         }
 
         [Test]
-        public void ExplicitAppearanceConstructorPublishesBorderSettings()
+        public void ExplicitAppearanceConstructorPublishesGradientEnabled()
         {
-            var appearance = new HexAppearance(true, Color.cyan, 0.2f, true, 3f);
+            var appearance = new HexAppearance(true, Color.cyan, true);
 
             Assert.That(appearance.Visible, Is.True);
             Assert.That(appearance.Color, Is.EqualTo(Color.cyan));
-            Assert.That(appearance.BorderWidth, Is.EqualTo(0.2f));
             Assert.That(appearance.GradientEnabled, Is.True);
-            Assert.That(appearance.GradientPower, Is.EqualTo(3f));
         }
         [Test]
         public void BuildPublishesViewsOnlyForExistingCells()
@@ -265,13 +257,15 @@ namespace HexMap.UnityRuntime.Tests
             }
         }
         [Test]
-        public void SetAppearancePublishesInstancedBorderSettings()
+        public void SetAppearancePublishesInstancedColorAndGradientEnabled()
         {
             var shader = Shader.Find("HexMap/InstancedColor");
             Assert.That(shader, Is.Not.Null);
             var material = new Material(shader);
             // A single cell ensures the inspected Renderer belongs to the target view.
             var map = new Runtime.HexMap(new HexMapDefinition(0));
+            material.SetFloat("_BorderWidth", 0.2f);
+            material.SetFloat("_GradientPower", 3f);
             var parent = new GameObject("Renderer Parent");
 
             try
@@ -284,15 +278,22 @@ namespace HexMap.UnityRuntime.Tests
                 {
                     HexView view;
                     Assert.That(renderer.TryGetHexView(new HexCoord(0, 0), out view), Is.True);
-                    view.SetAppearance(new HexAppearance(true, Color.magenta, 0.2f, true, 3f));
+                    view.SetAppearance(new HexAppearance(true, Color.magenta, true));
 
                     var meshRenderer = parent.GetComponentInChildren<MeshRenderer>();
                     var propertyBlock = new MaterialPropertyBlock();
                     meshRenderer.GetPropertyBlock(propertyBlock);
                     Assert.That(propertyBlock.GetColor("_BaseColor"), Is.EqualTo(Color.magenta));
-                    Assert.That(propertyBlock.GetFloat("_BorderWidth"), Is.EqualTo(0.2f));
                     Assert.That(propertyBlock.GetFloat("_GradientEnabled"), Is.EqualTo(1f));
-                    Assert.That(propertyBlock.GetFloat("_GradientPower"), Is.EqualTo(3f));
+                    Assert.That(meshRenderer.sharedMaterial.GetFloat("_BorderWidth"), Is.EqualTo(0.2f));
+                    Assert.That(meshRenderer.sharedMaterial.GetFloat("_GradientPower"), Is.EqualTo(3f));
+                    view.SetAppearance(new HexAppearance(false, Color.cyan, false));
+
+                    meshRenderer.GetPropertyBlock(propertyBlock);
+                    Assert.That(meshRenderer.enabled, Is.False);
+                    Assert.That(propertyBlock.GetColor("_BaseColor"), Is.EqualTo(Color.magenta));
+                    Assert.That(propertyBlock.GetFloat("_GradientEnabled"), Is.EqualTo(1f));
+
                 }
                 finally
                 {
