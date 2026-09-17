@@ -230,11 +230,12 @@ namespace HexMap.UnityRuntime.Tests
         {
             var shader = Shader.Find("HexMap/InstancedColor");
             Assert.That(shader, Is.Not.Null);
-            Assert.That(shader.GetTag("RenderType", true, string.Empty), Is.EqualTo("Transparent"));
+
 
             var material = new Material(shader);
             try
             {
+                Assert.That(material.GetTag("RenderType", true, string.Empty), Is.EqualTo("Transparent"));
                 Assert.That(material.renderQueue, Is.EqualTo(3000));
                 Assert.That(material.HasProperty("_BorderWidth"), Is.True);
                 Assert.That(material.HasProperty("_GradientEnabled"), Is.True);
