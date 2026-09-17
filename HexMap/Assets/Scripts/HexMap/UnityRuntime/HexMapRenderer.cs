@@ -118,8 +118,10 @@ namespace HexMap.UnityRuntime
         {
             var mesh = new Mesh { name = "Generated Hex Cell" };
             var vertices = new Vector3[7];
+            var borderDistances = new Vector2[7];
             var triangles = new int[18];
             vertices[0] = Vector3.zero;
+            borderDistances[0] = Vector2.right;
 
             for (var index = 0; index < 6; index++)
             {
@@ -130,6 +132,7 @@ namespace HexMap.UnityRuntime
                 vertices[index + 1] = m_Layout.Plane == HexPlane.XY
                     ? new Vector3(x, secondary, 0f)
                     : new Vector3(x, 0f, secondary);
+                borderDistances[index + 1] = Vector2.zero;
 
                 var triangleIndex = index * 3;
                 triangles[triangleIndex] = 0;
@@ -146,6 +149,7 @@ namespace HexMap.UnityRuntime
             }
 
             mesh.vertices = vertices;
+            mesh.uv = borderDistances;
             mesh.triangles = triangles;
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
@@ -175,7 +179,6 @@ namespace HexMap.UnityRuntime
                 DestroyObject(m_SharedMesh);
                 m_SharedMesh = null;
             }
-      
         }
 
         private static void DestroyObject(UnityEngine.Object target)

@@ -49,6 +49,21 @@ namespace HexMap.UnityRuntime
                     m_PropertyBlock.SetColor("_BaseColor", appearance.Color);
                 }
 
+                if (material.HasProperty("_BorderWidth"))
+                {
+                    m_PropertyBlock.SetFloat("_BorderWidth", appearance.BorderWidth);
+                }
+
+                if (material.HasProperty("_GradientEnabled"))
+                {
+                    m_PropertyBlock.SetFloat("_GradientEnabled", appearance.GradientEnabled ? 1f : 0f);
+                }
+
+                if (material.HasProperty("_GradientPower"))
+                {
+                    m_PropertyBlock.SetFloat("_GradientPower", appearance.GradientPower);
+                }
+
                 if (material.HasProperty("_Color"))
                 {
                     m_PropertyBlock.SetColor("_Color", appearance.Color);

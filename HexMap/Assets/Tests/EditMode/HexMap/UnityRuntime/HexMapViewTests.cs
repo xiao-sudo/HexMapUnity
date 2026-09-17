@@ -20,16 +20,36 @@ namespace HexMap.UnityRuntime.Tests
             }
         }
         [Test]
-        public void AppearanceEqualityUsesVisibleAndColor()
+        public void AppearanceEqualityUsesVisibleColorAndBorderSettings()
         {
             var first = new HexAppearance(true, Color.red);
             var same = new HexAppearance(true, Color.red);
             var different = new HexAppearance(false, Color.red);
+            var differentBorderWidth = new HexAppearance(true, Color.red, 0.1f, false, 1f);
+            var differentGradientEnabled = new HexAppearance(true, Color.red, 0.05f, true, 1f);
+            var differentGradientPower = new HexAppearance(true, Color.red, 0.05f, false, 2f);
 
             Assert.That(first, Is.EqualTo(same));
             Assert.That(first, Is.Not.EqualTo(different));
+            Assert.That(first, Is.Not.EqualTo(differentBorderWidth));
+            Assert.That(first, Is.Not.EqualTo(differentGradientEnabled));
+            Assert.That(first, Is.Not.EqualTo(differentGradientPower));
+            Assert.That(first.BorderWidth, Is.EqualTo(0.05f));
+            Assert.That(first.GradientEnabled, Is.False);
+            Assert.That(first.GradientPower, Is.EqualTo(1f));
         }
 
+        [Test]
+        public void ExplicitAppearanceConstructorPublishesBorderSettings()
+        {
+            var appearance = new HexAppearance(true, Color.cyan, 0.2f, true, 3f);
+
+            Assert.That(appearance.Visible, Is.True);
+            Assert.That(appearance.Color, Is.EqualTo(Color.cyan));
+            Assert.That(appearance.BorderWidth, Is.EqualTo(0.2f));
+            Assert.That(appearance.GradientEnabled, Is.True);
+            Assert.That(appearance.GradientPower, Is.EqualTo(3f));
+        }
         [Test]
         public void BuildPublishesViewsOnlyForExistingCells()
         {
@@ -165,6 +185,113 @@ namespace HexMap.UnityRuntime.Tests
             }
         }
 
+        [Test]
+        public void RendererPublishesNormalizedBorderDistanceWeightsForEveryLayoutVariant()
+        {
+            var map = new Runtime.HexMap(new HexMapDefinition(1));
+            var parent = new GameObject("Renderer Parent");
+
+            try
+            {
+                foreach (var orientation in new[] { HexOrientation.Pointy, HexOrientation.Flat })
+                {
+                    foreach (var plane in new[] { HexPlane.XY, HexPlane.XZ })
+                    {
+                        var renderer = new HexMapRenderer(
+                            map,
+                            new HexLayout(orientation, plane, 2f, Vector3.zero, 0.65f),
+                            new HexMapRenderConfig(parent.transform, null, 0));
+                        try
+                        {
+                            var uv = parent.GetComponentInChildren<MeshFilter>().sharedMesh.uv;
+                            Assert.That(uv.Length, Is.EqualTo(7));
+                            Assert.That(uv[0].x, Is.EqualTo(1f));
+                            Assert.That(uv[0].y, Is.EqualTo(0f));
+                            for (var index = 1; index < uv.Length; index++)
+                            {
+                                Assert.That(uv[index].x, Is.EqualTo(0f));
+                                Assert.That(uv[index].y, Is.EqualTo(0f));
+                            }
+                        }
+                        finally
+                        {
+                            renderer.Dispose();
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(parent);
+            }
+        }
+        [Test]
+        public void InstancedColorShaderUsesTransparentBorderDefaults()
+        {
+            var shader = Shader.Find("HexMap/InstancedColor");
+            Assert.That(shader, Is.Not.Null);
+            Assert.That(shader.GetTag("RenderType", true, string.Empty), Is.EqualTo("Transparent"));
+
+            var material = new Material(shader);
+            try
+            {
+                Assert.That(material.renderQueue, Is.EqualTo(3000));
+                Assert.That(material.HasProperty("_BorderWidth"), Is.True);
+                Assert.That(material.HasProperty("_GradientEnabled"), Is.True);
+                Assert.That(material.HasProperty("_GradientPower"), Is.True);
+                Assert.That(material.HasProperty("_InteriorAlpha"), Is.True);
+                Assert.That(material.HasProperty("_AntiAliasing"), Is.True);
+                Assert.That(material.GetFloat("_BorderWidth"), Is.EqualTo(0.05f));
+                Assert.That(material.GetFloat("_GradientEnabled"), Is.EqualTo(0f));
+                Assert.That(material.GetFloat("_GradientPower"), Is.EqualTo(1f));
+                Assert.That(material.GetFloat("_InteriorAlpha"), Is.EqualTo(0f));
+                Assert.That(material.GetFloat("_AntiAliasing"), Is.EqualTo(1f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+            }
+        }
+        [Test]
+        public void SetAppearancePublishesInstancedBorderSettings()
+        {
+            var shader = Shader.Find("HexMap/InstancedColor");
+            Assert.That(shader, Is.Not.Null);
+            var material = new Material(shader);
+            var map = new Runtime.HexMap(new HexMapDefinition(1));
+            var parent = new GameObject("Renderer Parent");
+
+            try
+            {
+                var renderer = new HexMapRenderer(
+                    map,
+                    new HexLayout(HexOrientation.Pointy, HexPlane.XZ, 1f, Vector3.zero),
+                    new HexMapRenderConfig(parent.transform, material, 0));
+                try
+                {
+                    HexView view;
+                    Assert.That(renderer.TryGetHexView(new HexCoord(0, 0), out view), Is.True);
+                    view.SetAppearance(new HexAppearance(true, Color.magenta, 0.2f, true, 3f));
+
+                    var meshRenderer = parent.GetComponentInChildren<MeshRenderer>();
+                    var propertyBlock = new MaterialPropertyBlock();
+                    meshRenderer.GetPropertyBlock(propertyBlock);
+                    Assert.That(propertyBlock.GetColor("_BaseColor"), Is.EqualTo(Color.magenta));
+                    Assert.That(propertyBlock.GetFloat("_BorderWidth"), Is.EqualTo(0.2f));
+                    Assert.That(propertyBlock.GetFloat("_GradientEnabled"), Is.EqualTo(1f));
+                    Assert.That(propertyBlock.GetFloat("_GradientPower"), Is.EqualTo(3f));
+                }
+                finally
+                {
+                    renderer.Dispose();
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+                UnityEngine.Object.DestroyImmediate(parent);
+            }
+        }
         [Test]
         public void RendererSharesMeshAndDoesNotCreateMeshColliders()
         {
