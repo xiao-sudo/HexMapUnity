@@ -14,7 +14,9 @@ namespace HexMap.Runtime
         NoValidTargets = 2,
         NoReachableTarget = 3,
         ResultCapacityExceeded = 4,
-        NoValidStarts = 5
+        NoValidStarts = 5,
+        MapNotInitialized = 6,
+        PlotNotFound = 7
     }
 
     public sealed class PathResult
@@ -78,7 +80,7 @@ namespace HexMap.Runtime
             m_Cost = m_Cells.Count - 1;
         }
 
-        internal void SetFailure(PathResultStatus status, PathFailureReason reason)
+        public void SetFailure(PathResultStatus status, PathFailureReason reason)
         {
             m_Cells.Clear();
             m_Status = status;

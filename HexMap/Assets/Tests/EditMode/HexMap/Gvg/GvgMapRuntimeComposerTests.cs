@@ -322,6 +322,17 @@ namespace HexMap.Gvg.Tests
             return CellAt(map, q, r).Id;
         }
 
+        [Test]
+        public void ComposerRejectsUninitializedStructRow()
+        {
+            var map = CreateMap(0);
+            var rows = new List<GvgPlotRuntimeData> { default(GvgPlotRuntimeData) };
+
+            PlotRegistry registry;
+            string error;
+            Assert.That(GvgMapRuntimeComposer.TryCompose(map, rows, out registry, out error), Is.False);
+            Assert.That(error, Does.Contain("uninitialized entry"));
+        }
         private static List<GvgPlotRuntimeData> DefaultRows(RuntimeHexMap map)
         {
             var rows = new List<GvgPlotRuntimeData>(map.Count);

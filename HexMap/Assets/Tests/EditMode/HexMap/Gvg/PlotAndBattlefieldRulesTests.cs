@@ -82,18 +82,20 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void PlotRejectsOwnerFactionIdBelowNoFactionId()
+        public void PlotAcceptsOpaqueOwnerFactionId()
         {
             var map = new RuntimeHexMap(new HexMapDefinition(0));
             var cell = CellAt(map, 0, 0);
 
-            Assert.Throws<ArgumentOutOfRangeException>(() => new Plot(
+            var plot = new Plot(
                 1,
                 new[] { cell },
                 PlotType.Normal,
                 PlotState.Open,
                 BlockingState.Passable,
-                Plot.NoFactionId - 1));
+                Plot.NoFactionId + 1);
+
+            Assert.That(plot.OwnerFactionId, Is.EqualTo(Plot.NoFactionId + 1));
         }
 
         [Test]

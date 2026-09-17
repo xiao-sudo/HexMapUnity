@@ -40,9 +40,9 @@ namespace HexMap.Gvg
             for (var index = 0; index < rows.Count; index++)
             {
                 var row = rows[index];
-                if (row == null)
+                if (row.HexIds == null)
                 {
-                    error = "The plot row list contains a null entry at index " + index + ".";
+                    error = "The plot row list contains an uninitialized entry at index " + index + ".";
                     return false;
                 }
 

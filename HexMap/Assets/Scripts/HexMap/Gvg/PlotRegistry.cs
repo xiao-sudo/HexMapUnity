@@ -43,12 +43,24 @@ namespace HexMap.Gvg
         {
             return m_PlotsById.TryGetValue(plotId, out plot);
         }
+        public bool TrySetOwnerFactionId(int plotId, int ownerFactionId)
+        {
+            Plot plot;
+            if (!TryGetPlot(plotId, out plot))
+            {
+                return false;
+            }
+
+            plot.SetOwnerFactionId(ownerFactionId);
+            return true;
+        }
 
         public Plot GetPlot(int plotId)
         {
             Plot plot;
             if (!TryGetPlot(plotId, out plot))
-                throw new KeyNotFoundException("The Plot ID is not registered: " + plotId);
+                return null;
+
             return plot;
         }
 
@@ -73,7 +85,8 @@ namespace HexMap.Gvg
         {
             Plot plot;
             if (!TryGetPlotForCell(cellId, out plot))
-                throw new KeyNotFoundException("The cell has no unique open Plot: " + cellId);
+                return null;
+
             return plot;
         }
 
@@ -81,7 +94,8 @@ namespace HexMap.Gvg
         {
             Plot plot;
             if (!TryGetPlot(cell, out plot))
-                throw new KeyNotFoundException("The cell has no unique open Plot: " + cell.Id);
+                return null;
+
             return plot;
         }
 

@@ -38,7 +38,7 @@ namespace HexMap.Gvg
         private readonly IReadOnlyList<HexCell> m_Cells;
         private readonly PlotType m_PlotType;
         private PlotState m_PlotState;
-        private readonly int m_OwnerFactionId;
+        private int m_OwnerFactionId;
         private readonly BlockingState m_BlockingState;
         private readonly int m_AffiliatedCampId;
 
@@ -116,6 +116,11 @@ namespace HexMap.Gvg
             if (m_PlotState == PlotState.NotOpen) return false;
             m_PlotState = PlotState.NotOpen;
             return true;
+        }
+
+        internal void SetOwnerFactionId(int ownerFactionId)
+        {
+            m_OwnerFactionId = ownerFactionId;
         }
     }
 }

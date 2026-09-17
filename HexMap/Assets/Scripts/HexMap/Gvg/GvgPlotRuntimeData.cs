@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 
 namespace HexMap.Gvg
 {
@@ -10,7 +9,7 @@ namespace HexMap.Gvg
     /// Instances are constructed by data loaders; the runtime composition pipeline
     /// only consumes them. This DTO is not Unity-serialized.
     /// </summary>
-    public sealed class GvgPlotRuntimeData
+    public readonly struct GvgPlotRuntimeData
     {
         private readonly int m_PlotId;
         private readonly IReadOnlyList<int> m_HexIds;
@@ -23,7 +22,7 @@ namespace HexMap.Gvg
 
         public GvgPlotRuntimeData(
             int plotId,
-            IEnumerable<int> hexIds,
+            IReadOnlyList<int> hexIds,
             PlotType plotType,
             int generationType,
             int start,
@@ -34,11 +33,8 @@ namespace HexMap.Gvg
             if (hexIds == null) throw new ArgumentNullException(nameof(hexIds));
             if (affiliatedCampId < Plot.NoAffiliatedCampId)
                 throw new ArgumentOutOfRangeException(nameof(affiliatedCampId));
-            if (ownerFactionId < Plot.NoFactionId)
-                throw new ArgumentOutOfRangeException(nameof(ownerFactionId));
-
             m_PlotId = plotId;
-            m_HexIds = new ReadOnlyCollection<int>(new List<int>(hexIds));
+            m_HexIds = hexIds;
             m_PlotType = plotType;
             m_GenerationType = generationType;
             m_Start = start;
@@ -47,14 +43,14 @@ namespace HexMap.Gvg
             m_OwnerFactionId = ownerFactionId;
         }
 
-        public GvgPlotRuntimeData(int plotId, IEnumerable<int> hexIds, PlotType plotType)
+        public GvgPlotRuntimeData(int plotId, IReadOnlyList<int> hexIds, PlotType plotType)
             : this(plotId, hexIds, plotType, 0, 0, -1, Plot.NoAffiliatedCampId)
         {
         }
 
         public GvgPlotRuntimeData(
             int plotId,
-            IEnumerable<int> hexIds,
+            IReadOnlyList<int> hexIds,
             PlotType plotType,
             int start,
             int end,
