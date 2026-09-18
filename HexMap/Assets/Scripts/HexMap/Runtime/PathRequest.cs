@@ -1,34 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 
 namespace HexMap.Runtime
 {
-    public sealed class PathRequest
-    {
-        private readonly IReadOnlyList<HexCell> m_Starts;
-        private readonly IReadOnlyList<HexCell> m_Targets;
-        private readonly IHexPathPolicy m_Policy;
-
-        public PathRequest(HexCell start, IReadOnlyList<HexCell> targets, IHexPathPolicy policy)
-            : this(new[] { start }, targets, policy) { }
-
-        public PathRequest(IReadOnlyList<HexCell> starts, IReadOnlyList<HexCell> targets, IHexPathPolicy policy)
-        {
-            if (starts == null) throw new ArgumentNullException(nameof(starts));
-            if (targets == null) throw new ArgumentNullException(nameof(targets));
-            if (policy == null) throw new ArgumentNullException(nameof(policy));
-            m_Starts = new ReadOnlyCollection<HexCell>(new List<HexCell>(starts));
-            m_Targets = new ReadOnlyCollection<HexCell>(new List<HexCell>(targets));
-            m_Policy = policy;
-        }
-
-        public HexCell Start { get { return m_Starts.Count == 0 ? default(HexCell) : m_Starts[0]; } }
-        public IReadOnlyList<HexCell> Starts { get { return m_Starts; } }
-        public IReadOnlyList<HexCell> Targets { get { return m_Targets; } }
-        public IHexPathPolicy Policy { get { return m_Policy; } }
-    }
-
     public sealed class ReusablePathRequest
     {
         private readonly List<HexCell> m_Starts;

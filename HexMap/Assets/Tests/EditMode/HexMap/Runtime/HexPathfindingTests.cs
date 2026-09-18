@@ -360,20 +360,26 @@ namespace HexMap.Runtime.Tests
             Assert.That(result.ReachedTarget, Is.EqualTo(default(HexCell)));
         }
 
-        private static PathRequest CreateRequest(
+        private static ReusablePathRequest CreateRequest(
             HexCell start,
             HexCell[] targets,
             object context,
             Func<HexCell, object, bool> canPass,
             Func<HexCell, object, bool> canEnter)
         {
-            return new PathRequest(
+            var request = new ReusablePathRequest(
                 start,
-                targets,
+                targets.Length,
                 new DelegatePathPolicy(canPass, canEnter, context));
+            for (var index = 0; index < targets.Length; index++)
+            {
+                Assert.That(request.TryAddTarget(targets[index]), Is.True);
+            }
+
+            return request;
         }
 
-        private static PathResult FindPath(HexMap map, PathRequest request)
+        private static PathResult FindPath(HexMap map, ReusablePathRequest request)
         {
             var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
             var result = new PathResult(new List<int>(map.Count));

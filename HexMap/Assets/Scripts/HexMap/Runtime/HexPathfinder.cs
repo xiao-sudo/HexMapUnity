@@ -18,12 +18,6 @@ namespace HexMap.Runtime
             m_Workspace = workspace;
         }
 
-        public PathResult FindPath(PathRequest request, PathResult result)
-        {
-            if (request == null) throw new ArgumentNullException(nameof(request));
-            return FindPathCore(request.Starts, request.Targets, request.Policy, result);
-        }
-
         public PathResult FindPath(ReusablePathRequest request, PathResult result)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
