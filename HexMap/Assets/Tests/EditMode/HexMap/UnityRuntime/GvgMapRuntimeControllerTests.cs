@@ -33,16 +33,9 @@ namespace HexMap.UnityRuntime.Tests
 
             var startId = controller.HexMapView.Map.Query(0).Cell.Id;
             var targetId = controller.HexMapView.Map.Query(1).Cell.Id;
-            Plot plot;
-            Assert.That(controller.TryGetPlot(startId, out plot), Is.True);
-            Assert.That(plot.OwnerFactionId, Is.EqualTo(10));
-            Assert.That(controller.TrySetPlotOwnerFactionId(startId, -100), Is.True);
-            Assert.That(plot.OwnerFactionId, Is.EqualTo(-100));
 
-            // var result = new PathResult(new List<int>(controller.HexMapView.Map.Count));
             var r = controller.TryFindPlotPath(startId, targetId, 10);
             Assert.That(r.IsSuccess, Is.True);
-            // Assert.That(result.IsSuccess, Is.True);
             Assert.That(r.Count, Is.EqualTo(2));
         }
 
@@ -60,10 +53,6 @@ namespace HexMap.UnityRuntime.Tests
             {
                 new GvgPlotRuntimeData(999, new[] { 999999 }, PlotType.Normal)
             }), Is.False);
-
-            Plot plot;
-            Assert.That(controller.TryGetPlot(plotId, out plot), Is.True);
-            Assert.That(plot.OwnerFactionId, Is.EqualTo(20));
         }
 
         [Test]

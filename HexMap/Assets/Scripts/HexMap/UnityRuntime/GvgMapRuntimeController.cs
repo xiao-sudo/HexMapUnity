@@ -19,6 +19,9 @@ namespace HexMap.UnityRuntime
 
     public readonly struct PlotScreenPickResult
     {
+        /// <summary>
+        /// 使用指定的拾取状态和地块 ID 创建不可变的屏幕拾取结果。仅由本结构的成功与失败工厂方法调用。
+        /// </summary>
         private PlotScreenPickResult(PlotScreenPickStatus status, int plotId)
         {
             Status = status;
@@ -33,11 +36,17 @@ namespace HexMap.UnityRuntime
             get { return Status == PlotScreenPickStatus.Found; }
         }
 
+        /// <summary>
+        /// 创建表示屏幕坐标成功命中地块的拾取结果。
+        /// </summary>
         internal static PlotScreenPickResult Found(int plotId)
         {
             return new PlotScreenPickResult(PlotScreenPickStatus.Found, plotId);
         }
 
+        /// <summary>
+        /// 创建表示屏幕坐标拾取失败的结果；失败结果的地块 ID 固定为 -1。
+        /// </summary>
         internal static PlotScreenPickResult Failure(PlotScreenPickStatus status)
         {
             return new PlotScreenPickResult(status, -1);
@@ -99,9 +108,11 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// Queries the selectable Plot at a Unity screen-space position without changing selection state.
-        /// A null camera falls back to Camera.main.
+        /// 根据屏幕坐标查询可选中的地块，但不会改变当前的选中状态。
         /// </summary>
+        /// <param name="screenPosition">Unity 屏幕坐标，原点由 Unity 的屏幕坐标系定义。</param>
+        /// <param name="cam">用于发射射线的相机；传入 <see langword="null"/> 时自动使用 <see cref="Camera.main"/>。</param>
+        /// <returns>成功时可取得地块 ID；失败时可通过状态判断地图、相机、射线与地块映射中的具体问题。</returns>
         public PlotScreenPickResult PickPlotAtScreenPosition(
             Vector2 screenPosition,
             Camera cam = null)
@@ -142,8 +153,9 @@ namespace HexMap.UnityRuntime
             return PlotScreenPickResult.Found(plot.PlotId);
         }
         /// <summary>
-        /// Gets or sets the world-space distance between a Plot center and its render anchor.
+        /// 获取或设置地块世界中心到渲染锚点的偏移距离。
         /// </summary>
+        /// <remarks>锚点沿地图平面的世界法线方向计算，通常用于将图标或标签抬离地图表面。设置值必须是有限数值。</remarks>
         public float PlotWorldAnchorHeightOffset
         {
             get { return m_PlotWorldAnchorHeightOffset; }
@@ -156,6 +168,9 @@ namespace HexMap.UnityRuntime
             }
         }
 
+        /// <summary>
+        /// 在 Unity 初始化组件时获取缺失的地图视图引用、构建运行时地图，并将 Inspector 配置的阵营颜色列表转换为便于查询的字典。
+        /// </summary>
         private void Awake()
         {
             if (m_HexMapView == null)
@@ -171,6 +186,9 @@ namespace HexMap.UnityRuntime
 
         }
 
+        /// <summary>
+        /// 从当前地图视图构建运行时六边形地图，并预分配寻路结果容器。地图已构建时不会重复构建；视图缺失或构建失败时会记录错误日志。
+        /// </summary>
         private void BuildMapFromView()
         {
             if (m_Map != null)
@@ -204,6 +222,9 @@ namespace HexMap.UnityRuntime
             }
         }
 
+        /// <summary>
+        /// 使用非空 GVG 地块快照初始化地块注册表、寻路服务和世界中心缓存。全部成功后才替换当前运行时数据，并会清除已有选中状态。
+        /// </summary>
         public bool TryInitialize(IReadOnlyList<GvgPlotRuntimeData> plots)
         {
             if (m_Map == null)
@@ -255,6 +276,9 @@ namespace HexMap.UnityRuntime
             return true;
         }
 
+        /// <summary>
+        /// 选中指定地块，并取消此前选中地块的视觉状态。地块不存在或已经选中时返回 false。
+        /// </summary>
         public bool Select(int plotId)
         {
             Plot plot;
@@ -269,6 +293,9 @@ namespace HexMap.UnityRuntime
             return true;
         }
 
+        /// <summary>
+        /// 仅当指定地块正处于选中状态时取消其选中状态；指定 ID 不是当前选中项时返回 false。
+        /// </summary>
         public bool Deselect(int plotId)
         {
             if (m_SelectedPlotId != plotId)
@@ -286,11 +313,17 @@ namespace HexMap.UnityRuntime
             return true;
         }
 
+        /// <summary>
+        /// 取消当前选中的地块；控制器没有选中地块时不执行任何操作并返回 false。
+        /// </summary>
         public bool DeselectAll()
         {
             return m_SelectedPlotId != -1 && Deselect(m_SelectedPlotId);
         }
-        public bool TryGetPlot(int plotId, out Plot plot)
+        /// <summary>
+        /// 按 ID 获取已初始化的运行时地块对象。注册表不存在或不包含该 ID 时返回 false，输出为 null。
+        /// </summary>
+        private bool TryGetPlot(int plotId, out Plot plot)
         {
             if (m_PlotRegistry == null)
             {
@@ -301,6 +334,9 @@ namespace HexMap.UnityRuntime
             return m_PlotRegistry.TryGetPlot(plotId, out plot);
         }
 
+        /// <summary>
+        /// 获取初始化时缓存的指定地块世界中心。中心缓存不存在或不含该地块时返回 false，输出为 Vector3.zero。
+        /// </summary>
         public bool TryGetPlotWorldCenter(int plotId, out Vector3 worldCenter)
         {
             if (m_PlotWorldCenters == null || !m_PlotWorldCenters.TryGetValue(plotId, out worldCenter))
@@ -313,8 +349,11 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// Gets a render anchor offset from the cached Plot center along the map plane's world normal.
+        /// 获取指定地块的渲染锚点世界坐标。
         /// </summary>
+        /// <param name="plotId">要查询的地块 ID。</param>
+        /// <param name="worldAnchor">查询成功时为从地块中心沿地图平面法线偏移后的世界坐标；失败时为 <see cref="Vector3.zero"/>。</param>
+        /// <returns>地块中心缓存和地图视图都可用时返回 <see langword="true"/>。</returns>
         public bool TryGetPlotWorldAnchor(int plotId, out Vector3 worldAnchor)
         {
             Vector3 worldCenter;
@@ -328,6 +367,9 @@ namespace HexMap.UnityRuntime
             return true;
         }
 
+        /// <summary>
+        /// 更新地块所属阵营；若 Inspector 中配置了该阵营颜色，则同步刷新地块内所有可用格子视图的颜色。
+        /// </summary>
         public bool TrySetPlotOwnerFactionId(int plotId, int ownerFactionId)
         {
             Plot plot;
@@ -349,6 +391,9 @@ namespace HexMap.UnityRuntime
             return r;
         }
 
+        /// <summary>
+        /// 将地块中所有已创建视图的格子设置为指定颜色，同时保持其填充显示。
+        /// </summary>
         private void SetPlotColor(Plot plot, Color color)
         {
             foreach (var cell in plot.Cells)
@@ -358,6 +403,9 @@ namespace HexMap.UnityRuntime
             }
         }
 
+        /// <summary>
+        /// 为地块中所有可取得的格子视图应用或移除选中外观。地图视图不存在时直接返回，缺少单个格子视图不会影响其他格子。
+        /// </summary>
         private void SetPlotSelection(Plot plot, bool selected)
         {
             if (m_HexMapView == null)
@@ -382,6 +430,9 @@ namespace HexMap.UnityRuntime
                 }
             }
         }
+        /// <summary>
+        /// 在已初始化的地块拓扑中查找从起始地块到目标地块的移动路径。地图未初始化或任一地块不存在时，在可复用结果对象中写入相应失败状态。
+        /// </summary>
         public PathResult TryFindPlotPath(
             int startPlotId,
             int targetPlotId,
@@ -404,6 +455,9 @@ namespace HexMap.UnityRuntime
             return m_PlotPathService.FindPath(startPlotId, targetPlotId, movingFactionId, m_PathResult);
         }
 
+        /// <summary>
+        /// 根据已组合的地块注册表及原始快照，计算并建立地块 ID 到世界中心坐标的映射。地图视图不存在或注册表缺少快照地块时会抛出 InvalidOperationException。
+        /// </summary>
         private Dictionary<int, Vector3> BuildPlotWorldCenters(
             PlotRegistry registry,
             IReadOnlyList<GvgPlotRuntimeData> plotData)
