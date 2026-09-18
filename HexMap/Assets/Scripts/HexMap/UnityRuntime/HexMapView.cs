@@ -18,6 +18,9 @@ namespace HexMap.UnityRuntime
         [SerializeField] private int m_CellLayer;
 
         [SerializeField]
+        private Color m_BaseAppearanceColor;
+
+        [SerializeField]
         private bool m_AutoBuildHexMap = false;
 
 #if UNITY_EDITOR
@@ -147,7 +150,7 @@ namespace HexMap.UnityRuntime
 
             m_Map = CreateMapSnapshot();
             m_Layout = CreateLayoutSnapshot();
-            var renderConfig = new HexMapRenderConfig(transform, m_CellMaterial, m_CellLayer);
+            var renderConfig = new HexMapRenderConfig(transform, m_CellMaterial, m_CellLayer, m_BaseAppearanceColor);
             m_Renderer = new HexMapRenderer(m_Map, m_Layout, renderConfig);
         }
 

@@ -32,14 +32,27 @@ namespace HexMap.UnityRuntime
             get { return m_RenderHandle != null && m_RenderHandle.IsValid; }
         }
 
+        public bool IsSelected
+        {
+            get { return m_RenderHandle != null && m_RenderHandle.IsSelected; }
+        }
+
         public void SetAppearance(HexAppearance appearance)
         {
-            if (!IsValid)
-            {
-                throw new InvalidOperationException("The HexView is no longer valid.");
-            }
-
+            EnsureValid();
             m_RenderHandle.SetAppearance(appearance);
+        }
+
+        public void Select(HexSelectionAppearance appearance)
+        {
+            EnsureValid();
+            m_RenderHandle.Select(appearance);
+        }
+
+        public void Deselect()
+        {
+            EnsureValid();
+            m_RenderHandle.Deselect();
         }
 
         internal int Generation
@@ -50,6 +63,14 @@ namespace HexMap.UnityRuntime
         internal void Invalidate()
         {
             m_RenderHandle.Invalidate();
+        }
+
+        private void EnsureValid()
+        {
+            if (!IsValid)
+            {
+                throw new InvalidOperationException("The HexView is no longer valid.");
+            }
         }
     }
 }

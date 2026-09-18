@@ -7,16 +7,34 @@ using RuntimeHexMap = HexMap.Runtime.HexMap;
 
 namespace HexMap.UnityRuntime
 {
+    [Serializable]
+    public struct IdToColor
+    {
+        public int Id;
+        public Color Color;
+    }
+
     /// <summary>
     /// Composes scene topology with external GVG Plot snapshots into the runtime map API.
     /// </summary>
     public sealed class GvgMapRuntimeController : MonoBehaviour
     {
-        [SerializeField] private HexMapView m_HexMapView;
+        [SerializeField]
+        private HexMapView m_HexMapView;
 
+        [SerializeField]
+        private List<IdToColor> m_FactionToColor;
+
+        [SerializeField]
+        private Color m_SelectedColor = Color.white;
+        
         private RuntimeHexMap m_Map;
         private PlotRegistry m_PlotRegistry;
         private PlotPathService m_PlotPathService;
+        private Dictionary<int, Color> m_FactionToColorDict;
+
+        [NonSerialized]
+        private int m_SelectedPlotId = -1;
 
         public HexMapView HexMapView
         {
@@ -33,6 +51,11 @@ namespace HexMap.UnityRuntime
             get { return m_Map != null && m_PlotRegistry != null && m_PlotPathService != null; }
         }
 
+        public int SelectedPlotId
+        {
+            get { return m_SelectedPlotId; }
+        }
+
         private void Awake()
         {
             if (m_HexMapView == null)
@@ -41,6 +64,10 @@ namespace HexMap.UnityRuntime
             }
 
             BuildMapFromView();
+
+            m_FactionToColorDict = new Dictionary<int, Color>(m_FactionToColor.Count);
+            foreach (var idToColor in m_FactionToColor)
+                m_FactionToColorDict.Add(idToColor.Id, idToColor.Color);
         }
 
         private void BuildMapFromView()
@@ -71,6 +98,7 @@ namespace HexMap.UnityRuntime
                 Debug.LogError("GvgMapRuntimeController failed to build its HexMap: " + exception.Message, this);
             }
         }
+
         public bool TryInitialize(IReadOnlyList<GvgPlotRuntimeData> plots)
         {
             if (m_Map == null)
@@ -99,15 +127,52 @@ namespace HexMap.UnityRuntime
             }
             catch (Exception exception)
             {
-                Debug.LogError("GvgMapRuntimeController failed to initialize Plot path service: " + exception.Message, this);
+                Debug.LogError("GvgMapRuntimeController failed to initialize Plot path service: " + exception.Message,
+                    this);
                 return false;
             }
 
+            DeselectAll();
             m_PlotRegistry = registry;
             m_PlotPathService = pathService;
             return true;
         }
 
+        public bool Select(int plotId)
+        {
+            Plot plot;
+            if (!TryGetPlot(plotId, out plot) || m_SelectedPlotId == plotId)
+            {
+                return false;
+            }
+
+            DeselectAll();
+            SetPlotSelection(plot, true);
+            m_SelectedPlotId = plotId;
+            return true;
+        }
+
+        public bool Deselect(int plotId)
+        {
+            if (m_SelectedPlotId != plotId)
+            {
+                return false;
+            }
+
+            Plot plot;
+            if (TryGetPlot(plotId, out plot))
+            {
+                SetPlotSelection(plot, false);
+            }
+
+            m_SelectedPlotId = -1;
+            return true;
+        }
+
+        public bool DeselectAll()
+        {
+            return m_SelectedPlotId != -1 && Deselect(m_SelectedPlotId);
+        }
         public bool TryGetPlot(int plotId, out Plot plot)
         {
             if (m_PlotRegistry == null)
@@ -127,9 +192,52 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            return m_PlotRegistry.TrySetOwnerFactionId(plotId, ownerFactionId);
+            var r = m_PlotRegistry.TrySetOwnerFactionId(plotId, ownerFactionId);
+
+            if (r)
+            {
+                if(null != m_FactionToColorDict && m_FactionToColorDict.TryGetValue(ownerFactionId, out var color))
+                {
+                    SetPlotColor(plot, color);
+                }
+            }
+
+            return r;
         }
 
+        private void SetPlotColor(Plot plot, Color color)
+        {
+            foreach (var cell in plot.Cells)
+            {
+                if (m_HexMapView.TryGetHexView(cell.Coordinate, out var view))
+                    view.SetAppearance(new HexAppearance(true, color, true));
+            }
+        }
+
+        private void SetPlotSelection(Plot plot, bool selected)
+        {
+            if (m_HexMapView == null)
+            {
+                return;
+            }
+
+            foreach (var cell in plot.Cells)
+            {
+                if (!m_HexMapView.TryGetHexView(cell.Coordinate, out var view))
+                {
+                    continue;
+                }
+
+                if (selected)
+                {
+                    view.Select(new HexSelectionAppearance(m_SelectedColor, true));
+                }
+                else
+                {
+                    view.Deselect();
+                }
+            }
+        }
         public bool TryFindPlotPath(
             int startPlotId,
             int targetPlotId,
@@ -144,10 +252,8 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            Plot startPlot;
-            Plot targetPlot;
-            if (!m_PlotRegistry.TryGetPlot(startPlotId, out startPlot) ||
-                !m_PlotRegistry.TryGetPlot(targetPlotId, out targetPlot))
+            if (!m_PlotRegistry.TryGetPlot(startPlotId, out _) ||
+                !m_PlotRegistry.TryGetPlot(targetPlotId, out _))
             {
                 result.SetFailure(PathResultStatus.InvalidInput, PathFailureReason.PlotNotFound);
                 return false;

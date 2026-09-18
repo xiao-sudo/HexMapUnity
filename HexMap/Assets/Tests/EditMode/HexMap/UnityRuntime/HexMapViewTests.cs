@@ -146,7 +146,7 @@ namespace HexMap.UnityRuntime.Tests
                 var pointyRenderer = new HexMapRenderer(
                     map,
                     new HexLayout(HexOrientation.Pointy, HexPlane.XZ, 1f, Vector3.zero, 0.8f),
-                    new HexMapRenderConfig(parent.transform, null, 0));
+                    new HexMapRenderConfig(parent.transform, null, 0, Color.black));
                 try
                 {
                     var pointyMesh = parent.GetComponentInChildren<MeshFilter>().sharedMesh;
@@ -160,7 +160,7 @@ namespace HexMap.UnityRuntime.Tests
                 var flatRenderer = new HexMapRenderer(
                     map,
                     new HexLayout(HexOrientation.Flat, HexPlane.XZ, 1f, Vector3.zero, 0.8f),
-                    new HexMapRenderConfig(parent.transform, null, 0));
+                    new HexMapRenderConfig(parent.transform, null, 0, Color.black));
                 try
                 {
                     var flatMesh = parent.GetComponentInChildren<MeshFilter>().sharedMesh;
@@ -192,7 +192,7 @@ namespace HexMap.UnityRuntime.Tests
                         var renderer = new HexMapRenderer(
                             map,
                             new HexLayout(orientation, plane, 2f, Vector3.zero, 0.65f),
-                            new HexMapRenderConfig(parent.transform, null, 0));
+                            new HexMapRenderConfig(parent.transform, null, 0, Color.black));
                         try
                         {
                             var mesh = parent.GetComponentInChildren<MeshFilter>().sharedMesh;
@@ -273,7 +273,7 @@ namespace HexMap.UnityRuntime.Tests
                 var renderer = new HexMapRenderer(
                     map,
                     new HexLayout(HexOrientation.Pointy, HexPlane.XZ, 1f, Vector3.zero),
-                    new HexMapRenderConfig(parent.transform, material, 0));
+                    new HexMapRenderConfig(parent.transform, material, 0, Color.black));
                 try
                 {
                     HexView view;
@@ -307,11 +307,76 @@ namespace HexMap.UnityRuntime.Tests
             }
         }
         [Test]
+        public void SelectionAppearanceOverridesBaseAppearanceUntilDeselected()
+        {
+            var shader = Shader.Find("HexMap/InstancedColor");
+            Assert.That(shader, Is.Not.Null);
+            var material = new Material(shader);
+            var map = new Runtime.HexMap(new HexMapDefinition(0));
+            var parent = new GameObject("Renderer Parent");
+
+            try
+            {
+                var renderer = new HexMapRenderer(
+                    map,
+                    new HexLayout(HexOrientation.Pointy, HexPlane.XZ, 1f, Vector3.zero),
+                    new HexMapRenderConfig(parent.transform, material, 0, Color.black));
+                try
+                {
+                    HexView view;
+                    Assert.That(renderer.TryGetHexView(new HexCoord(0, 0), out view), Is.True);
+
+                    view.Select(new HexSelectionAppearance(Color.red, true));
+                    Assert.That(view.IsSelected, Is.True);
+                    view.SetAppearance(new HexAppearance(true, Color.blue, false));
+
+                    var meshRenderer = parent.GetComponentInChildren<MeshRenderer>();
+                    var propertyBlock = new MaterialPropertyBlock();
+                    meshRenderer.GetPropertyBlock(propertyBlock);
+                    Assert.That(propertyBlock.GetColor("_BaseColor"), Is.EqualTo(Color.red));
+                    Assert.That(propertyBlock.GetFloat("_GradientEnabled"), Is.EqualTo(1f));
+
+                    view.SetAppearance(new HexAppearance(true, Color.green, true));
+                    meshRenderer.GetPropertyBlock(propertyBlock);
+                    Assert.That(propertyBlock.GetColor("_BaseColor"), Is.EqualTo(Color.red));
+                    Assert.That(propertyBlock.GetFloat("_GradientEnabled"), Is.EqualTo(1f));
+
+                    view.Select(new HexSelectionAppearance(Color.yellow, false));
+                    meshRenderer.GetPropertyBlock(propertyBlock);
+                    Assert.That(propertyBlock.GetColor("_BaseColor"), Is.EqualTo(Color.yellow));
+                    Assert.That(propertyBlock.GetFloat("_GradientEnabled"), Is.EqualTo(0f));
+
+                    view.SetAppearance(new HexAppearance(false, Color.cyan, true));
+                    Assert.That(meshRenderer.enabled, Is.False);
+
+                    view.Deselect();
+                    view.Deselect();
+                    Assert.That(view.IsSelected, Is.False);
+                    Assert.That(meshRenderer.enabled, Is.False);
+
+                    view.SetAppearance(new HexAppearance(true, Color.cyan, true));
+                    meshRenderer.GetPropertyBlock(propertyBlock);
+                    Assert.That(meshRenderer.enabled, Is.True);
+                    Assert.That(propertyBlock.GetColor("_BaseColor"), Is.EqualTo(Color.cyan));
+                    Assert.That(propertyBlock.GetFloat("_GradientEnabled"), Is.EqualTo(1f));
+                }
+                finally
+                {
+                    renderer.Dispose();
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+                UnityEngine.Object.DestroyImmediate(parent);
+            }
+        }
+        [Test]
         public void RendererSharesMeshAndDoesNotCreateMeshColliders()
         {
             var map = new Runtime.HexMap(new HexMapDefinition(1));
             var parent = new GameObject("Renderer Parent");
-            var config = new HexMapRenderConfig(parent.transform, null, 0);
+            var config = new HexMapRenderConfig(parent.transform, null, 0, Color.black);
             var renderer = new HexMapRenderer(
                 map,
                 new HexLayout(HexOrientation.Pointy, HexPlane.XZ, 1f, Vector3.zero),

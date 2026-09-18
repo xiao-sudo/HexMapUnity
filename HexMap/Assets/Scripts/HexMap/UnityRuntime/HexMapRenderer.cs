@@ -110,7 +110,9 @@ namespace HexMap.UnityRuntime
                 renderer.sharedMaterial = material;
 
                 var renderHandle = new HexRenderHandle(renderer, m_Generation);
-                m_Views.Add(cell.Coordinate, new HexView(cell, renderHandle));
+                var hexView = new HexView(cell, renderHandle);
+                hexView.SetAppearance(new HexAppearance(true, m_Config.BaseAppearanceColor, false));
+                m_Views.Add(cell.Coordinate, hexView);
             }
         }
 

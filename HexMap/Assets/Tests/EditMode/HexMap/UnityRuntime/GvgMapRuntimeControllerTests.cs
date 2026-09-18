@@ -66,6 +66,44 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
+        public void SelectionCommandsMaintainOneSelectedPlotAndIgnoreInvalidRequests()
+        {
+            var controller = CreateController();
+            var rows = CreateRows(controller.HexMapView.Map, 10);
+            Assert.That(controller.TryInitialize(rows), Is.True);
+
+            var firstCell = controller.HexMapView.Map.Query(0).Cell;
+            var secondCell = controller.HexMapView.Map.Query(1).Cell;
+            HexView firstView;
+            HexView secondView;
+            Assert.That(controller.HexMapView.TryGetHexView(firstCell.Coordinate, out firstView), Is.True);
+            Assert.That(controller.HexMapView.TryGetHexView(secondCell.Coordinate, out secondView), Is.True);
+
+            Assert.That(controller.Select(firstCell.Id), Is.True);
+            Assert.That(controller.SelectedPlotId, Is.EqualTo(firstCell.Id));
+            Assert.That(firstView.IsSelected, Is.True);
+            Assert.That(controller.Select(firstCell.Id), Is.False);
+
+            Assert.That(controller.Select(secondCell.Id), Is.True);
+            Assert.That(controller.SelectedPlotId, Is.EqualTo(secondCell.Id));
+            Assert.That(firstView.IsSelected, Is.False);
+            Assert.That(secondView.IsSelected, Is.True);
+            Assert.That(controller.Select(-999), Is.False);
+            Assert.That(controller.SelectedPlotId, Is.EqualTo(secondCell.Id));
+            Assert.That(controller.Deselect(firstCell.Id), Is.False);
+            Assert.That(secondView.IsSelected, Is.True);
+
+            Assert.That(controller.DeselectAll(), Is.True);
+            Assert.That(controller.SelectedPlotId, Is.EqualTo(-1));
+            Assert.That(secondView.IsSelected, Is.False);
+            Assert.That(controller.DeselectAll(), Is.False);
+
+            Assert.That(controller.Select(firstCell.Id), Is.True);
+            Assert.That(controller.TryInitialize(rows), Is.True);
+            Assert.That(controller.SelectedPlotId, Is.EqualTo(-1));
+            Assert.That(firstView.IsSelected, Is.False);
+        }
+        [Test]
         public void PathFailuresAreReportedInTheCallerProvidedResultWithoutLogging()
         {
             var controller = CreateController();

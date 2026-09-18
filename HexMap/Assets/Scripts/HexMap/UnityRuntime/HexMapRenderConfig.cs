@@ -4,7 +4,7 @@ namespace HexMap.UnityRuntime
 {
     public sealed class HexMapRenderConfig
     {
-        public HexMapRenderConfig(Transform parent, Material sharedMaterial, int layer)
+        public HexMapRenderConfig(Transform parent, Material sharedMaterial, int layer, Color baseAppearanceColor)
         {
             if (layer < 0 || layer > 31)
             {
@@ -14,10 +14,12 @@ namespace HexMap.UnityRuntime
             Parent = parent;
             SharedMaterial = sharedMaterial;
             Layer = layer;
+            BaseAppearanceColor = baseAppearanceColor;
         }
 
         public Transform Parent { get; }
         public Material SharedMaterial { get; }
         public int Layer { get; }
+        public Color BaseAppearanceColor { get; }
     }
 }
