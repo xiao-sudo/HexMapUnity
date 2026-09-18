@@ -4,7 +4,8 @@
     "references": [
         "HexMap.UnityRuntime",
         "HexMap.Gvg.Authoring",
-        "HexMap.Gvg"
+        "HexMap.Gvg",
+        "HexMap.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

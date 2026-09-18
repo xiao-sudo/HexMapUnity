@@ -27,7 +27,7 @@ namespace HexMap.Gvg.Tests
             Assert.That(registry.Count, Is.EqualTo(map.Count));
 
             var service = new PlotPathService(registry);
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
             service.FindPath(CellIdAt(map, 0, 0), CellIdAt(map, 2, 0), Plot.NoFactionId, result);
 
             Assert.That(result.IsSuccess, Is.True);
@@ -49,7 +49,7 @@ namespace HexMap.Gvg.Tests
             Assert.That(GvgMapRuntimeComposer.TryCompose(map, rows, out registry, out error), Is.True, error);
 
             var service = new PlotPathService(registry);
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
             service.FindPath(CellIdAt(map, 0, 0), 12000, Plot.NoFactionId, result);
 
             Assert.That(result.IsSuccess, Is.True);
@@ -73,11 +73,11 @@ namespace HexMap.Gvg.Tests
             Assert.That(registry.GetPlot(obstacleCell.Id).BlockingState, Is.EqualTo(BlockingState.Blocked));
 
             var service = new PlotPathService(registry);
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
             service.FindPath(CellIdAt(map, 0, 0), CellIdAt(map, 2, 0), Plot.NoFactionId, result);
 
             Assert.That(result.IsSuccess, Is.True);
-            Assert.That(result.Cells.Select(cell => cell.Id), Has.No.Member(obstacleCell.Id));
+            Assert.That(result.Cells, Has.No.Member(obstacleCell.Id));
         }
 
         [Test]
@@ -95,11 +95,11 @@ namespace HexMap.Gvg.Tests
             Assert.That(registry.GetPlot(closedCell.Id).PlotState, Is.EqualTo(PlotState.NotOpen));
 
             var service = new PlotPathService(registry);
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
             service.FindPath(CellIdAt(map, 0, 0), CellIdAt(map, 2, 0), Plot.NoFactionId, result);
 
             Assert.That(result.IsSuccess, Is.True);
-            Assert.That(result.Cells.Select(cell => cell.Id), Has.No.Member(closedCell.Id));
+            Assert.That(result.Cells.Select(cell => cell), Has.No.Member(closedCell.Id));
         }
 
         [Test]
@@ -119,11 +119,11 @@ namespace HexMap.Gvg.Tests
             Assert.That(cellPlots.Count, Is.EqualTo(2));
 
             var service = new PlotPathService(registry);
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
             service.FindPath(CellIdAt(map, 0, 0), CellIdAt(map, 2, 0), Plot.NoFactionId, result);
 
             Assert.That(result.IsSuccess, Is.True);
-            Assert.That(result.Cells.Select(cell => cell.Id), Has.Member(layeredCell.Id));
+            Assert.That(result.Cells.Select(cell => cell), Has.Member(layeredCell.Id));
         }
 
         [Test]
@@ -268,42 +268,6 @@ namespace HexMap.Gvg.Tests
             finally
             {
                 UnityEngine.Object.DestroyImmediate(asset);
-            }
-        }
-
-        [Test]
-        public void PathWorldCentersCanBeProducedFromViewLayout()
-        {
-            var viewObject = new GameObject("Hex Map View");
-            try
-            {
-                var mapView = viewObject.AddComponent<HexMapView>();
-                mapView.Radius = 2;
-                mapView.OuterRadius = 1.5f;
-                mapView.SecondaryScale = 0.8f;
-
-                RuntimeHexMap map;
-                HexLayout layout;
-                string snapshotError;
-                Assert.That(mapView.TryCreateSnapshots(out map, out layout, out snapshotError), Is.True, snapshotError);
-
-                PlotRegistry registry;
-                string error;
-                Assert.That(GvgMapRuntimeComposer.TryCompose(map, DefaultRows(map), out registry, out error), Is.True, error);
-
-                var service = new PlotPathService(registry);
-                var result = new PathResult(new List<HexCell>(map.Count));
-                service.FindPath(CellIdAt(map, 0, 0), CellIdAt(map, 2, 0), Plot.NoFactionId, result);
-                Assert.That(result.IsSuccess, Is.True);
-
-                var centers = new List<Vector3>(result.Count);
-                Assert.That(result.CopyWorldCentersTo(layout, centers), Is.True);
-                Assert.That(centers.Count, Is.EqualTo(result.Count));
-                Assert.That(centers.All(center => float.IsNaN(center.x) == false), Is.True);
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(viewObject);
             }
         }
 

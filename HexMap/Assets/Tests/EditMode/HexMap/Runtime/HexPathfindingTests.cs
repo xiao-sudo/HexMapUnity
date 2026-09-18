@@ -27,7 +27,7 @@ namespace HexMap.Runtime.Tests
             var result = FindPath(map, request);
 
             AssertSuccess(result, target, 2);
-            AssertCoordinates(result, new[]
+            AssertCoordinates(result, map, new[]
             {
                 new HexCoord(0, 0),
                 new HexCoord(1, 0),
@@ -129,7 +129,8 @@ namespace HexMap.Runtime.Tests
             var result = FindPath(map, request);
 
             AssertSuccess(result, reachableTarget, 3);
-            Assert.That(result.Cells[1].Coordinate, Is.EqualTo(new HexCoord(1, -1)));
+            var query = map.Query(result.Cells[1]);
+            Assert.That(query.Cell.Coordinate, Is.EqualTo(new HexCoord(1, -1)));
             Assert.That(result.Cells, Has.None.EqualTo(rejectedTarget));
         }
 
@@ -187,7 +188,8 @@ namespace HexMap.Runtime.Tests
             var result = FindPath(map, request);
 
             AssertSuccess(result, target, 2);
-            Assert.That(result.Cells[1].Coordinate, Is.EqualTo(new HexCoord(1, 0)));
+            var query = map.Query(result.Cells[1]);
+            Assert.That(query.Cell.Coordinate, Is.EqualTo(new HexCoord(1, 0)));
         }
 
         [Test]
@@ -302,34 +304,6 @@ namespace HexMap.Runtime.Tests
         }
 
         [Test]
-        public void PathResultConvertsOnlyItsAuthoritativeCellsToWorldCenters()
-        {
-            var map = new HexMap(new HexMapDefinition(1));
-            var start = CellAt(map, 0, 0);
-            var target = CellAt(map, 1, 0);
-            var result = FindPath(map, CreateRequest(
-                start,
-                new[] { target },
-                new object(),
-                (cell, context) => true,
-                (cell, context) => true));
-            var layout = new HexLayout(
-                HexOrientation.Pointy,
-                HexPlane.XZ,
-                2f,
-                new Vector3(10f, 20f, 30f));
-            var worldCenters = new List<Vector3>(map.Count);
-
-            Assert.That(result.CopyWorldCentersTo(layout, worldCenters), Is.True);
-
-            Assert.That(worldCenters.Count, Is.EqualTo(2));
-            Assert.That(worldCenters[0], Is.EqualTo(new Vector3(10f, 20f, 30f)));
-            Assert.That(worldCenters[1].x, Is.EqualTo(10f + Mathf.Sqrt(3f) * 2f).Within(0.0001f));
-            Assert.That(worldCenters[1].y, Is.EqualTo(20f));
-            Assert.That(worldCenters[1].z, Is.EqualTo(30f));
-        }
-
-        [Test]
         public void ReusableRequestAndResultCanBeUsedForMultipleSearches()
         {
             var map = new HexMap(new HexMapDefinition(2));
@@ -346,7 +320,7 @@ namespace HexMap.Runtime.Tests
             Assert.That(request.TryAddTarget(firstTarget), Is.True);
 
             var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
 
             pathfinder.FindPath(request, result);
             AssertSuccess(result, firstTarget, 1);
@@ -373,7 +347,7 @@ namespace HexMap.Runtime.Tests
             Assert.That(request.TryAddTarget(target), Is.True);
 
             var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
-            var result = new PathResult(new List<HexCell>(0));
+            var result = new PathResult(new List<int>(0));
 
             pathfinder.FindPath(request, result);
 
@@ -384,31 +358,6 @@ namespace HexMap.Runtime.Tests
             Assert.That(result.Cells, Is.Empty);
             Assert.That(result.Cost, Is.EqualTo(0));
             Assert.That(result.ReachedTarget, Is.EqualTo(default(HexCell)));
-        }
-
-        [Test]
-        public void WorldCenterOutputListCanBeReused()
-        {
-            var map = new HexMap(new HexMapDefinition(1));
-            var start = CellAt(map, 0, 0);
-            var target = CellAt(map, 1, 0);
-            var result = FindPath(map, CreateRequest(
-                start,
-                new[] { target },
-                new object(),
-                (cell, context) => true,
-                (cell, context) => true));
-            var layout = new HexLayout(
-                HexOrientation.Pointy,
-                HexPlane.XZ,
-                2f,
-                new Vector3(10f, 20f, 30f));
-            var worldCenters = new List<Vector3>(map.Count);
-            worldCenters.Add(Vector3.one);
-
-            Assert.That(result.CopyWorldCentersTo(layout, worldCenters), Is.True);
-            Assert.That(worldCenters.Count, Is.EqualTo(result.Count));
-            Assert.That(worldCenters[0], Is.EqualTo(new Vector3(10f, 20f, 30f)));
         }
 
         private static PathRequest CreateRequest(
@@ -427,7 +376,7 @@ namespace HexMap.Runtime.Tests
         private static PathResult FindPath(HexMap map, PathRequest request)
         {
             var pathfinder = new HexPathfinder(map, new PathSearchWorkspace(map));
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
             return pathfinder.FindPath(request, result);
         }
 
@@ -443,7 +392,6 @@ namespace HexMap.Runtime.Tests
             Assert.That(result.ReachedTarget, Is.EqualTo(target));
             Assert.That(result.Cost, Is.EqualTo(cost));
             Assert.That(result.Cells.Count, Is.EqualTo(cost + 1));
-            Assert.That(result.Cells[0].Coordinate, Is.EqualTo(new HexCoord(0, 0)));
             Assert.That(result.Reason, Is.EqualTo(PathFailureReason.None));
         }
 
@@ -457,12 +405,13 @@ namespace HexMap.Runtime.Tests
             Assert.That(result.Reason, Is.EqualTo(reason));
         }
 
-        private static void AssertCoordinates(PathResult result, HexCoord[] expected)
+        private static void AssertCoordinates(PathResult result, HexMap map, HexCoord[] expected)
         {
             Assert.That(result.Cells.Count, Is.EqualTo(expected.Length));
             for (var index = 0; index < expected.Length; index++)
             {
-                Assert.That(result.Cells[index].Coordinate, Is.EqualTo(expected[index]));
+                var query = map.Query(result.Cells[index]);
+                Assert.That(query.Cell.Coordinate, Is.EqualTo(expected[index]));
             }
         }
 

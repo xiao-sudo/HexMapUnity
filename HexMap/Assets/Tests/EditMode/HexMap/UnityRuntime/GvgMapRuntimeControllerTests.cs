@@ -39,10 +39,11 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(controller.TrySetPlotOwnerFactionId(startId, -100), Is.True);
             Assert.That(plot.OwnerFactionId, Is.EqualTo(-100));
 
-            var result = new PathResult(new List<HexCell>(controller.HexMapView.Map.Count));
-            Assert.That(controller.TryFindPlotPath(startId, targetId, 10, result), Is.True);
-            Assert.That(result.IsSuccess, Is.True);
-            Assert.That(result.Count, Is.EqualTo(2));
+            // var result = new PathResult(new List<int>(controller.HexMapView.Map.Count));
+            var r = controller.TryFindPlotPath(startId, targetId, 10);
+            Assert.That(r.IsSuccess, Is.True);
+            // Assert.That(result.IsSuccess, Is.True);
+            Assert.That(r.Count, Is.EqualTo(2));
         }
 
         [Test]
@@ -107,13 +108,16 @@ namespace HexMap.UnityRuntime.Tests
         public void PathFailuresAreReportedInTheCallerProvidedResultWithoutLogging()
         {
             var controller = CreateController();
-            var result = new PathResult(new List<HexCell>(1));
 
-            Assert.That(controller.TryFindPlotPath(1, 2, 10, result), Is.False);
+            var result = controller.TryFindPlotPath(1, 2, 10);
+
+            Assert.That(result.IsSuccess, Is.False);
             Assert.That(result.Reason, Is.EqualTo(PathFailureReason.MapNotInitialized));
 
             Assert.That(controller.TryInitialize(CreateRows(controller.HexMapView.Map, 10)), Is.True);
-            Assert.That(controller.TryFindPlotPath(999, 1000, 10, result), Is.False);
+            
+            result = controller.TryFindPlotPath(999, 1000, 10);
+            Assert.That(result.IsSuccess, Is.False);
             Assert.That(result.Reason, Is.EqualTo(PathFailureReason.PlotNotFound));
         }
 

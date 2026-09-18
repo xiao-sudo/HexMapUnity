@@ -207,7 +207,7 @@ namespace HexMap.Gvg.Tests
             // Plot.NoFactionId (false). The affiliated target camp cannot be resolved
             // to the mover faction, so the target must not be enterable.
             var service = new PlotPathService(new PlotRegistry(map, plots));
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
 
             service.FindPath(1, 2, RedFaction, result);
 
@@ -241,7 +241,7 @@ namespace HexMap.Gvg.Tests
 
             var registry = new PlotRegistry(map, plots);
             var service = new PlotPathService(registry);
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
 
             service.FindPath(1, 12000, RedFaction, result);
 
@@ -269,7 +269,7 @@ namespace HexMap.Gvg.Tests
             var resolver = new TestCampFactionResolver();
             resolver.Set(12000, RedFaction);
             var service = new PlotPathService(new PlotRegistry(map, plots), resolver);
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
 
             service.FindPath(1, 2, RedFaction, result);
 
@@ -291,7 +291,7 @@ namespace HexMap.Gvg.Tests
             var resolver = new TestCampFactionResolver();
             resolver.Set(12000, RedFaction);
             var service = new PlotPathService(new PlotRegistry(map, plots), resolver);
-            var result = new PathResult(new List<HexCell>(map.Count));
+            var result = new PathResult(new List<int>(map.Count));
 
             service.FindPath(1, 2, RedFaction, result);
 
@@ -312,7 +312,7 @@ namespace HexMap.Gvg.Tests
                 new[] { cell },
                 BlueFaction);
             var service = new PlotPathService(new PlotRegistry(map, new[] { plot }));
-            var result = new PathResult(new List<HexCell>(1));
+            var result = new PathResult(new List<int>(1));
 
             service.FindPath(1, 1, RedFaction, result);
 
