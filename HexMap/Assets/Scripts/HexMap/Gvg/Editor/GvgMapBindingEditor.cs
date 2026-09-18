@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using HexMap.Gvg.Authoring;
 using HexMap.UnityRuntime;
 using UnityEditor;
@@ -53,3 +54,4 @@ namespace HexMap.Gvg.Editor
         }
     }
 }
+#endif

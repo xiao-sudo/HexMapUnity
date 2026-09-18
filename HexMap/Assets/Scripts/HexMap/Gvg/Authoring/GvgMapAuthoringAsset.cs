@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using HexMap.Core;
@@ -78,3 +79,4 @@ namespace HexMap.Gvg.Authoring
         }
     }
 }
+#endif

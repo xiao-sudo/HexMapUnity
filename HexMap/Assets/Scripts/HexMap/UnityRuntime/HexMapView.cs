@@ -21,9 +21,6 @@ namespace HexMap.UnityRuntime
         [SerializeField]
         private Color m_BaseAppearanceColor;
 
-        [SerializeField]
-        private bool m_AutoBuildHexMap = false;
-
 #if UNITY_EDITOR
         [SerializeField] private HexMap.Gvg.Authoring.GvgMapAuthoringAsset m_GvgMapAuthoringAsset;
 #endif
@@ -136,12 +133,6 @@ namespace HexMap.UnityRuntime
                 error = exception.Message;
                 return false;
             }
-        }
-
-        public void Awake()
-        {
-            if(m_AutoBuildHexMap)
-                Build();
         }
 
         public void Build()
