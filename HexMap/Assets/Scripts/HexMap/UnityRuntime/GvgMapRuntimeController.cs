@@ -7,6 +7,42 @@ using RuntimeHexMap = HexMap.Runtime.HexMap;
 
 namespace HexMap.UnityRuntime
 {
+    public enum PlotScreenPickStatus
+    {
+        Found = 0,
+        MapNotInitialized = 1,
+        NoCamera = 2,
+        NoPlaneIntersection = 3,
+        OutsideMap = 4,
+        NoSelectablePlot = 5
+    }
+
+    public readonly struct PlotScreenPickResult
+    {
+        private PlotScreenPickResult(PlotScreenPickStatus status, int plotId)
+        {
+            Status = status;
+            PlotId = plotId;
+        }
+
+        public PlotScreenPickStatus Status { get; }
+        public int PlotId { get; }
+
+        public bool HasPlot
+        {
+            get { return Status == PlotScreenPickStatus.Found; }
+        }
+
+        internal static PlotScreenPickResult Found(int plotId)
+        {
+            return new PlotScreenPickResult(PlotScreenPickStatus.Found, plotId);
+        }
+
+        internal static PlotScreenPickResult Failure(PlotScreenPickStatus status)
+        {
+            return new PlotScreenPickResult(status, -1);
+        }
+    }
     [Serializable]
     public struct IdToColor
     {
@@ -29,7 +65,8 @@ namespace HexMap.UnityRuntime
         private Color m_SelectedColor = Color.white;
 
         [SerializeField]
-        private float m_PlotWorldAnchorHeightOffset;
+        [Range(0.1f, 10)]
+        private float m_PlotWorldAnchorHeightOffset = 1;
 
         private RuntimeHexMap m_Map;
         private PlotRegistry m_PlotRegistry;
@@ -60,6 +97,49 @@ namespace HexMap.UnityRuntime
             get { return m_SelectedPlotId; }
         }
 
+        /// <summary>
+        /// Queries the selectable Plot at a Unity screen-space position without changing selection state.
+        /// A null camera falls back to Camera.main.
+        /// </summary>
+        public PlotScreenPickResult PickPlotAtScreenPosition(
+            Vector2 screenPosition,
+            Camera cam = null)
+        {
+            if (!IsInitialized || m_HexMapView == null)
+            {
+                return PlotScreenPickResult.Failure(PlotScreenPickStatus.MapNotInitialized);
+            }
+
+            var targetCamera = cam != null ? cam : Camera.main;
+            if (targetCamera == null)
+            {
+                return PlotScreenPickResult.Failure(PlotScreenPickStatus.NoCamera);
+            }
+
+            var ray = targetCamera.ScreenPointToRay(screenPosition);
+            float distance;
+            if (!m_HexMapView.WorldPlane.Raycast(ray, out distance) ||
+                float.IsNaN(distance) ||
+                float.IsInfinity(distance) ||
+                distance < 0f)
+            {
+                return PlotScreenPickResult.Failure(PlotScreenPickStatus.NoPlaneIntersection);
+            }
+
+            var query = m_Map.Query(m_HexMapView.WorldToHex(ray.GetPoint(distance)));
+            if (query.Status != HexCellQueryStatus.Found)
+            {
+                return PlotScreenPickResult.Failure(PlotScreenPickStatus.OutsideMap);
+            }
+
+            Plot plot;
+            if (!m_PlotRegistry.TryGetPlotForCell(query.Cell.Id, out plot))
+            {
+                return PlotScreenPickResult.Failure(PlotScreenPickStatus.NoSelectablePlot);
+            }
+
+            return PlotScreenPickResult.Found(plot.PlotId);
+        }
         /// <summary>
         /// Gets or sets the world-space distance between a Plot center and its render anchor.
         /// </summary>
