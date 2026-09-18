@@ -27,10 +27,14 @@ namespace HexMap.UnityRuntime
 
         [SerializeField]
         private Color m_SelectedColor = Color.white;
-        
+
+        [SerializeField]
+        private float m_PlotWorldAnchorHeightOffset;
+
         private RuntimeHexMap m_Map;
         private PlotRegistry m_PlotRegistry;
         private PlotPathService m_PlotPathService;
+        private Dictionary<int, Vector3> m_PlotWorldCenters;
         private Dictionary<int, Color> m_FactionToColorDict;
 
         [NonSerialized]
@@ -54,6 +58,21 @@ namespace HexMap.UnityRuntime
         public int SelectedPlotId
         {
             get { return m_SelectedPlotId; }
+        }
+
+        /// <summary>
+        /// Gets or sets the world-space distance between a Plot center and its render anchor.
+        /// </summary>
+        public float PlotWorldAnchorHeightOffset
+        {
+            get { return m_PlotWorldAnchorHeightOffset; }
+            set
+            {
+                if (float.IsNaN(value) || float.IsInfinity(value))
+                    throw new ArgumentOutOfRangeException(nameof(value), value, "Height offset must be finite.");
+
+                m_PlotWorldAnchorHeightOffset = value;
+            }
         }
 
         private void Awake()
@@ -132,9 +151,21 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
+            Dictionary<int, Vector3> plotWorldCenters;
+            try
+            {
+                plotWorldCenters = BuildPlotWorldCenters(registry, plots);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError("GvgMapRuntimeController failed to calculate Plot world centers: " + exception.Message, this);
+                return false;
+            }
+
             DeselectAll();
             m_PlotRegistry = registry;
             m_PlotPathService = pathService;
+            m_PlotWorldCenters = plotWorldCenters;
             return true;
         }
 
@@ -182,6 +213,33 @@ namespace HexMap.UnityRuntime
             }
 
             return m_PlotRegistry.TryGetPlot(plotId, out plot);
+        }
+
+        public bool TryGetPlotWorldCenter(int plotId, out Vector3 worldCenter)
+        {
+            if (m_PlotWorldCenters == null || !m_PlotWorldCenters.TryGetValue(plotId, out worldCenter))
+            {
+                worldCenter = Vector3.zero;
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Gets a render anchor offset from the cached Plot center along the map plane's world normal.
+        /// </summary>
+        public bool TryGetPlotWorldAnchor(int plotId, out Vector3 worldAnchor)
+        {
+            Vector3 worldCenter;
+            if (!TryGetPlotWorldCenter(plotId, out worldCenter) || m_HexMapView == null)
+            {
+                worldAnchor = Vector3.zero;
+                return false;
+            }
+
+            worldAnchor = worldCenter + m_HexMapView.WorldPlane.normal * m_PlotWorldAnchorHeightOffset;
+            return true;
         }
 
         public bool TrySetPlotOwnerFactionId(int plotId, int ownerFactionId)
@@ -260,6 +318,31 @@ namespace HexMap.UnityRuntime
             }
 
             return m_PlotPathService.FindPath(startPlotId, targetPlotId, movingFactionId, result).IsSuccess;
+        }
+
+        private Dictionary<int, Vector3> BuildPlotWorldCenters(
+            PlotRegistry registry,
+            IReadOnlyList<GvgPlotRuntimeData> plotData)
+        {
+            if (m_HexMapView == null)
+            {
+                throw new InvalidOperationException("A HexMapView is required to calculate Plot world centers.");
+            }
+
+            var centers = new Dictionary<int, Vector3>(plotData.Count);
+            for (var index = 0; index < plotData.Count; index++)
+            {
+                var plotId = plotData[index].PlotId;
+                Plot plot;
+                if (!registry.TryGetPlot(plotId, out plot))
+                {
+                    throw new InvalidOperationException("The composed PlotRegistry is missing Plot " + plotId + ".");
+                }
+
+                centers.Add(plotId, m_HexMapView.GetPlotWorldCenter(plot.Cells));
+            }
+
+            return centers;
         }
     }
 }

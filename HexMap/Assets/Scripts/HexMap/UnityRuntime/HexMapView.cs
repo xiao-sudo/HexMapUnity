@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using HexMap.Core;
 using HexMap.Runtime;
 using RuntimeHexMap = HexMap.Runtime.HexMap;
@@ -182,6 +183,16 @@ namespace HexMap.UnityRuntime
             // use HexMapPicker when the point must lie on the active map plane.
             var coordinate = WorldToHex(worldPoint);
             return TryGetHexView(coordinate, out view);
+        }
+
+        internal Vector3 GetPlotWorldCenter(IReadOnlyList<HexCell> cells)
+        {
+            if (cells == null) throw new ArgumentNullException(nameof(cells));
+            if (cells.Count == 0) throw new ArgumentException("A Plot must contain at least one Cell.", nameof(cells));
+            ValidateTransformScale();
+            var localCenter = Vector3.zero;
+            for (var index = 0; index < cells.Count; index++) localCenter += m_Layout.HexToWorld(cells[index].Coordinate);
+            return transform.TransformPoint(localCenter / cells.Count);
         }
 
         /// <summary>
