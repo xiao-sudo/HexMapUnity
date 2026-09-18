@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using HexMap.Core;
-using UnityEngine;
 
 namespace HexMap.Runtime
 {
@@ -21,13 +19,13 @@ namespace HexMap.Runtime
 
     public sealed class PathResult
     {
-        private readonly List<HexCell> m_Cells;
+        private readonly List<int> m_Cells;
         private PathResultStatus m_Status;
         private PathFailureReason m_Reason;
         private HexCell m_ReachedTarget;
         private int m_Cost;
 
-        public PathResult(List<HexCell> cells)
+        public PathResult(List<int> cells)
         {
             if (cells == null) throw new ArgumentNullException(nameof(cells));
             m_Cells = cells;
@@ -35,24 +33,12 @@ namespace HexMap.Runtime
         }
 
         public PathResultStatus Status { get { return m_Status; } }
-        public IReadOnlyList<HexCell> Cells { get { return m_Cells; } }
+        public IReadOnlyList<int> Cells { get { return m_Cells; } }
         public int Count { get { return m_Cells.Count; } }
         public HexCell ReachedTarget { get { return m_ReachedTarget; } }
         public int Cost { get { return m_Cost; } }
         public PathFailureReason Reason { get { return m_Reason; } }
         public bool IsSuccess { get { return m_Status == PathResultStatus.Success; } }
-
-        public bool CopyWorldCentersTo(HexLayout layout, List<Vector3> output)
-        {
-            if (output == null) throw new ArgumentNullException(nameof(output));
-            output.Clear();
-            if (output.Capacity < m_Cells.Count) return false;
-            for (var index = 0; index < m_Cells.Count; index++)
-            {
-                output.Add(layout.HexToWorld(m_Cells[index].Coordinate));
-            }
-            return true;
-        }
 
         internal void BeginSearch()
         {
@@ -66,7 +52,7 @@ namespace HexMap.Runtime
         internal bool TryAddCell(HexCell cell)
         {
             if (m_Cells.Count >= m_Cells.Capacity) return false;
-            m_Cells.Add(cell);
+            m_Cells.Add(cell.Id);
             return true;
         }
 

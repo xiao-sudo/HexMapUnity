@@ -73,6 +73,7 @@ namespace HexMap.UnityRuntime
         private PlotPathService m_PlotPathService;
         private Dictionary<int, Vector3> m_PlotWorldCenters;
         private Dictionary<int, Color> m_FactionToColorDict;
+        private PathResult m_PathResult;
 
         [NonSerialized]
         private int m_SelectedPlotId = -1;
@@ -167,6 +168,7 @@ namespace HexMap.UnityRuntime
             m_FactionToColorDict = new Dictionary<int, Color>(m_FactionToColor.Count);
             foreach (var idToColor in m_FactionToColor)
                 m_FactionToColorDict.Add(idToColor.Id, idToColor.Color);
+
         }
 
         private void BuildMapFromView()
@@ -189,6 +191,10 @@ namespace HexMap.UnityRuntime
                 if (m_Map == null)
                 {
                     Debug.LogError("GvgMapRuntimeController could not build a HexMap from its HexMapView.", this);
+                }
+                else
+                {
+                    m_PathResult = new PathResult(new List<int>(m_HexMapView.Map.Count));
                 }
             }
             catch (Exception exception)
@@ -376,28 +382,26 @@ namespace HexMap.UnityRuntime
                 }
             }
         }
-        public bool TryFindPlotPath(
+        public PathResult TryFindPlotPath(
             int startPlotId,
             int targetPlotId,
-            int movingFactionId,
-            PathResult result)
+            int movingFactionId)
         {
-            if (result == null) throw new ArgumentNullException(nameof(result));
 
             if (m_PlotPathService == null)
             {
-                result.SetFailure(PathResultStatus.InvalidInput, PathFailureReason.MapNotInitialized);
-                return false;
+                m_PathResult.SetFailure(PathResultStatus.InvalidInput, PathFailureReason.MapNotInitialized);
+                return m_PathResult;
             }
 
             if (!m_PlotRegistry.TryGetPlot(startPlotId, out _) ||
                 !m_PlotRegistry.TryGetPlot(targetPlotId, out _))
             {
-                result.SetFailure(PathResultStatus.InvalidInput, PathFailureReason.PlotNotFound);
-                return false;
+                m_PathResult.SetFailure(PathResultStatus.InvalidInput, PathFailureReason.PlotNotFound);
+                return m_PathResult;
             }
 
-            return m_PlotPathService.FindPath(startPlotId, targetPlotId, movingFactionId, result).IsSuccess;
+            return m_PlotPathService.FindPath(startPlotId, targetPlotId, movingFactionId, m_PathResult);
         }
 
         private Dictionary<int, Vector3> BuildPlotWorldCenters(

@@ -66,12 +66,12 @@ namespace HexMap.Gvg
 
         private sealed class DefaultCampFactionResolver : ICampFactionResolver
         {
-            public static readonly DefaultCampFactionResolver Instance = new DefaultCampFactionResolver();
+            public static readonly DefaultCampFactionResolver Instance = new();
 
             public bool TryGetFaction(int campId, out int factionId)
             {
-                factionId = Plot.NoFactionId;
-                return false;
+                factionId = campId;
+                return true;
             }
         }
     }
