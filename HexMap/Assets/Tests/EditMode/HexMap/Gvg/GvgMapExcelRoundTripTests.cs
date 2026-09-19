@@ -102,12 +102,13 @@ namespace HexMap.Gvg.Tests
                 var markerRow = cells[5];
                 Assert.That(markerRow[0], Is.EqualTo("c/s"));
 
-                // Sorted data region: multi-cell plot first, then single-cell plots.
+                // 数据行按 PlotId 升序输出，地块类型和单元格数量不会影响顺序。
                 var dataRows = cells.Where(pair => pair.Key >= 6).OrderBy(pair => pair.Key).ToList();
                 Assert.That(dataRows.Count, Is.EqualTo(6));
-                Assert.That(dataRows[0].Value[0], Is.EqualTo("12000"));
-                Assert.That(dataRows[0].Value[7], Is.EqualTo("大营"));
-                Assert.That(dataRows[0].Value[8], Is.EqualTo("100"));
+                Assert.That(dataRows[0].Value[0], Is.EqualTo("2"));
+                var multiCellRow = dataRows.Single(pair => pair.Value[0] == "12000").Value;
+                Assert.That(multiCellRow[7], Is.EqualTo("大营"));
+                Assert.That(multiCellRow[8], Is.EqualTo("100"));
             }
             finally
             {
@@ -301,7 +302,7 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void Export_SortsMultiCellBeforeSingleCell()
+        public void Export_SortsByPlotIdAscending()
         {
             var map = CreateMap(1);
             var asset = CreateAsset();
@@ -327,7 +328,7 @@ namespace HexMap.Gvg.Tests
                     .Select(pair => pair.Value[0])
                     .ToList();
 
-                Assert.That(ids, Is.EqualTo(new List<string> { "12000", "2", "3", "4", "5", "6" }));
+                Assert.That(ids, Is.EqualTo(new List<string> { "2", "3", "4", "5", "6", "12000" }));
             }
             finally
             {
@@ -337,7 +338,7 @@ namespace HexMap.Gvg.Tests
         }
 
         [Test]
-        public void Export_SortsByPlotTypeWithNormalLast()
+        public void Export_SortsByPlotIdAscendingRegardlessOfPlotType()
         {
             var map = CreateMap(1);
             var asset = CreateAsset();
@@ -363,8 +364,8 @@ namespace HexMap.Gvg.Tests
                     .Select(pair => pair.Value[0])
                     .ToList();
 
-                // Multi-cell plot first, then single cells by PlotType with Normal last.
-                Assert.That(ids, Is.EqualTo(new List<string> { "11000", "2", "3", "5", "4", "6" }));
+                // 所有导出行均按 PlotId 升序排列，与地块类型和单元格数量无关。
+                Assert.That(ids, Is.EqualTo(new List<string> { "2", "3", "4", "5", "6", "11000" }));
             }
             finally
             {

@@ -229,38 +229,21 @@ namespace HexMap.Gvg.Editor
 
             private void SortPlots(GvgMapAuthoringAsset asset)
             {
-                var multiCell = new List<GvgPlotAuthoringData>();
-                var singleCell = new List<GvgPlotAuthoringData>();
                 for (var index = 0; index < asset.Plots.Count; index++)
                 {
                     var plot = asset.Plots[index];
-                    if (plot == null) continue;
-                    if (plot.IsMultiCell) multiCell.Add(plot);
-                    else singleCell.Add(plot);
+                    if (plot != null)
+                    {
+                        m_SortedPlots.Add(plot);
+                    }
                 }
 
-                multiCell.Sort(ComparePlotIds);
-                singleCell.Sort(CompareSingleCell);
-                m_SortedPlots.AddRange(multiCell);
-                m_SortedPlots.AddRange(singleCell);
+                m_SortedPlots.Sort(ComparePlotIds);
             }
 
             private static int ComparePlotIds(GvgPlotAuthoringData left, GvgPlotAuthoringData right)
             {
                 return left.PlotId.CompareTo(right.PlotId);
-            }
-
-            /// <summary>
-            /// Orders single-cell plots by PlotType with Normal always last, then by
-            /// PlotId for a stable secondary order. Multi-cell plots are emitted before
-            /// this group by <see cref="SortPlots"/>.
-            /// </summary>
-            private static int CompareSingleCell(GvgPlotAuthoringData left, GvgPlotAuthoringData right)
-            {
-                var leftRank = left.PlotType == PlotType.Normal ? int.MaxValue : (int)left.PlotType;
-                var rightRank = right.PlotType == PlotType.Normal ? int.MaxValue : (int)right.PlotType;
-                var typeResult = leftRank.CompareTo(rightRank);
-                return typeResult != 0 ? typeResult : left.PlotId.CompareTo(right.PlotId);
             }
 
             public string BuildContentTypes()
