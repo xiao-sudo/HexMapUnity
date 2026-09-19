@@ -186,7 +186,9 @@ namespace HexMap.Gvg.Tests
                 var exportPath = GvgMapExcelExporter.ExportExcel(asset, map, directory);
                 var cells = ReadWorkbookCells(exportPath);
                 Assert.That(cells[3][9], Is.EqualTo("Bonus"));
-                Assert.That(cells[6][9], Is.EqualTo("7"));
+
+                var dataRows = cells.Where(pair => pair.Key >= 6).ToDictionary(pair => pair.Key, pair => pair.Value);
+                Assert.That(GetDataRow(dataRows, "12000")[9], Is.EqualTo("7"));
             }
             finally
             {

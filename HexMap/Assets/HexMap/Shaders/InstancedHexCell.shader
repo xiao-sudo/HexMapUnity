@@ -1,4 +1,4 @@
-Shader "HexMap/InstancedColor"
+Shader "HexMap/InstancedHexCell"
 {
     Properties
     {

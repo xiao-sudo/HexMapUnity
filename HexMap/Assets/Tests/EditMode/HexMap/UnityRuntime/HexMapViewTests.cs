@@ -225,9 +225,9 @@ namespace HexMap.UnityRuntime.Tests
             }
         }
         [Test]
-        public void InstancedColorShaderUsesTransparentBorderDefaults()
+        public void InstancedHexCellShaderUsesTransparentBorderDefaults()
         {
-            var shader = Shader.Find("HexMap/InstancedColor");
+            var shader = Shader.Find("HexMap/InstancedHexCell");
             Assert.That(shader, Is.Not.Null);
             Assert.That(UnityEditor.ShaderUtil.ShaderHasError(shader), Is.False);
 
@@ -257,9 +257,9 @@ namespace HexMap.UnityRuntime.Tests
             }
         }
         [Test]
-        public void SetAppearancePublishesInstancedColorAndGradientEnabled()
+        public void SetAppearancePublishesInstancedHexCellAndGradientEnabled()
         {
-            var shader = Shader.Find("HexMap/InstancedColor");
+            var shader = Shader.Find("HexMap/InstancedHexCell");
             Assert.That(shader, Is.Not.Null);
             var material = new Material(shader);
             // A single cell ensures the inspected Renderer belongs to the target view.
@@ -309,7 +309,7 @@ namespace HexMap.UnityRuntime.Tests
         [Test]
         public void SelectionAppearanceOverridesBaseAppearanceUntilDeselected()
         {
-            var shader = Shader.Find("HexMap/InstancedColor");
+            var shader = Shader.Find("HexMap/InstancedHexCell");
             Assert.That(shader, Is.Not.Null);
             var material = new Material(shader);
             var map = new Runtime.HexMap(new HexMapDefinition(0));
