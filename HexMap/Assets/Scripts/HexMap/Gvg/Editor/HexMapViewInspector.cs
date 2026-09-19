@@ -101,6 +101,12 @@ namespace HexMap.Gvg.Editor
         private void DrawBindingActions(HexMapView view)
         {
             EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Open GVG Map Authoring"))
+            {
+                Selection.activeGameObject = view.gameObject;
+                GvgMapAuthoringWindow.Open();
+            }
+
             var asset = view.GvgMapAuthoringAssetEditorOnly;
             GUI.enabled = asset != null;
             if (GUILayout.Button("Unbind"))
