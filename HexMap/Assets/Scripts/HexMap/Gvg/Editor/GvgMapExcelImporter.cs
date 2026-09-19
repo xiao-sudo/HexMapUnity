@@ -477,6 +477,7 @@ namespace HexMap.Gvg.Editor
             var entry = archive.GetEntry("xl/styles.xml");
             if (entry == null) return styles;
 
+            var themeColors = ReadThemeColors(archive);
             var document = new XmlDocument();
             using (var stream = entry.Open())
             {
@@ -487,7 +488,9 @@ namespace HexMap.Gvg.Editor
             for (var index = 0; index < fonts.Count; index++)
             {
                 var colors = ((XmlElement)fonts[index]).GetElementsByTagName("color");
-                styles.FontColors.Add(colors.Count > 0 ? ((XmlElement)colors[0]).GetAttribute("rgb") : string.Empty);
+                styles.FontColors.Add(colors.Count > 0
+                    ? ReadColor((XmlElement)colors[0], themeColors)
+                    : string.Empty);
             }
 
             var fills = document.GetElementsByTagName("fill");
@@ -498,7 +501,10 @@ namespace HexMap.Gvg.Editor
                 if (patterns.Count > 0)
                 {
                     var fgColors = ((XmlElement)patterns[0]).GetElementsByTagName("fgColor");
-                    if (fgColors.Count > 0) color = ((XmlElement)fgColors[0]).GetAttribute("rgb");
+                    if (fgColors.Count > 0)
+                    {
+                        color = ReadColor((XmlElement)fgColors[0], themeColors);
+                    }
                 }
 
                 styles.FillColors.Add(color);
@@ -521,6 +527,119 @@ namespace HexMap.Gvg.Editor
             }
 
             return styles;
+        }
+
+
+        private static List<string> ReadThemeColors(ZipArchive archive)
+        {
+            var colors = new List<string>
+            {
+                "FFFFFFFF", "FF000000", "FFEEECE1", "FF1F497D",
+                "FF4F81BD", "FFC0504D", "FF9BBB59", "FF8064A2",
+                "FF4BACC6", "FFF79646", "FF0000FF", "FF800080"
+            };
+
+            var entry = archive.GetEntry("xl/theme/theme1.xml");
+            if (entry == null) return colors;
+
+            var document = new XmlDocument();
+            using (var stream = entry.Open())
+            {
+                document.Load(stream);
+            }
+
+            var colorSchemes = document.GetElementsByTagName("clrScheme");
+            if (colorSchemes.Count == 0) return colors;
+
+            var scheme = colorSchemes[0] as XmlElement;
+            if (scheme == null) return colors;
+
+            foreach (XmlNode node in scheme.ChildNodes)
+            {
+                var slot = node as XmlElement;
+                if (slot == null) continue;
+
+                var colorIndex = ThemeColorIndex(slot.LocalName);
+                if (colorIndex < 0) continue;
+
+                var colorNode = slot.FirstChild as XmlElement;
+                if (colorNode == null) continue;
+
+                var color = colorNode.GetAttribute("lastClr");
+                if (string.IsNullOrEmpty(color)) color = colorNode.GetAttribute("val");
+                color = NormalizeArgb(color);
+                if (color.Length == 0) continue;
+
+                colors[colorIndex] = color;
+            }
+
+            return colors;
+        }
+
+        private static int ThemeColorIndex(string slotName)
+        {
+            if (slotName == "lt1") return 0;
+            if (slotName == "dk1") return 1;
+            if (slotName == "lt2") return 2;
+            if (slotName == "dk2") return 3;
+            if (slotName == "accent1") return 4;
+            if (slotName == "accent2") return 5;
+            if (slotName == "accent3") return 6;
+            if (slotName == "accent4") return 7;
+            if (slotName == "accent5") return 8;
+            if (slotName == "accent6") return 9;
+            if (slotName == "hlink") return 10;
+            if (slotName == "folHlink") return 11;
+            return -1;
+        }
+        private static string ReadColor(XmlElement colorNode, IReadOnlyList<string> themeColors)
+        {
+            if (colorNode == null) return string.Empty;
+
+            var rgb = NormalizeArgb(colorNode.GetAttribute("rgb"));
+            if (rgb.Length > 0) return rgb;
+
+            int themeIndex;
+            if (int.TryParse(colorNode.GetAttribute("theme"), NumberStyles.Integer, CultureInfo.InvariantCulture, out themeIndex) &&
+                themeIndex >= 0 && themeIndex < themeColors.Count)
+            {
+                return ApplyTint(themeColors[themeIndex], colorNode.GetAttribute("tint"));
+            }
+
+            return string.Empty;
+        }
+
+        private static string ApplyTint(string argb, string tintText)
+        {
+            double tint;
+            if (string.IsNullOrEmpty(argb) ||
+                !double.TryParse(tintText, NumberStyles.Float, CultureInfo.InvariantCulture, out tint) ||
+                tint == 0d)
+            {
+                return argb;
+            }
+
+            tint = Math.Max(-1d, Math.Min(1d, tint));
+            var red = ApplyTintToChannel(argb.Substring(2, 2), tint);
+            var green = ApplyTintToChannel(argb.Substring(4, 2), tint);
+            var blue = ApplyTintToChannel(argb.Substring(6, 2), tint);
+            return argb.Substring(0, 2) + red + green + blue;
+        }
+
+        private static string ApplyTintToChannel(string channelHex, double tint)
+        {
+            var channel = int.Parse(channelHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            var tinted = tint < 0d
+                ? channel * (1d + tint)
+                : channel + (255d - channel) * tint;
+            return ((int)Math.Round(tinted, MidpointRounding.AwayFromZero))
+                .ToString("X2", CultureInfo.InvariantCulture);
+        }
+        private static string NormalizeArgb(string color)
+        {
+            if (string.IsNullOrEmpty(color)) return string.Empty;
+            if (color.Length == 6) return "FF" + color;
+            return color.Length == 8 ? color : string.Empty;
         }
 
         private static Dictionary<int, Dictionary<int, string>> ReadComments(ZipArchive archive)
