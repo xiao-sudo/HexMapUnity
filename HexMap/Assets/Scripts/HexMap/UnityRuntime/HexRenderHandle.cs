@@ -1,31 +1,31 @@
 using System;
-using UnityEngine;
 
 namespace HexMap.UnityRuntime
 {
     internal sealed class HexRenderHandle
     {
         private readonly int m_Generation;
-        private readonly MeshRenderer m_Renderer;
-        private readonly MaterialPropertyBlock m_PropertyBlock = new MaterialPropertyBlock();
+        private readonly IHexRenderTarget m_Target;
         private bool m_IsValid = true;
         private bool m_HasBaseAppearance;
         private HexAppearance m_BaseAppearance;
         private bool m_IsSelected;
         private HexSelectionAppearance m_SelectionAppearance;
 
-        private static readonly int s_BaseColorId = Shader.PropertyToID("_BaseColor");
-        private static readonly int s_GradientEnabledId = Shader.PropertyToID("_GradientEnabled");
-
-        public HexRenderHandle(MeshRenderer renderer, int generation)
+        internal HexRenderHandle(IHexRenderTarget target, int generation)
         {
-            m_Renderer = renderer;
+            if (target == null)
+            {
+                throw new ArgumentNullException(nameof(target));
+            }
+
+            m_Target = target;
             m_Generation = generation;
         }
 
         public bool IsValid
         {
-            get { return m_IsValid && m_Renderer != null; }
+            get { return m_IsValid && m_Target != null && m_Target.IsValid; }
         }
 
         public int Generation
@@ -78,8 +78,14 @@ namespace HexMap.UnityRuntime
 
         public void Invalidate()
         {
+            if (!m_IsValid)
+            {
+                return;
+            }
+
             m_IsSelected = false;
             m_IsValid = false;
+            m_Target.Invalidate();
         }
 
         private void ApplyAppearance()
@@ -89,21 +95,11 @@ namespace HexMap.UnityRuntime
                 return;
             }
 
-            m_Renderer.enabled = m_BaseAppearance.Visible;
-            if (!m_BaseAppearance.Visible)
-            {
-                return;
-            }
-
             var color = m_IsSelected ? m_SelectionAppearance.Color : m_BaseAppearance.Color;
             var gradientEnabled = m_IsSelected
                 ? m_SelectionAppearance.GradientEnabled
                 : m_BaseAppearance.GradientEnabled;
-            
-            m_PropertyBlock.Clear();
-            m_PropertyBlock.SetColor(s_BaseColorId, color);
-            m_PropertyBlock.SetFloat(s_GradientEnabledId, gradientEnabled ? 1f : 0f);
-            m_Renderer.SetPropertyBlock(m_PropertyBlock);
+            m_Target.Apply(new HexAppearance(m_BaseAppearance.Visible, color, gradientEnabled));
         }
 
         private void EnsureValid()

@@ -10,11 +10,10 @@ namespace HexMap.UnityRuntime
     public sealed class HexMapRenderer : IDisposable
     {
         private readonly HexMapRenderConfig m_Config;
-        private readonly Dictionary<HexCoord, HexView> m_Views = new Dictionary<HexCoord, HexView>();
+        private Dictionary<HexCoord, HexView> m_Views = new Dictionary<HexCoord, HexView>();
         private RuntimeHexMap m_Map;
         private HexLayout m_Layout;
-        private Transform m_GeneratedRoot;
-        private Mesh m_SharedMesh;
+        private IHexRenderStrategy m_Strategy;
         private int m_Generation;
         private bool m_IsDisposed;
 
@@ -33,7 +32,7 @@ namespace HexMap.UnityRuntime
             m_Config = config;
             m_Map = map;
             m_Layout = layout;
-            BuildCurrentMap();
+            BuildInitialMap();
         }
 
         public RuntimeHexMap Map
@@ -57,6 +56,12 @@ namespace HexMap.UnityRuntime
             return m_Views.TryGetValue(coordinate, out view);
         }
 
+        public void Render()
+        {
+            EnsureNotDisposed();
+            m_Strategy.Render();
+        }
+
         public void Rebuild(RuntimeHexMap map, HexLayout layout)
         {
             EnsureNotDisposed();
@@ -65,11 +70,32 @@ namespace HexMap.UnityRuntime
                 throw new ArgumentNullException(nameof(map));
             }
 
+            var candidateGeneration = m_Generation + 1;
+            IHexRenderStrategy candidateStrategy;
+            var candidateViews = BuildCandidate(map, layout, candidateGeneration, out candidateStrategy);
+
+            try
+            {
+                candidateStrategy.Activate();
+            }
+            catch
+            {
+                DisposeCandidate(candidateStrategy);
+                throw;
+            }
+
             InvalidateCurrentViews();
-            ReleaseGeneratedResources();
+            var previousStrategy = m_Strategy;
+            if (previousStrategy != null)
+            {
+                previousStrategy.Dispose();
+            }
+
             m_Map = map;
             m_Layout = layout;
-            BuildCurrentMap();
+            m_Strategy = candidateStrategy;
+            m_Views = candidateViews;
+            m_Generation = candidateGeneration;
         }
 
         public void Dispose()
@@ -80,88 +106,83 @@ namespace HexMap.UnityRuntime
             }
 
             InvalidateCurrentViews();
-            ReleaseGeneratedResources();
+            if (m_Strategy != null)
+            {
+                m_Strategy.Dispose();
+                m_Strategy = null;
+            }
+
             m_Map = null;
             m_IsDisposed = true;
         }
 
-        private void BuildCurrentMap()
+        private void BuildInitialMap()
         {
-            m_Generation++;
-            m_GeneratedRoot = new GameObject("Generated Hex Map").transform;
-            if (m_Config.Parent != null)
+            var initialGeneration = m_Generation + 1;
+            IHexRenderStrategy candidateStrategy;
+            var candidateViews = BuildCandidate(m_Map, m_Layout, initialGeneration, out candidateStrategy);
+
+            try
             {
-                m_GeneratedRoot.SetParent(m_Config.Parent, false);
+                candidateStrategy.Activate();
+            }
+            catch
+            {
+                DisposeCandidate(candidateStrategy);
+                throw;
             }
 
-            m_SharedMesh = CreateCellMesh();
-            var material = m_Config.SharedMaterial;
+            m_Strategy = candidateStrategy;
+            m_Views = candidateViews;
+            m_Generation = initialGeneration;
+        }
 
-            foreach (var cell in m_Map.Cells)
+        private Dictionary<HexCoord, HexView> BuildCandidate(
+            RuntimeHexMap map,
+            HexLayout layout,
+            int generation,
+            out IHexRenderStrategy strategy)
+        {
+            strategy = CreateStrategy(m_Config.Strategy);
+            try
             {
-                var cellObject = new GameObject(cell.Coordinate.ToString());
-                cellObject.layer = m_Config.Layer;
-                cellObject.transform.SetParent(m_GeneratedRoot, false);
-                cellObject.transform.localPosition = m_Layout.HexToWorld(cell.Coordinate);
+                var targets = strategy.Build(map, layout, m_Config, generation);
+                var views = new Dictionary<HexCoord, HexView>();
 
-                var filter = cellObject.AddComponent<MeshFilter>();
-                var renderer = cellObject.AddComponent<MeshRenderer>();
-                filter.sharedMesh = m_SharedMesh;
-                renderer.sharedMaterial = material;
+                foreach (var cell in map.Cells)
+                {
+                    IHexRenderTarget target;
+                    if (!targets.TryGetValue(cell.Coordinate, out target))
+                    {
+                        throw new InvalidOperationException(
+                            "The render strategy did not create a target for " + cell.Coordinate + ".");
+                    }
 
-                var renderHandle = new HexRenderHandle(renderer, m_Generation);
-                var hexView = new HexView(cell, renderHandle);
-                hexView.SetAppearance(new HexAppearance(true, m_Config.BaseAppearanceColor, false));
-                m_Views.Add(cell.Coordinate, hexView);
+                    var renderHandle = new HexRenderHandle(target, generation);
+                    var hexView = new HexView(cell, renderHandle);
+                    hexView.SetAppearance(new HexAppearance(true, m_Config.BaseAppearanceColor, false));
+                    views.Add(cell.Coordinate, hexView);
+                }
+
+                return views;
+            }
+            catch
+            {
+                DisposeCandidate(strategy);
+                strategy = null;
+                throw;
             }
         }
 
-        private Mesh CreateCellMesh()
+        private static IHexRenderStrategy CreateStrategy(HexMapRenderStrategy strategy)
         {
-            var mesh = new Mesh { name = "Generated Hex Cell" };
-            var vertices = new Vector3[7];
-            var borderDistances = new Vector2[7];
-            var normalizedPositions = new Vector2[7];
-            var triangles = new int[18];
-            vertices[0] = Vector3.zero;
-            borderDistances[0] = Vector2.right;
-            normalizedPositions[0] = Vector2.zero;
-
-            for (var index = 0; index < 6; index++)
+            switch (strategy)
             {
-                var angle = (m_Layout.Orientation == HexOrientation.Pointy ? 30f : 0f) + index * 60f;
-                var radians = angle * Mathf.Deg2Rad;
-                var x = Mathf.Cos(radians) * m_Layout.OuterRadius;
-                var secondary = Mathf.Sin(radians) * m_Layout.OuterRadius * m_Layout.SecondaryScale;
-                vertices[index + 1] = m_Layout.Plane == HexPlane.XY
-                    ? new Vector3(x, secondary, 0f)
-                    : new Vector3(x, 0f, secondary);
-                borderDistances[index + 1] = Vector2.zero;
-                // Keep shader-space edge normals fixed for Pointy and Flat layouts.
-                var normalizedRadians = index * 60f * Mathf.Deg2Rad;
-                normalizedPositions[index + 1] = new Vector2(Mathf.Cos(normalizedRadians), Mathf.Sin(normalizedRadians));
-
-                var triangleIndex = index * 3;
-                triangles[triangleIndex] = 0;
-                if (m_Layout.Plane == HexPlane.XY)
-                {
-                    triangles[triangleIndex + 1] = index + 1;
-                    triangles[triangleIndex + 2] = index == 5 ? 1 : index + 2;
-                }
-                else
-                {
-                    triangles[triangleIndex + 1] = index == 5 ? 1 : index + 2;
-                    triangles[triangleIndex + 2] = index + 1;
-                }
+                case HexMapRenderStrategy.MeshRenderer:
+                    return new MeshRendererStrategy();
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown HexMap render strategy.");
             }
-
-            mesh.vertices = vertices;
-            mesh.uv = borderDistances;
-            mesh.uv2 = normalizedPositions;
-            mesh.triangles = triangles;
-            mesh.RecalculateBounds();
-            mesh.RecalculateNormals();
-            return mesh;
         }
 
         private void InvalidateCurrentViews()
@@ -174,30 +195,15 @@ namespace HexMap.UnityRuntime
             m_Views.Clear();
         }
 
-        private void ReleaseGeneratedResources()
+        private static void DisposeCandidate(IHexRenderStrategy strategy)
         {
-            if (m_GeneratedRoot != null)
+            try
             {
-                DestroyObject(m_GeneratedRoot.gameObject);
-                m_GeneratedRoot = null;
+                strategy.Dispose();
             }
-
-            if (m_SharedMesh != null)
+            catch (Exception cleanupException)
             {
-                DestroyObject(m_SharedMesh);
-                m_SharedMesh = null;
-            }
-        }
-
-        private static void DestroyObject(UnityEngine.Object target)
-        {
-            if (Application.isPlaying)
-            {
-                UnityEngine.Object.Destroy(target);
-            }
-            else
-            {
-                UnityEngine.Object.DestroyImmediate(target);
+                Debug.LogException(cleanupException);
             }
         }
 
