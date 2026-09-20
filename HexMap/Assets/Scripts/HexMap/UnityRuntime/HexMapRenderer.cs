@@ -180,6 +180,8 @@ namespace HexMap.UnityRuntime
             {
                 case HexMapRenderStrategy.MeshRenderer:
                     return new MeshRendererStrategy();
+                case HexMapRenderStrategy.DrawMeshInstanced:
+                    return new DrawMeshInstancedStrategy();
                 default:
                     throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown HexMap render strategy.");
             }

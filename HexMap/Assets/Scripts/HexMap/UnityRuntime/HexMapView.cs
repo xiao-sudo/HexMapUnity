@@ -17,6 +17,7 @@ namespace HexMap.UnityRuntime
         [SerializeField] private Vector3 m_Origin;
         [SerializeField] private Material m_CellMaterial;
         [SerializeField] private int m_CellLayer;
+        [SerializeField] private HexMapRenderStrategy m_RenderStrategy = HexMapRenderStrategy.MeshRenderer;
 
         [SerializeField]
         private Color m_BaseAppearanceColor;
@@ -72,6 +73,12 @@ namespace HexMap.UnityRuntime
             set { m_GvgMapAuthoringAsset = value; }
         }
 #endif
+
+        public HexMapRenderStrategy RenderStrategy
+        {
+            get { return m_RenderStrategy; }
+            set { m_RenderStrategy = value; }
+        }
 
         public RuntimeHexMap Map
         {
@@ -142,7 +149,12 @@ namespace HexMap.UnityRuntime
 
             m_Map = CreateMapSnapshot();
             m_Layout = CreateLayoutSnapshot();
-            var renderConfig = new HexMapRenderConfig(transform, m_CellMaterial, m_CellLayer, m_BaseAppearanceColor);
+            var renderConfig = new HexMapRenderConfig(
+                transform,
+                m_CellMaterial,
+                m_CellLayer,
+                m_BaseAppearanceColor,
+                m_RenderStrategy);
             m_Renderer = new HexMapRenderer(m_Map, m_Layout, renderConfig);
         }
 
