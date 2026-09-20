@@ -254,6 +254,14 @@ namespace HexMap.UnityRuntime
             }
         }
 
+        private void LateUpdate()
+        {
+            if (m_Renderer != null)
+            {
+                m_Renderer.Render();
+            }
+        }
+
         private void DisposeRenderer()
         {
             if (m_Renderer == null)
