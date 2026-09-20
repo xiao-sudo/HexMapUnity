@@ -109,6 +109,7 @@ namespace HexMap.UnityRuntime
                 m_SharedMaterial = config.SharedMaterial;
                 m_Parent = config.Parent;
                 m_Layer = config.Layer;
+                var useLinearColorSpace = QualitySettings.activeColorSpace == ColorSpace.Linear;
                 if (m_SharedMaterial != null)
                 {
                     m_SharedMaterial.enableInstancing = true;
@@ -120,7 +121,7 @@ namespace HexMap.UnityRuntime
                         layout.HexToWorld(cell.Coordinate),
                         Quaternion.identity,
                         Vector3.one);
-                    var target = new DrawMeshInstancedTarget(localMatrix);
+                    var target = new DrawMeshInstancedTarget(localMatrix, useLinearColorSpace);
                     m_Targets.Add(cell.Coordinate, target);
                     m_RenderTargets.Add(target);
                 }
