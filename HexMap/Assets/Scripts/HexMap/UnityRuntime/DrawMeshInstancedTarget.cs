@@ -22,6 +22,11 @@ namespace HexMap.UnityRuntime
             get { return !m_IsInvalidated; }
         }
 
+        public bool IsVisible
+        {
+            get { return IsValid && m_Appearance.Visible; }
+        }
+
         public void Apply(HexAppearance appearance)
         {
             EnsureValid();
@@ -38,7 +43,6 @@ namespace HexMap.UnityRuntime
             Matrix4x4[] matrices,
             Vector4[] colors,
             float[] gradientEnabled,
-            float[] visible,
             int index)
         {
             EnsureValid();
@@ -52,7 +56,6 @@ namespace HexMap.UnityRuntime
                 color.b,
                 color.a);
             gradientEnabled[index] = m_Appearance.GradientEnabled ? 1f : 0f;
-            visible[index] = m_Appearance.Visible ? 1f : 0f;
         }
 
         private void EnsureValid()

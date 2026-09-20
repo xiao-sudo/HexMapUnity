@@ -3,7 +3,7 @@ Shader "HexMap/InstancedHexCell"
     Properties
     {
         _BaseColor("Color", Color) = (1, 1, 1, 1)
-        [Toggle] _Visible("Visible", Float) = 1
+
         _BorderWidth("Border Width", Range(0.001, 0.5)) = 0.05
         [Toggle] _GradientEnabled("Gradient Enabled", Float) = 0
         _GradientPower("Gradient Power", Range(0.1, 8)) = 1
@@ -60,7 +60,7 @@ Shader "HexMap/InstancedHexCell"
             UNITY_INSTANCING_BUFFER_START(Props)
                 UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
                 UNITY_DEFINE_INSTANCED_PROP(float, _GradientEnabled)
-                UNITY_DEFINE_INSTANCED_PROP(float, _Visible)
+
             UNITY_INSTANCING_BUFFER_END(Props)
 
             CBUFFER_START(UnityPerMaterial)
@@ -114,8 +114,8 @@ Shader "HexMap/InstancedHexCell"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
                 float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(Props, _BaseColor);
-                float visible = UNITY_ACCESS_INSTANCED_PROP(Props, _Visible);
-                clip(visible - 0.5);
+
+
                 float borderWidth = clamp(_BorderWidth, 0.001, 0.5);
                 float gradientEnabled = UNITY_ACCESS_INSTANCED_PROP(Props, _GradientEnabled);
                 float gradientPower = max(_GradientPower, 0.1);

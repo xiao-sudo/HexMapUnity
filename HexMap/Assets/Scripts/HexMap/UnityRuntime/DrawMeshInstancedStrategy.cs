@@ -51,7 +51,7 @@ namespace HexMap.UnityRuntime
 
         private static readonly int s_BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int s_GradientEnabledId = Shader.PropertyToID("_GradientEnabled");
-        private static readonly int s_VisibleId = Shader.PropertyToID("_Visible");
+
 
         private readonly Dictionary<HexCoord, IHexRenderTarget> m_Targets =
             new Dictionary<HexCoord, IHexRenderTarget>();
@@ -61,7 +61,7 @@ namespace HexMap.UnityRuntime
         private readonly Matrix4x4[] m_Matrices = new Matrix4x4[MaxInstancesPerDraw];
         private readonly Vector4[] m_Colors = new Vector4[MaxInstancesPerDraw];
         private readonly float[] m_GradientEnabled = new float[MaxInstancesPerDraw];
-        private readonly float[] m_Visible = new float[MaxInstancesPerDraw];
+
         private readonly MaterialPropertyBlock m_PropertyBlock = new MaterialPropertyBlock();
 
         private Mesh m_SharedMesh;
@@ -161,7 +161,7 @@ namespace HexMap.UnityRuntime
                 while (targetIndex < m_RenderTargets.Count && instanceCount < MaxInstancesPerDraw)
                 {
                     var target = m_RenderTargets[targetIndex++];
-                    if (!target.IsValid)
+                    if (!target.IsValid || !target.IsVisible)
                     {
                         continue;
                     }
@@ -171,7 +171,6 @@ namespace HexMap.UnityRuntime
                         m_Matrices,
                         m_Colors,
                         m_GradientEnabled,
-                        m_Visible,
                         instanceCount);
                     instanceCount++;
                 }
@@ -184,7 +183,7 @@ namespace HexMap.UnityRuntime
                 m_PropertyBlock.Clear();
                 m_PropertyBlock.SetVectorArray(s_BaseColorId, m_Colors);
                 m_PropertyBlock.SetFloatArray(s_GradientEnabledId, m_GradientEnabled);
-                m_PropertyBlock.SetFloatArray(s_VisibleId, m_Visible);
+
                 m_DrawAdapter.Draw(
                     m_SharedMesh,
                     m_SharedMaterial,
