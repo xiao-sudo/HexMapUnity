@@ -26,7 +26,9 @@ namespace HexMap.Editor
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var cameraObject = new GameObject("Main Camera");
             cameraObject.tag = "MainCamera";
-            cameraObject.transform.position = new Vector3(0f, 0f, -10f);
+            // XY Hex meshes face +Z; view their front faces with backface culling enabled.
+            cameraObject.transform.position = new Vector3(0f, 0f, 10f);
+            cameraObject.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
             var camera = cameraObject.AddComponent<Camera>();
             camera.orthographic = true;
             camera.orthographicSize = 5f;

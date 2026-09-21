@@ -33,7 +33,8 @@ namespace HexMap.UnityRuntime.Tests
             var cameraObject = new GameObject("Test camera");
             cameraObject.transform.SetParent(m_Root.transform, false);
             m_Camera = cameraObject.AddComponent<Camera>();
-            m_Camera.transform.position = new Vector3(0f, 0f, -10f);
+            m_Camera.transform.position = new Vector3(0f, 0f, 10f);
+            m_Camera.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
             m_Camera.orthographic = true;
             m_Camera.orthographicSize = 3f;
             m_Camera.clearFlags = CameraClearFlags.SolidColor;
@@ -57,7 +58,7 @@ namespace HexMap.UnityRuntime.Tests
 
             // Deliberately nearer the camera than the Hex: queue ordering must still win.
             m_Decorations = new StaticDecorationRenderer(m_Root.transform, m_DecorationMaterial,
-                new[] { new StaticDecorationPlacement(new Vector3(0f, 0f, -0.2f), Quaternion.identity, new Vector3(8f, 4f, 1f)) }, 31);
+                new[] { new StaticDecorationPlacement(new Vector3(0f, 0f, 0.2f), Quaternion.identity, new Vector3(8f, 4f, 1f)) }, 31);
             m_Map = new HexMapRenderer(new RuntimeHexMap(new HexMapDefinition(0)),
                 new HexLayout(HexOrientation.Pointy, HexPlane.XY, 1f, Vector3.zero),
                 new HexMapRenderConfig(m_Root.transform, m_HexMaterial, 31,

@@ -16,9 +16,9 @@ namespace HexMap.UnityRuntime
         [SerializeField] private bool m_DecorationsVisible = true;
         [SerializeField] private StaticDecorationPlacement[] m_Placements =
         {
-            new StaticDecorationPlacement(new Vector3(-2.5f, 0f, -0.2f), Quaternion.identity, new Vector3(2.2f, 5f, 1f)),
-            new StaticDecorationPlacement(new Vector3(0f, 0f, -0.2f), Quaternion.identity, new Vector3(2.2f, 5f, 1f)),
-            new StaticDecorationPlacement(new Vector3(2.5f, 0f, -0.2f), Quaternion.identity, new Vector3(2.2f, 5f, 1f))
+            new StaticDecorationPlacement(new Vector3(-2.5f, 0f, 0.2f), Quaternion.identity, new Vector3(2.2f, 5f, 1f)),
+            new StaticDecorationPlacement(new Vector3(0f, 0f, 0.2f), Quaternion.identity, new Vector3(2.2f, 5f, 1f)),
+            new StaticDecorationPlacement(new Vector3(2.5f, 0f, 0.2f), Quaternion.identity, new Vector3(2.2f, 5f, 1f))
         };
 
         private StaticDecorationRenderer m_Decorations;
