@@ -12,6 +12,12 @@ using UnityEngine;
 
 namespace HexMap.Gvg.Editor
 {
+    public enum GvgAuthoringEditTarget
+    {
+        Hex,
+        SceneObject
+    }
+
     public sealed class GvgMapAuthoringWindow : EditorWindow
     {
         private enum ToolMode
@@ -26,7 +32,8 @@ namespace HexMap.Gvg.Editor
         private GvgMapAuthoringAsset m_Asset;
         private HexMapView m_MapView;
         private string m_MapError = string.Empty;
-        private bool m_SceneEditing = true;
+        [SerializeField]
+        private GvgAuthoringEditTarget m_EditTarget = GvgAuthoringEditTarget.Hex;
         private GvgMapBindingDiagnostic m_BindingDiagnostic = GvgMapBindingDiagnostic.NotBound;
         private ToolMode m_Mode;
         private int m_SelectedPlotId;
@@ -40,8 +47,26 @@ namespace HexMap.Gvg.Editor
         [MenuItem("Tools/Hex Map/GVG Map Authoring")]
         public static void Open()
         {
+            Open(GvgAuthoringEditTarget.Hex);
+        }
+
+        public static void Open(GvgAuthoringEditTarget initialTarget)
+        {
             var window = GetWindow<GvgMapAuthoringWindow>("GVG Map Authoring");
+            window.SetEditTarget(initialTarget);
             window.InitializeFromScene();
+        }
+
+        public void SetEditTarget(GvgAuthoringEditTarget target)
+        {
+            if (m_EditTarget == target)
+            {
+                return;
+            }
+
+            m_EditTarget = target;
+            SceneView.RepaintAll();
+            Repaint();
         }
 
         private void OnEnable()
@@ -160,9 +185,25 @@ namespace HexMap.Gvg.Editor
         }
         private void DrawToolControls()
         {
-            EditorGUILayout.LabelField("Scene Tool", EditorStyles.boldLabel);
-            m_SceneEditing = EditorGUILayout.Toggle("Scene Editing", m_SceneEditing);
+            EditorGUILayout.LabelField("Edit Target", EditorStyles.boldLabel);
+            EditorGUI.BeginChangeCheck();
+            m_EditTarget = (GvgAuthoringEditTarget)GUILayout.Toolbar(
+                (int)m_EditTarget,
+                new[] { "Edit Hex", "Edit Scene Objects" });
+            if (EditorGUI.EndChangeCheck())
+            {
+                SceneView.RepaintAll();
+            }
+
+            if (m_EditTarget == GvgAuthoringEditTarget.SceneObject)
+            {
+                EditorGUILayout.HelpBox("Hex preview is read-only. Scene input is handled by Unity.", MessageType.Info);
+            }
+
+            EditorGUI.BeginDisabledGroup(m_EditTarget != GvgAuthoringEditTarget.Hex);
             m_Mode = (ToolMode)GUILayout.Toolbar((int)m_Mode, new[] { "Select Plot", "Paint Add", "Paint Remove" });
+            EditorGUI.EndDisabledGroup();
+
             m_ShowHexIds = EditorGUILayout.Toggle("Show HexId", m_ShowHexIds);
             m_ShowCoordinates = EditorGUILayout.Toggle("Show Coordinates", m_ShowCoordinates);
             m_ShowTypes = EditorGUILayout.Toggle("Show Type", m_ShowTypes);
@@ -565,16 +606,18 @@ namespace HexMap.Gvg.Editor
                 ClearSelection();
             }
 
-            if (!m_SceneEditing) return;
-
             RuntimeHexMap map;
             HexLayout layout;
             if (!TryCreatePreviewData(out map, out layout)) return;
 
-            ClaimSceneViewInput(map, layout);
             var plotsByHexId = GvgMapAuthoringUtility.CreatePlotLookup(m_Asset, false);
             DrawCells(map, layout, plotsByHexId);
-            HandleSceneInput(sceneView, map, layout);
+
+            if (m_EditTarget == GvgAuthoringEditTarget.Hex)
+            {
+                ClaimSceneViewInput(map, layout);
+                HandleSceneInput(sceneView, map, layout);
+            }
         }
 
         private void ClaimSceneViewInput(RuntimeHexMap map, HexLayout layout)
