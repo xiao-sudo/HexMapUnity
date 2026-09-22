@@ -89,7 +89,10 @@ namespace HexMap.UnityRuntime.Tests
             var renderer = filter.GetComponent<MeshRenderer>();
 
             Assert.That(renderer.enabled, Is.True, "a visible decoration must draw");
-            Assert.That(renderer.sortingOrder, Is.EqualTo(0));
+            Assert.That(
+                renderer.sortingOrder,
+                Is.EqualTo(DecorationQueue.DecorationSortingOrder),
+                "a decoration must be placed below the HexMap baseline");
             Assert.That(renderer.shadowCastingMode, Is.EqualTo(UnityEngine.Rendering.ShadowCastingMode.Off));
             Assert.That(renderer.receiveShadows, Is.False);
             Assert.That(renderer.lightProbeUsage, Is.EqualTo(UnityEngine.Rendering.LightProbeUsage.Off));
@@ -100,6 +103,24 @@ namespace HexMap.UnityRuntime.Tests
                 renderer.sharedMaterial.renderQueue,
                 Is.EqualTo(DecorationQueue.Decoration),
                 "a decoration draws before the HexMap");
+        }
+
+        /// <summary>
+        /// The band ordering is carried by sorting order, and the sign of each band's value is the
+        /// whole contract: smaller draws first, and the HexMap baseline cannot move. This test states
+        /// that numerically so changing a constant cannot silently invert the layers.
+        /// </summary>
+        [Test]
+        public void TheBandsAreOrderedAroundTheHexMapBaseline()
+        {
+            Assert.That(
+                DecorationQueue.DecorationSortingOrder,
+                Is.LessThan(DecorationQueue.HexMapSortingOrder),
+                "decorations must draw before the HexMap, which needs a smaller sorting order");
+            Assert.That(
+                DecorationQueue.OverlaySortingOrder,
+                Is.GreaterThan(DecorationQueue.HexMapSortingOrder),
+                "overlays must draw after the HexMap, which needs a larger sorting order");
         }
 
         [Test]

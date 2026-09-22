@@ -21,7 +21,7 @@
 - [ ] Shader 查找两段式：优先组件上的序列化引用，为空则回退按名查找（`HexMap/Decoration`）。这是为了防止打包时未被引用的 Shader 被剥离导致运行时取到空。
 - [ ] Shader 为空时记录错误并禁用渲染器，**不抛异常**。
 - [ ] 渲染器配置沿用旧实现：关闭阴影投射、接收阴影、光照探针、反射探针、运动矢量。
-- [x] `sortingLayer` 留 `Default`；**`sortingOrder` 一律不写，保持默认 0**。原计划是「队列内顺序用 `sortingOrder` 表达」，但实测证明 `sortingOrder` 的优先级**高于** `renderQueue`，非零值会让装饰物越过队列盖住 HexMap，因此组件不提供该字段；组内先后改用 `renderQueue` 的相邻取值。见 `docs/reference/unity-render-order-rules.md` 第 3 节与 ADR-0001。
+- [x] `sortingLayer` 留 `Default`。**分层由 `sortingOrder` 表达**：装饰物 `-100`、HexMap `0`（基线）、覆盖物 `100`，由 `DecorationQueue` 集中拥有；组件默认取装饰物的值。排序号是只读的摆放设置，不是运行时状态。**已推翻了中途的一版设计** —— 曾一度删掉该字段，因为当时认为 `sortingOrder` 只能在组内微调；实测证明它才是跨带排序的唯一旋钮（`renderQueue` 在排序号不等时被完全忽略），所以它回归了，并被提升为分层机制本身。见 `docs/reference/unity-render-order-rules.md` 第 3 节与 ADR-0001。
 - [ ] 分层只靠 `renderQueue` 子区间。**不得**引入深度偏移、几何高度分层或渲染管线改动。
 - [ ] 提供一个装饰物 Prefab 作为实例参考（人工创建，非批量工具）。
 - [ ] 用同一个 Prefab 改队列值为覆盖物的值，即可得到浮在 HexMap 之上的一层，不需要新组件或新 Shader。

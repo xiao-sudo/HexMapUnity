@@ -28,6 +28,7 @@ namespace HexMap.UnityRuntime
 
         [SerializeField] private Sprite m_Sprite;
         [SerializeField] private int m_Queue = DecorationQueue.Decoration;
+        [SerializeField] private int m_SortingOrder = DecorationQueue.DecorationSortingOrder;
         [SerializeField] private bool m_Visible = true;
 
         [Tooltip("The child that carries the MeshFilter and MeshRenderer. Found automatically when left empty.")]
@@ -70,6 +71,24 @@ namespace HexMap.UnityRuntime
         public int Queue
         {
             get { return m_Queue; }
+        }
+
+        /// <summary>
+        /// The band this decoration is drawn in. Smaller draws first; the HexMap sits at
+        /// <see cref="DecorationQueue.HexMapSortingOrder"/>, so anything meant to stay under the map
+        /// needs an order below it.
+        /// </summary>
+        /// <remarks>
+        /// Read-only on purpose, because this is a placement decision rather than a runtime state:
+        /// the same prefab becomes an overlay by carrying <see cref="DecorationQueue.OverlaySortingOrder"/>
+        /// instead. It is the one field that can silently break the map covering decorations: this
+        /// component ordered at or above <see cref="DecorationQueue.HexMapSortingOrder"/> draws over
+        /// the HexMap. Setting it from script would invite exactly the per-frame drift that makes
+        /// that hard to notice.
+        /// </remarks>
+        public int SortingOrder
+        {
+            get { return m_SortingOrder; }
         }
 
         /// <summary>
@@ -163,6 +182,7 @@ namespace HexMap.UnityRuntime
             }
 
             DecorationRenderSettings.Apply(renderer);
+            renderer.sortingOrder = m_SortingOrder;
             renderer.enabled = m_Visible;
         }
 

@@ -77,9 +77,10 @@
 ## 手动验证（不是自动化测试，但必须执行）
 
 - [x] 在真实生产场景的实例化绘制路径下，用 Frame Debugger 确认装饰物没有被绘制到 HexMap 之前。**已由人确认。**
-- [x] ~~确认不同的 `sortingOrder` 没有把 SRP Batch 切碎。~~ **已实测，但结论比问题本身重要**：`sortingOrder` 不切碎 SRP Batch，然而它的优先级**高于** `renderQueue` —— 给装饰物（2800）设 `sortingOrder = 1` 会让它盖住 HexMap（3000）。因此 `DecorationView` 的 `SortingOrder` 字段已删除，`docs/reference/unity-render-order-rules.md` 中「`sortingLayer → renderQueue → sortingOrder`」的推理已被实测证伪并更正为「`sortingLayer → sortingOrder → renderQueue`」。
+- [x] ~~确认不同的 `sortingOrder` 没有把 SRP Batch 切碎。~~ **已实测，但结论比问题本身重要**：`sortingOrder` 不切碎 SRP Batch，然而它的优先级**高于** `renderQueue` —— 给装饰物（2800）设 `sortingOrder = 1` 会让它盖住 HexMap（3000）。后续经过一轮设计反复（曾删掉该字段，又确定它才是唯一可用的跨带旋钮），最终**改为由 `sortingOrder` 承担分层**：装饰物 `-100`、HexMap `0` 基线、覆盖物 `100`。`docs/reference/unity-render-order-rules.md` 中「`sortingLayer → renderQueue → sortingOrder`」的推理已被实测证伪并更正为「`sortingLayer → sortingOrder → renderQueue`」。
 - [x] 确认装饰物 Shader 在 Inspector 中显示 SRP Batcher 兼容。**已由人确认。**
 - [x] 图集验证：工程使用 Atlas V2，Frame Debugger 上确认已用图集渲染且效果正确。**已由人确认。**
+- [x] 分层守卫：`DecorationLayerOrderTests` 断言「HexMap 盖住装饰物」「覆盖物盖住 HexMap」两条像素关系，并断言两侧的排序号落在正确的一侧（`< 0` 与 `> 0`）。**新增**：`DecorationViewEditModeTests.TheBandsAreOrderedAroundTheHexMapBaseline` 把符号契约钉成数字断言。
 
 ### 为什么装饰物几何进不了 Tier 1
 

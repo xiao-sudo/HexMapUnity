@@ -21,10 +21,16 @@ namespace HexMap.UnityRuntime.Tests
     /// <c>sortingLayer → sortingOrder → renderQueue</c>.
     /// </para>
     /// <para>
-    /// The decoration component therefore writes no <c>sortingOrder</c> at all, and these tests are
-    /// what notices if that changes. Each case draws one opaque rectangle against the opaque HexMap
-    /// and reads the centre pixel, so the answer comes from the screen rather than from reasoning
-    /// about sort flags.
+    /// Because <c>sortingOrder</c> outranks <c>renderQueue</c>, it is the only knob that can order
+    /// these bands, and it is the one the decoration component writes. That also makes it the one
+    /// field that can silently break the layering: a decoration ordered at or above the HexMap
+    /// baseline draws over the map. These tests check both the assigned band values and the result
+    /// on screen, so a changed constant or a changed renderer setting shows up as a failing pixel
+    /// rather than as a decoration that quietly covers the map.
+    /// </para>
+    /// <para>
+    /// Each case draws one opaque rectangle against the opaque HexMap and reads the centre pixel, so
+    /// the answer comes from the screen rather than from reasoning about sort flags.
     /// </para>
     /// </remarks>
     [TestFixture]
@@ -146,19 +152,38 @@ namespace HexMap.UnityRuntime.Tests
                 Is.EqualTo(DecorationQueue.HexMap),
                 "the layering contract names the queue the hex shader must own");
 
-            var decoration = CreateRectangle(DecorationQueue.Decoration, Color.blue, new Vector3(-1.5f, 0f, 0f));
-            var overlay = CreateRectangle(DecorationQueue.Overlay, Color.green, new Vector3(1.5f, 0f, 0f));
+            var decoration = CreateRectangle(
+                DecorationQueue.Decoration,
+                DecorationQueue.DecorationSortingOrder,
+                Color.blue,
+                new Vector3(-1.5f, 0f, 0f));
+            var overlay = CreateRectangle(
+                DecorationQueue.Overlay,
+                DecorationQueue.OverlaySortingOrder,
+                Color.green,
+                new Vector3(1.5f, 0f, 0f));
 
-            // The component must not write sortingOrder: it outranks renderQueue, so any non-zero
-            // value would let a decoration cross the HexMap's layer.
+            // The bands are separated by sorting order. It outranks the render queue, so a
+            // decoration at or above the HexMap baseline would draw over the map.
+            var decorationRenderer = decoration.GetComponentInChildren<MeshRenderer>(true);
+            var overlayRenderer = overlay.GetComponentInChildren<MeshRenderer>(true);
+
             Assert.That(
-                decoration.GetComponentInChildren<MeshRenderer>(true).sortingOrder,
-                Is.EqualTo(0),
-                "a decoration must leave sortingOrder at its default");
+                decorationRenderer.sortingOrder,
+                Is.EqualTo(DecorationQueue.DecorationSortingOrder),
+                "a decoration must take the decoration band");
             Assert.That(
-                overlay.GetComponentInChildren<MeshRenderer>(true).sortingOrder,
-                Is.EqualTo(0),
-                "an overlay must leave sortingOrder at its default");
+                decorationRenderer.sortingOrder,
+                Is.LessThan(DecorationQueue.HexMapSortingOrder),
+                "a decoration must sit below the HexMap baseline");
+            Assert.That(
+                overlayRenderer.sortingOrder,
+                Is.EqualTo(DecorationQueue.OverlaySortingOrder),
+                "an overlay must take the overlay band");
+            Assert.That(
+                overlayRenderer.sortingOrder,
+                Is.GreaterThan(DecorationQueue.HexMapSortingOrder),
+                "an overlay must sit above the HexMap baseline");
 
             BuildHexMap(Color.red);
 
@@ -173,7 +198,11 @@ namespace HexMap.UnityRuntime.Tests
             AssertPixel(new Vector3(1.5f, 0f, 0f), Color.green, "the overlay must cover the HexMap");
         }
 
-        private DecorationView CreateRectangle(int queue, Color colour, Vector3 position)
+        private DecorationView CreateRectangle(
+            int queue,
+            int sortingOrder,
+            Color colour,
+            Vector3 position)
         {
             var texture = new Texture2D(4, 1, TextureFormat.RGBA32, false, true)
             {
@@ -207,7 +236,8 @@ namespace HexMap.UnityRuntime.Tests
 
             var view = root.AddComponent<DecorationView>();
             view.Sprite = sprite;
-            SetQueue(view, queue);
+            SetSerializedField(view, "m_Queue", queue);
+            SetSerializedField(view, "m_SortingOrder", sortingOrder);
             view.Apply();
 
             Assert.That(view.IsReady, Is.True);
@@ -228,15 +258,16 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         /// <summary>
-        /// Writes the queue the way the prefab asset would. The component exposes no queue setter
-        /// because changing it derives a Material that stays resident for the session.
+        /// Writes a serialized field the way the prefab asset would. The component exposes no setters
+        /// for the queue or the sorting order: both decide which Material is derived and which band
+        /// the decoration joins, so they are placement settings rather than runtime switches.
         /// </summary>
-        private static void SetQueue(DecorationView view, int queue)
+        private static void SetSerializedField(DecorationView view, string name, object value)
         {
             var field = typeof(DecorationView).GetField(
-                "m_Queue", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            Assert.That(field, Is.Not.Null, "DecorationView must keep a serialized queue field");
-            field.SetValue(view, queue);
+                name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, "DecorationView must keep a serialized field named " + name);
+            field.SetValue(view, value);
         }
 
         private void ReadFrame()

@@ -188,9 +188,16 @@ namespace HexMap.UnityRuntime.Tests
                 4, 1,
                 new[] { Color.green, Color.green, Color.green, Color.green });
 
-            // Same prefab, same shader, only the queue differs: this is what makes it an overlay.
-            var overlay = CreateDrawableDecoration(sprite, DecorationQueue.Overlay, new Vector3(2f, 4f, 1f));
+            // Same prefab, same shader: the overlay differs by its band, and the band is the
+            // sorting order. The queue only keeps it in the transparent range.
+            var overlay = CreateDrawableDecoration(
+                sprite,
+                DecorationQueue.Overlay,
+                new Vector3(2f, 4f, 1f),
+                default(Vector3),
+                DecorationQueue.OverlaySortingOrder);
             Assert.That(overlay.Queue, Is.EqualTo(DecorationQueue.Overlay));
+            Assert.That(overlay.SortingOrder, Is.EqualTo(DecorationQueue.OverlaySortingOrder));
 
             BuildHexMap(new Color(1f, 0f, 0f, 1f));
 
@@ -232,12 +239,20 @@ namespace HexMap.UnityRuntime.Tests
                 4, 1,
                 new[] { Color.blue, Color.blue, Color.blue, Color.blue });
 
-            // One texture, one Sprite, two decorations: the material cache must key on the queue as
-            // well, or both would end up sharing a material and one queue would win for both.
+            // One texture, one Sprite, two bands: the material cache must key on the queue as well,
+            // or both would end up sharing a material and one queue would win for both.
             var decoration = CreateDrawableDecoration(
-                sprite, DecorationQueue.Decoration, new Vector3(0.5f, 0.5f, 1f), new Vector3(-1.5f, 0f, 0f));
+                sprite,
+                DecorationQueue.Decoration,
+                new Vector3(0.5f, 0.5f, 1f),
+                new Vector3(-1.5f, 0f, 0f),
+                DecorationQueue.DecorationSortingOrder);
             var overlay = CreateDrawableDecoration(
-                sprite, DecorationQueue.Overlay, new Vector3(0.5f, 0.5f, 1f), new Vector3(1.5f, 0f, 0f));
+                sprite,
+                DecorationQueue.Overlay,
+                new Vector3(0.5f, 0.5f, 1f),
+                new Vector3(1.5f, 0f, 0f),
+                DecorationQueue.OverlaySortingOrder);
 
             Assert.That(
                 overlay.GetComponentInChildren<MeshRenderer>(true).sharedMaterial,
@@ -263,7 +278,8 @@ namespace HexMap.UnityRuntime.Tests
             Sprite sprite,
             int queue,
             Vector3 localScale,
-            Vector3 localPosition = default(Vector3))
+            Vector3 localPosition = default(Vector3),
+            int? sortingOrder = null)
         {
             var root = new GameObject("Decoration " + queue);
             root.transform.SetParent(m_Root.transform, false);
@@ -280,6 +296,11 @@ namespace HexMap.UnityRuntime.Tests
             var view = root.AddComponent<DecorationView>();
             view.Sprite = sprite;
             SetQueue(view, queue);
+            if (sortingOrder.HasValue)
+            {
+                SetSortingOrder(view, sortingOrder.Value);
+            }
+
             view.Apply();
 
             Assert.That(view.IsReady, Is.True, "the decoration component must resolve its child MeshRenderer");
@@ -299,6 +320,18 @@ namespace HexMap.UnityRuntime.Tests
                 "m_Queue", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, "DecorationView must keep a serialized queue field");
             field.SetValue(view, queue);
+        }
+
+        /// <summary>
+        /// Writes the sorting order the way the prefab asset would. The component exposes no setter:
+        /// the band a decoration belongs to is a placement decision, not a runtime state.
+        /// </summary>
+        private static void SetSortingOrder(DecorationView view, int sortingOrder)
+        {
+            var field = typeof(DecorationView).GetField(
+                "m_SortingOrder", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, "DecorationView must keep a serialized sorting order field");
+            field.SetValue(view, sortingOrder);
         }
 
         /// <summary>

@@ -112,9 +112,9 @@ sortingLayer  →  sortingOrder  →  renderQueue  →  距离（从后到前）
 >
 > **`sortingOrder` 的优先级高于 `renderQueue`。** 只有当两者 `sortingOrder` 相等时，`renderQueue` 才参与比较 —— 这解释了为什么 `sortingOrder = 0` 时队列顺序（装饰物 2800 先于 Hex 3000）生效，而非零值会让装饰物越过队列盖住 Hex。
 
-**由此得到一条硬约束**：`renderQueue` 子区间分层**只在所有参与对象的 `sortingOrder` 相等时有效**。任何一方设了不同的 `sortingOrder`，队列差异就被忽略。所以跨组分层不能依赖「反正队列不同」这一想法，必须同时保证 `sortingOrder` 一致。
+**由此得到一条硬约束**：靠 `renderQueue` 差异分层**只在所有参与对象的 `sortingOrder` 相等时才有效**。任何一方排序号不同，队列差异就被忽略。
 
-**建议**：跨组关系只用 `renderQueue` 表达，且**各组一律不写 `sortingOrder`（保持默认 0）**。需要组内先后时，同样用 `renderQueue` 的相邻取值，而不是 `sortingOrder` —— 因为后者一旦被写成非零值，就可能越过相邻组。
+**建议**：既然 `sortingOrder` 是唯一能跨带起作用的旋钮，**跨带关系就用 `sortingOrder` 表达，不再指望 `renderQueue`**。`renderQueue` 退化为「留在透明带内」的材质标识。本仓库的具体取值见下文「本仓库的推荐取值」。
 
 
 ### 三个容易踩的约束
@@ -222,28 +222,32 @@ sortingLayer  →  sortingOrder  →  renderQueue  →  距离（从后到前）
 
 ### 分层原则
 
-**让 renderQueue 决定跨组的前后关系，各组一律不写 sortingOrder（保持默认 0），sorting layer 全部保持默认。**
+**跨组层级用 `sortingOrder` 表达（小者先画）；`renderQueue` 不再用于分层，只保证物体留在透明带内。`sorting layer` 全部保持默认。**
 
 | 目标 | 用什么 | 不要用什么 |
 | --- | --- | --- |
-| A 组整体在 B 组之下 | A 的 renderQueue < B 的 renderQueue，**且两组的 `sortingOrder` 相等** | sorting layer、单方面改 `sortingOrder` |
-| 同组内固定排序 | 组内统一的 `renderQueue` 相邻取值 | 混用不同 `sortingOrder` |
-| 同组内按距离排序 | 不动，默认行为 | — |
+| A 组整体在 B 组之下 | A 的 `sortingOrder` < B 的 `sortingOrder` | 只靠 `renderQueue` 差异（`sortingOrder` 不等时它被忽略） |
+| 组内先后 | 组内不同的 `sortingOrder`（会在该组内切批次，见反例） | — |
+| 同组内按距离排序 | 同组统一 `sortingOrder`，其余不动 | — |
 
 ### 本仓库的推荐取值
 
-| | RenderQueue | Sorting Layer | Sorting Order |
+| | Sorting Order | RenderQueue | Sorting Layer |
 | --- | --- | --- | --- |
-| 装饰物 | 2800（`DecorationQueue.Decoration`） | Default | **不写，保持默认 0** |
-| InstancedHexCell | 3000（shader 拥有，`DecorationQueue.HexMap` 引用） | Default | **不写，保持默认 0** |
-| 覆盖物 | 3005（`DecorationQueue.Overlay`） | Default | **不写，保持默认 0** |
+| 装饰物 | **-100**（`DecorationQueue.DecorationSortingOrder`） | 2800 | Default |
+| HexMap | **0，基线不可移动**（`DecorationQueue.HexMapSortingOrder`） | 3000（shader 拥有） | Default |
+| 覆盖物 | **100**（`DecorationQueue.OverlaySortingOrder`） | 3005 | Default |
+| 后续特效 | 继续往上取正值 | 留在透明带内 | Default |
 
-组内先后不要用 `sortingOrder`：它与相邻组的 `renderQueue` 谁优先取决于本文件第 3 节的实测结论，非零值会让该组越过相邻组。需要组内先后时用 `renderQueue` 的相邻取值（如 2800 / 2801）。
+**`sortingOrder` 小者先画，所以任何要画在 HexMap 之下的带必须取负值。** HexMap 的基线在实例化绘制路径上**无法设置**（`Graphics.DrawMeshInstanced` 没有排序参数），是被钉在 0 上的；`MeshRendererStrategy` 会把它显式写到 cell 上。两条路径都在 0，纯属 0 恰好是默认值。
 
 ### 反例
 
-- **给 Hex 用比装饰物更低的 sorting layer。** `SortingLayer` 排序最优先，这会越过队列差异，破坏 Hex 覆盖装饰物的关系。
-- **给任何一组设非零 `sortingOrder`。** `sortingOrder` 优先于 `renderQueue`，所以非零值会越过相邻组的队列差异。实测：装饰物 2800 设 `sortingOrder = 1` 后盖住了 3000 的 Hex。**这是本仓库已经踩过的一个坑。**
+- **给 HexMap 之下的带用正 `sortingOrder`。** 任何正整数都会跑赢基线 0，无论多小。实测：装饰物在队列 2800、`sortingOrder = 1` 时盖住了队列 3000 的 Hex。**这是本仓库已经踩过的一个坑**，表现为「加个层号结果地图被盖住」。
+- **指望 `renderQueue` 差异保证层级。** `sortingOrder` 优先于它，只要两边排序号不等，队列差异就被完全忽略。
+- **给 Hex 用比装饰物更低的 sorting layer。** `SortingLayer` 排序最优先，会越过 `sortingOrder` 差异。另外实例化绘制的物体**无法指定 sorting layer**（见下条）。
+- **想用 `sortingLayer` 给实例化绘制的物体分带。** `sortingLayer` 只能经 `Renderer.sortingLayerID` 设置，而 `DrawMeshInstanced` / `RenderMeshInstanced` 没有排序参数也不产生 `Renderer`。反射打印的 17 个 `DrawMeshInstanced` 重载只带渲染 layer（剔除层），`RenderParams` 的字段里没有任何排序字段。**这是本仓库试过并放弃的方案。**
+- **用 `rendererPriority` 做跨带排序。** 它名字像排序，但只作用于同一材质/shader 批次内部。
 - **给同一组内不同对象设不同 `sortingOrder`。** 会切出额外批次。对 SRP Batcher 是切 SRP Batch，对 instancing 是切 instanced draw call。
 
 ## 验证

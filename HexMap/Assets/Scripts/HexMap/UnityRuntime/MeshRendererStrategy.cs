@@ -73,6 +73,10 @@ namespace HexMap.UnityRuntime
                     renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
                     renderer.allowOcclusionWhenDynamic = false;
 
+                    // Written rather than left at its default, so the HexMap baseline is stated
+                    // where it can be: this path has renderers, the instanced one does not.
+                    renderer.sortingOrder = DecorationQueue.HexMapSortingOrder;
+
                     m_Targets.Add(cell.Coordinate, new MeshRendererTarget(renderer));
                 }
 
