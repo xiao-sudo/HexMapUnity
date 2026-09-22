@@ -236,7 +236,11 @@ namespace HexMap.UnityRuntime.Tests
             try
             {
                 Assert.That(material.GetTag("RenderType", true, string.Empty), Is.EqualTo("Transparent"));
+                // The literal pins the shader to the number it owns; the constant assertion below
+                // ties that number to the decoration/overlay layering. Keep both: with only the
+                // constant assertion, a wrong DecorationQueue.HexMap would still pass.
                 Assert.That(material.renderQueue, Is.EqualTo(3000));
+                Assert.That(material.renderQueue, Is.EqualTo(DecorationQueue.HexMap));
                 Assert.That(material.HasProperty("_BorderWidth"), Is.True);
                 Assert.That(material.HasProperty("_GradientEnabled"), Is.True);
                 Assert.That(material.HasProperty("_GradientPower"), Is.True);

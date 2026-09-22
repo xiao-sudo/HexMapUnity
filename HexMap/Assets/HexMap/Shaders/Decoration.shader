@@ -1,4 +1,4 @@
-Shader "HexMap/StaticDecoration"
+Shader "HexMap/Decoration"
 {
     Properties
     {
@@ -7,12 +7,12 @@ Shader "HexMap/StaticDecoration"
     }
     SubShader
     {
-        // Disable legacy dynamic batching, not the SRP Batcher, so the demo measures this path.
-        Tags { "RenderPipeline" = "UniversalPipeline" "RenderType" = "Transparent" "Queue" = "Transparent-100" "DisableBatching" = "True" }
+        // Disable legacy dynamic batching, not the SRP Batcher.
+        Tags { "RenderPipeline" = "UniversalPipeline" "RenderType" = "Transparent" "Queue" = "Transparent-200" "DisableBatching" = "True" }
         Pass
         {
             Name "Unlit"
-            Tags { "LightMode" = "SRPDefaultUnlit" }
+            Tags { "LightMode" = "UniversalForward" }
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
             ZTest LEqual

@@ -58,7 +58,7 @@ powershell -File scripts/run-tests.ps1 -Mode PlayMode
 ## Frame Debugger 与计数验收
 
 1. 保持同一场景、相机、Game 分辨率及 URP 配置，关闭不需要的 Scene 视图渲染和额外相机，关闭 Gizmos。
-2. 启用装饰，Frame Debugger 捕获主相机：找到 HexMap/StaticDecoration，确认 SRP Batcher 路径，所有装饰先于 InstancedHexCell，且没有装饰穿插进 HexMap 绘制。
+2. 启用装饰，Frame Debugger 捕获主相机：找到 HexMap/Decoration（当时名为 HexMap/StaticDecoration），确认 SRP Batcher 路径，所有装饰先于 InstancedHexCell，且没有装饰穿插进 HexMap 绘制。
 3. 查看 Shader Inspector 的 SRP Batcher 兼容信息和 Frame Debugger 实际事件；兼容标志不能代替实际生效的证据。
 4. 关闭 Frame Debugger 后用同一 Profiler/Rendering 计数口径分别记录装饰开、关的稳定帧 SetPass Calls 与 Draw Calls。装饰新增 SetPass 应为 1～2；Draw Call 不限制为 1～2。
 5. 保留 Shader/批次截图、帧计数、Unity 版本、图形 API、分辨率、设备及配置。不要将 SRP Batch 数量直接视为 SetPass 数量。
