@@ -51,6 +51,25 @@
 - 贴图版与骨架版**共用构建器**，所以它们的结构与旋转不可能漂移。
 - 删除旧文件 `Assets/Editor/DecorationPrefabMenu.cs`（无任何资产引用）。`Assets/Editor/GraphicsSortingProbe.cs` 不动。
 
+### 3.1 带（band）维度（追加）
+
+覆盖物与装饰物共用同一套工具，差别只有一个 `DecorationBand`：
+
+| 带 | 队列 | 排序号 | 命名后缀 |
+| --- | --- | --- | --- |
+| `Decoration` | `DecorationQueue.Decoration` (2800) | `DecorationSortingOrder` (−100) | `_Decoration_` |
+| `Overlay` | `DecorationQueue.Overlay` (3005) | `OverlaySortingOrder` (100) | `_Overlay_` |
+
+- 菜单从 4 项扩到 8 项（`Assets/Create/HexMap/{Decoration,Overlay} (XY|XZ)` 与 `HexMap/Create {Decoration,Overlay} Prefab (XY|XZ)`），**平铺不分组**，已提交的 4 条路径不变。
+- `DecorationBand` 放在 `HexMap.Editor`（编辑器程序集），数字引自 `DecorationQueue` —— 运行时程序集仍然零改动，且那些数字依旧只有一个主人。
+- 写成枚举而不是两个散落的 int，是为了让「队列 2800 配排序号 100」这种组合**不可表达**。
+- 队列与排序号经 `SerializedObject` 写进 `DecorationView` 的私有序列化字段：那是 Inspector 自己的机制，`Queue` / `SortingOrder` 的公开 API 继续只读。**必须在 `Apply()` 之前写**。
+- 骨架菜单也带所属带的数字，否则美术事后填 Sprite 会得到一个站在 −100 的「覆盖物」。
+
+**队列号不承载层级，这条又实测了一次（反方向）。** 把 `Overlay` 临时改成 2800 后，`AnOverlayIsOpaqueAndCoversTheHexMap` 与 `OverlayStaysAboveTheHexMap` 两条像素回读用例**仍然通过** —— 拿掉队列优势，覆盖物照样盖住地图。测量已还原（`git diff` 为空），结论记进 `docs/reference/unity-render-order-rules.md` 第 3 节。
+
+据此**保留 3005（O1）**：它的职责是「该带的材质标识」；而省下那一份材质只在同一张图同时被用作装饰与覆盖时才发生，那并不是 ADR 标注的那条内存风险的杠杆（ADR 第 34 行写明出路是「共享材质 + 纹理图集」）。`DecorationQueue.Overlay` 那句声称队列决定层级的注释已按实测改写。
+
 ## 4. 工具二：装饰贴图导入配置
 
 - `DecorationImportConfig : ScriptableObject`，`[CreateAssetMenu(menuName = "Hex Map/Decoration Import Config")]`。

@@ -114,6 +114,11 @@ sortingLayer  →  sortingOrder  →  renderQueue  →  距离（从后到前）
 
 **由此得到一条硬约束**：靠 `renderQueue` 差异分层**只在所有参与对象的 `sortingOrder` 相等时才有效**。任何一方排序号不同，队列差异就被忽略。
 
+> **第二次实测（覆盖物侧，反方向）**：把覆盖物带的队列临时改成与装饰物相同的 2800（`OverlaySortingOrder` 仍为 100），两条像素回读用例
+> `DecorationRenderingTests.AnOverlayIsOpaqueAndCoversTheHexMap` 与 `DecorationLayerOrderTests.OverlayStaysAboveTheHexMap`
+> **仍然通过** —— 覆盖物照样盖住地图。这一次是**拿掉**队列优势，层级不变，比第一次的「队列劣势也赢」更强。
+> 结论：队列号在覆盖物侧同样不承载层级，`DecorationQueue.Overlay` 只是该带的材质标识。测完已还原为 3005。
+
 **建议**：既然 `sortingOrder` 是唯一能跨带起作用的旋钮，**跨带关系就用 `sortingOrder` 表达，不再指望 `renderQueue`**。`renderQueue` 退化为「留在透明带内」的材质标识。本仓库的具体取值见下文「本仓库的推荐取值」。
 
 

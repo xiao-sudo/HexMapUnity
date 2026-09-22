@@ -30,7 +30,12 @@ namespace HexMap.UnityRuntime
         /// </summary>
         public const int HexMap = 3000;
 
-        /// <summary>Overlays are drawn after the HexMap, so they sit on top of it.</summary>
+        /// <summary>
+        /// Overlays are drawn after the HexMap, so they sit on top of it. That position comes from
+        /// <see cref="OverlaySortingOrder"/>, not from this number: measured with the overlay band on
+        /// this value's neighbour <see cref="Decoration"/>, the overlay still covered the map. The
+        /// queue's job is to keep the band's materials distinct and inside the transparent range.
+        /// </summary>
         public const int Overlay = 3005;
 
         /// <summary>

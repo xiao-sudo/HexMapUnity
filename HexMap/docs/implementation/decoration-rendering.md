@@ -15,6 +15,7 @@
 | 一装饰一 Prefab、放进场景可预览 | 根挂 `DecorationView`、子物体持 `MeshFilter` + `MeshRenderer`；`[ExecuteAlways]` 让编辑期直接可见 |
 | 贴片可竖立（XY）或平放（XZ） | 只改子物体 `Renderer` 的 `localRotation`；网格恒在局部 XY 生成，运行时组件零改动（见 4.1） |
 | 美术把图丢进目录就得到可用的 Sprite | `DecorationImportConfig` + `DecorationSpriteImporter`，目录即契约（见第 12 节） |
+| 覆盖物也能用同一套工具创建 | 同一个构建器多一个「带」维度：`DecorationBand.Overlay` 写 `OverlaySortingOrder`(100) 与 `DecorationQueue.Overlay`(3005)，命名 `{name}_Overlay_{plane}`（见 4.1） |
 
 ## 2. 分层契约
 
@@ -95,14 +96,24 @@ DecorationView Prefab
 
 **平面与分层正交。** 一个装饰落在哪条带仍由 `m_Queue` / `m_SortingOrder` 决定：平放的地面贴片同样可以取 `-100`（被地图压住）或 `100`（盖住地图），不需要新的带，也不需要新组件。
 
-四个菜单项由 `DecorationPrefabBuilder` 一处构建，签名的差别只有平面：
+八个菜单项由 `DecorationPrefabBuilder` 一处构建，签名的差别只有「带」与「平面」两个维度：
 
 | 菜单项 | 输入 | 产出 |
 | --- | --- | --- |
 | `Assets/Create/HexMap/Decoration (XY)` | 选中的 Sprite | `{sprite.name}_Decoration_XY.prefab`，落在源图同目录 |
 | `Assets/Create/HexMap/Decoration (XZ)` | 选中的 Sprite | `{sprite.name}_Decoration_XZ.prefab`，同上 |
+| `Assets/Create/HexMap/Overlay (XY)` | 选中的 Sprite | `{sprite.name}_Overlay_XY.prefab`，同上 |
+| `Assets/Create/HexMap/Overlay (XZ)` | 选中的 Sprite | `{sprite.name}_Overlay_XZ.prefab`，同上 |
 | `HexMap/Create Decoration Prefab (XY)` | 无 | 用户选路径的空骨架 |
 | `HexMap/Create Decoration Prefab (XZ)` | 无 | 用户选路径的空骨架 |
+| `HexMap/Create Overlay Prefab (XY)` | 无 | 用户选路径的空骨架 |
+| `HexMap/Create Overlay Prefab (XZ)` | 无 | 用户选路径的空骨架 |
+
+命名模板是 `{sourceName}_{band}_{plane}`，两段都写成枚举成员名 —— 磁盘上的标签与代码里的 token 是同一个词，改不动其中一半。一个 Sprite 合法地可以派生出**四个** Prefab（两带 × 两平面），所以四者必须彼此不同；重名走 `AssetDatabase.GenerateUniqueAssetPath`，不弹框。
+
+**`DecorationBand` 是构建器侧唯一的带表**，它从 `DecorationQueue` 取数，不重述 2800 / 3005 / -100 / 100 —— 那些数字的主人只有一个。写成枚举而不是两个散落的 int，是为了让「队列 2800 配排序号 100」这种组合**不可表达**：它的症状是装饰物静默盖住地图，正是第 8 节陷阱 1 那条。
+
+骨架版也会带上所属带的队列与排序号，即使它还没有任何东西可画 —— 否则美术事后填 Sprite 会得到一个站在 -100 的「覆盖物」。
 
 校验器同时接受 **`Texture2D` 主资产与展开后的子 `Sprite`**：Project 窗口点中一张 Sprite 贴图时给的是 `Texture2D`，只有展开点中子 Sprite 才是 `Sprite`。`spriteMode = Multiple` 的主资产被拒绝而不是静默取第一张子图 —— 那会为一张用户没指的图建出 Prefab。重名走 `AssetDatabase.GenerateUniqueAssetPath`，不弹框。
 
@@ -246,7 +257,7 @@ DecorationView.Visible = false
 | `DecorationMeshFactory` | `DecorationGeometryTests`（EditMode） | 居中、UV 直通（子矩形 Sprite）、Tight 轮廓保留、缓存复用、清理、**顶点全在局部 XY** |
 | `DecorationMaterialCache` | 同上 | 同键复用、异队列隔离、`_BaseMap`、空输入报错且返回 null、`Clear()` |
 | `DecorationView` 编辑期装配 | `DecorationViewEditModeTests`（EditMode） | `[ExecuteAlways]` → `OnEnable` → `Apply()` 链路、渲染器配置、初始隐藏、带序符号契约 |
-| 渲染平面与构建器 | `DecorationPrefabBuilderTests`（EditMode，`HexMap.Editor.Tests.EditMode`） | XY = `identity`、XZ = `+90°X`、两平面只差一个四元数、子物体名与组件、未定义平面被拒绝、产物命名 |
+| 带与平面 | `DecorationPrefabBuilderTests`（EditMode，`HexMap.Editor.Tests.EditMode`） | band × plane 四格都带上正确的队列/排序号、XY = `identity`、XZ = `+90°X`、两平面只差一个四元数、两带只差数字、未定义带/平面被拒绝、产物命名四格、两带的排序号分居基线两侧 |
 | 装饰贴图导入规则 | `DecorationSpriteImportTests`（EditMode，同上） | 命中、子目录、前缀陷阱（`Res` vs `Resources`）、多目录、空目录、兜底计划、配置驱动设置 |
 | 跨带层序 | `DecorationLayerOrderTests`（PlayMode） | HexMap 盖住装饰物、覆盖物盖住 HexMap、隐藏装饰物 |
 | 装饰物渲染与相机移动 | `DecorationRenderingTests`（PlayMode） | 半透明 Hex 混合、相机平移缩放稳定、显隐、队列隔离 |

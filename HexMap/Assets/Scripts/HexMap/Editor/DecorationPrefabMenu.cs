@@ -10,59 +10,104 @@ namespace HexMap.Editor
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Four entries, two questions each: what the prefab is built from (the selected Sprite, or
-    /// nothing but the required shape) and which plane it renders on. All four go through
-    /// <see cref="DecorationPrefabBuilder"/>, so none of them can disagree about the structure or
-    /// the rotation.
+    /// Eight entries, two questions each: what the prefab is built from (the selected Sprite, or
+    /// nothing but the required shape) and which band and plane it renders in. Every one of them goes
+    /// through <see cref="DecorationPrefabBuilder"/>, so none of them can disagree about the
+    /// structure, the rotation, or the two numbers a band means.
     /// </para>
     /// <para>
-    /// <b>The plane is picked by the menu entry rather than by a dialog or by a folder rule.</b> A
-    /// decoration's plane is a per-asset decision — an upright tree and a flat road tile can live in
-    /// the same folder — so it has to be stated where the prefab is created, and two entries state
-    /// it in the one place that is always visible.
+    /// <b>Band and plane are picked by the menu entry rather than by a dialog or by a folder
+    /// rule.</b> Both are per-asset decisions -- an upright tree, a flat road tile and a floating
+    /// status icon can all live in the same folder -- so they have to be stated where the prefab is
+    /// created, and menu entries state them in the one place that is always visible.
+    /// </para>
+    /// <para>
+    /// The entries are flat rather than grouped into <c>Decoration/</c> and <c>Overlay/</c>
+    /// submenus: with four items per band a submenu costs a click and buys nothing, and the paths
+    /// that already exist stay where anyone who learned them expects to find them.
     /// </para>
     /// </remarks>
     internal static class DecorationPrefabMenu
     {
-        private const string SpriteXyMenuPath = "Assets/Create/HexMap/Decoration (XY)";
-        private const string SpriteXzMenuPath = "Assets/Create/HexMap/Decoration (XZ)";
-        private const string SkeletonXyMenuPath = "HexMap/Create Decoration Prefab (XY)";
-        private const string SkeletonXzMenuPath = "HexMap/Create Decoration Prefab (XZ)";
+        private const string DecorationSpriteXyMenuPath = "Assets/Create/HexMap/Decoration (XY)";
+        private const string DecorationSpriteXzMenuPath = "Assets/Create/HexMap/Decoration (XZ)";
+        private const string OverlaySpriteXyMenuPath = "Assets/Create/HexMap/Overlay (XY)";
+        private const string OverlaySpriteXzMenuPath = "Assets/Create/HexMap/Overlay (XZ)";
+        private const string DecorationSkeletonXyMenuPath = "HexMap/Create Decoration Prefab (XY)";
+        private const string DecorationSkeletonXzMenuPath = "HexMap/Create Decoration Prefab (XZ)";
+        private const string OverlaySkeletonXyMenuPath = "HexMap/Create Overlay Prefab (XY)";
+        private const string OverlaySkeletonXzMenuPath = "HexMap/Create Overlay Prefab (XZ)";
 
-        [MenuItem(SpriteXyMenuPath, false, 1)]
-        private static void CreateFromSelectedSpritesOnXy()
+        [MenuItem(DecorationSpriteXyMenuPath, false, 1)]
+        private static void CreateDecorationFromSpriteOnXy()
         {
-            CreateFromSelectedSprites(HexPlane.XY);
+            CreateFromSelectedSprites(DecorationBand.Decoration, HexPlane.XY);
         }
 
-        [MenuItem(SpriteXyMenuPath, true, 1)]
-        private static bool ValidateCreateFromSelectedSpritesOnXy()
+        [MenuItem(DecorationSpriteXyMenuPath, true, 1)]
+        private static bool ValidateCreateDecorationFromSpriteOnXy()
         {
-            return CollectSelectedSprites().Count > 0;
+            return CanCreateFromSelectedSprites();
         }
 
-        [MenuItem(SpriteXzMenuPath, false, 2)]
-        private static void CreateFromSelectedSpritesOnXz()
+        [MenuItem(DecorationSpriteXzMenuPath, false, 2)]
+        private static void CreateDecorationFromSpriteOnXz()
         {
-            CreateFromSelectedSprites(HexPlane.XZ);
+            CreateFromSelectedSprites(DecorationBand.Decoration, HexPlane.XZ);
         }
 
-        [MenuItem(SpriteXzMenuPath, true, 2)]
-        private static bool ValidateCreateFromSelectedSpritesOnXz()
+        [MenuItem(DecorationSpriteXzMenuPath, true, 2)]
+        private static bool ValidateCreateDecorationFromSpriteOnXz()
         {
-            return CollectSelectedSprites().Count > 0;
+            return CanCreateFromSelectedSprites();
         }
 
-        [MenuItem(SkeletonXyMenuPath)]
-        private static void CreateSkeletonOnXy()
+        [MenuItem(OverlaySpriteXyMenuPath, false, 3)]
+        private static void CreateOverlayFromSpriteOnXy()
         {
-            CreateSkeleton(HexPlane.XY);
+            CreateFromSelectedSprites(DecorationBand.Overlay, HexPlane.XY);
         }
 
-        [MenuItem(SkeletonXzMenuPath)]
-        private static void CreateSkeletonOnXz()
+        [MenuItem(OverlaySpriteXyMenuPath, true, 3)]
+        private static bool ValidateCreateOverlayFromSpriteOnXy()
         {
-            CreateSkeleton(HexPlane.XZ);
+            return CanCreateFromSelectedSprites();
+        }
+
+        [MenuItem(OverlaySpriteXzMenuPath, false, 4)]
+        private static void CreateOverlayFromSpriteOnXz()
+        {
+            CreateFromSelectedSprites(DecorationBand.Overlay, HexPlane.XZ);
+        }
+
+        [MenuItem(OverlaySpriteXzMenuPath, true, 4)]
+        private static bool ValidateCreateOverlayFromSpriteOnXz()
+        {
+            return CanCreateFromSelectedSprites();
+        }
+
+        [MenuItem(DecorationSkeletonXyMenuPath)]
+        private static void CreateDecorationSkeletonOnXy()
+        {
+            CreateSkeleton(DecorationBand.Decoration, HexPlane.XY);
+        }
+
+        [MenuItem(DecorationSkeletonXzMenuPath)]
+        private static void CreateDecorationSkeletonOnXz()
+        {
+            CreateSkeleton(DecorationBand.Decoration, HexPlane.XZ);
+        }
+
+        [MenuItem(OverlaySkeletonXyMenuPath)]
+        private static void CreateOverlaySkeletonOnXy()
+        {
+            CreateSkeleton(DecorationBand.Overlay, HexPlane.XY);
+        }
+
+        [MenuItem(OverlaySkeletonXzMenuPath)]
+        private static void CreateOverlaySkeletonOnXz()
+        {
+            CreateSkeleton(DecorationBand.Overlay, HexPlane.XZ);
         }
 
         /// <summary>
@@ -73,7 +118,7 @@ namespace HexMap.Editor
         /// decoration prefab is meaningless without the Sprite it references, so keeping the two
         /// together is what makes deleting a texture and finding its dependants a single operation.
         /// </remarks>
-        private static void CreateFromSelectedSprites(HexPlane plane)
+        private static void CreateFromSelectedSprites(DecorationBand band, HexPlane plane)
         {
             var sprites = CollectSelectedSprites();
             if (sprites.Count == 0)
@@ -94,9 +139,10 @@ namespace HexMap.Editor
                     continue;
                 }
 
-                var fileName = DecorationPrefabBuilder.BuildAssetName(sprite.name, plane) + ".prefab";
+                var fileName = DecorationPrefabBuilder.BuildAssetName(sprite.name, band, plane)
+                    + ".prefab";
                 var assetPath = AssetDatabase.GenerateUniqueAssetPath(folder + "/" + fileName);
-                created.Add(DecorationPrefabBuilder.CreateAsset(assetPath, plane, sprite));
+                created.Add(DecorationPrefabBuilder.CreateAsset(assetPath, band, plane, sprite));
             }
 
             if (created.Count == 0)
@@ -115,12 +161,15 @@ namespace HexMap.Editor
         /// This is the only entry that asks for a path. The Sprite entries cannot: they are invoked
         /// on an already-selected asset, and asking again where to put the result of "make a
         /// decoration out of this" is a question the selection has already answered.
+        ///
+        /// The skeleton carries its band's queue and sorting order even though it has nothing to
+        /// draw yet, so filling in the Sprite later cannot land it in the wrong band.
         /// </remarks>
-        private static void CreateSkeleton(HexPlane plane)
+        private static void CreateSkeleton(DecorationBand band, HexPlane plane)
         {
             var path = EditorUtility.SaveFilePanelInProject(
                 "Create Decoration Prefab",
-                "Decoration_" + plane,
+                band + "_" + plane,
                 "prefab",
                 "Choose where to save the decoration prefab.");
             if (string.IsNullOrEmpty(path))
@@ -128,9 +177,14 @@ namespace HexMap.Editor
                 return;
             }
 
-            var prefab = DecorationPrefabBuilder.CreateAsset(path, plane, null);
+            var prefab = DecorationPrefabBuilder.CreateAsset(path, band, plane, null);
             EditorGUIUtility.PingObject(prefab);
             Selection.activeObject = prefab;
+        }
+
+        private static bool CanCreateFromSelectedSprites()
+        {
+            return CollectSelectedSprites().Count > 0;
         }
 
         /// <summary>
@@ -138,7 +192,7 @@ namespace HexMap.Editor
         /// is not a Sprite asset.
         /// </summary>
         /// <remarks>
-        /// All or nothing on purpose: the validator calls this too, so a menu entry is enabled only
+        /// All or nothing on purpose: the validators call this too, so a menu entry is enabled only
         /// when it would create a prefab for every selected object. Creating some and silently
         /// skipping the rest would make a partial failure look like a success.
         /// </remarks>
