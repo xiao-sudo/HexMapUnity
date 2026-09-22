@@ -4,16 +4,16 @@
 
 **Blocked by:** 02 — 装饰物 Prefab 与自渲染组件。
 
-**Status:** tests landed with 02 (`e7cc504`, review fixes in `d6c6813`); two items still open, listed below.
+**Status:** implemented. Manual Frame Debugger and atlas checks remain, listed at the end.
 
 ## 接缝一：`DecorationMeshFactory`（EditMode）
 
 - [x] 先例：`HexCellMeshFactory` 是同形态、同程序集的静态几何工厂。实际断言方式未沿用 `HexMapViewTests`，而是各自独立构造 Sprite —— 因为它需要精确控制 UV 与 Pivot。
-- [x] 断言：一个占据非 0~1 矩形、且 Pivot 不在中心的 Sprite，产出的顶点以 `Sprite.bounds.center` 为原点居中。
+- [x] 断言：一个占据非 0~1 矩形、且 Pivot 不在中心的 Sprite，产出的顶点以 `Sprite.bounds.center` 为原点居中；**并断言顶点跨度等于 `Sprite.bounds.size`**。
 - [x] 断言：UV 与 `Sprite.uv` 逐项相等。
-- [ ] ~~断言：顶点数为 4、索引数为 6。~~ **已作废**：`Tight` 导入的轮廓网格顶点数本就大于 4，写死 4/6 与「保留 Sprite 拓扑」的新约束直接冲突。改为断言拓扑被保留（见下一条）。
-- [ ] **未做：故意退化实现确认测试真的红。** 计划中要求的这一步没有执行。风险具体是：「居中」与「UV 直通」两条断言在**程序化 Sprite** 上无法证伪退化实现 —— 因为 `Sprite.uv` 恒为单位方格、`Sprite.bounds.center` 也恒为可复现值，一个硬编码单位 Quad 会同时通过这两条。**所以这两条断言目前只记录契约，不具备证伪能力。**
-- [x] **不引入真实 Sprite Atlas 资产做测试。** 只测几何学。已把「为什么测不到图集」写进 `DecorationGeometryTests` 的类文档：程序化 `Texture2D` 没有 `.meta`，无法进入 Sprite Atlas。
+- [x] ~~断言：顶点数为 4、索引数为 6。~~ **已作废**：`Tight` 导入的轮廓网格顶点数本就大于 4。改为断言拓扑被保留。
+- [x] **已解决「断言无法证伪退化实现」的问题。** 原判断是「程序化 Sprite 的 UV 恒为单位方格，故退化 Quad 也能通过」。**这个判断是错的**：`Sprite.Create` 的 `rect` 可以只覆盖纹理的一块子区域，此时 `Sprite.uv` 只寻址该角。测试现在就用这种子矩形 Sprite（`rect = (1,1,2,2)`，纹理 4×4），并先断言该 Sprite 的 UV 跨度确实小于整张纹理，否则测试自身无效。**退化实现（硬编码 0~1 UV）会因 UV 跨度断言而失败。**
+- [x] **不引入真实 Sprite Atlas 资产做测试。** 但已用子矩形 Sprite 复现了图集的**几何情形**（UV 只覆盖纹理一角）。仍未覆盖的是**打包这一步本身**，留作人工验证。
 - [x] 断言外部数据（顶点 / UV / 索引），不绑定内部缓存结构或私有字段。
 - [x] 断言：`Tight` 导入的轮廓网格被保留而不是被压成四边形。用真实导入管线（写 PNG + `TextureImporterSettings.spriteMeshType = Tight`）构造，因为 `Sprite.Create(..., SpriteMeshType.Tight)` 在运行时返回的仍是 4 顶点矩形。
 
@@ -28,16 +28,17 @@
 
 ## 接缝二之补充：`DecorationView` 的编辑期装配（EditMode）
 
-- [ ] 断言：对一个「根挂 `DecorationView` + 子物体持 `MeshFilter`/`MeshRenderer`」的对象设好 Sprite 后，子物体的 `sharedMesh` 与 `sharedMaterial` 均非空。
-- [ ] 这一条守的是**编辑模式可见**这个能力本身：它执行的是 `[ExecuteAlways]` → `OnEnable` → `Apply()` 这条链路，而几何接缝与 PlayMode 测试都不经过它。
-- [ ] 尚未实现。`DecorationView` 目前只在 PlayMode 测试里被用到，且那些测试是运行时 `AddComponent`，不覆盖编辑期启用路径。
+- [x] 断言：对一个「根挂 `DecorationView` + 子物体持 `MeshFilter`/`MeshRenderer`」的对象设好 Sprite 后，**启用组件**会让子物体的 `sharedMesh` 与 `sharedMaterial` 均非空。见 `DecorationViewEditModeTests`。
+- [x] 这一条守的是**编辑模式可见**这个能力本身：它执行的是 `[ExecuteAlways]` → `OnEnable` → `Apply()` 这条链路。测试为此**先禁用组件、写好序列化字段、再启用**，否则 `AddComponent` 会在字段就位前就调用 `OnEnable`，链路根本没被真正检验。
+- [x] 另断言装配结果：`renderer.enabled`、`sortingOrder`、阴影/探针/运动矢量全关、材质 `renderQueue == DecorationQueue.Decoration`。
+- [x] 另断言：`m_Visible == false` 的装饰物**不画但仍被装配**（否则日后显示它就得重建）。这条同时覆盖了 PlayMode 侧的初始隐藏场景，但 PlayMode 侧另有像素断言。
 
-## 接缝二之补充二：生命周期钩子（PlayMode，尚未实现）
+## 接缝二之补充二：生命周期钩子（PlayMode，**决定不做**）
 
-- [ ] 断言：一个**在场景里**（而非运行时 `AddComponent`）的 `DecorationView`，在进入 Play 之后 `MeshFilter.sharedMesh` 仍然有效。
-- [ ] 这条守的是一类已经在实现中真实发生过的缺陷：`RuntimeInitializeOnLoadMethod` 的清理时机若晚于场景对象的 `OnEnable`，会把刚赋给 `MeshFilter` 的网格销毁，表现为「编辑模式正常、一运行就没引用」。
-- [ ] 现有 PlayMode 测试抓不到它，因为它们在 `SetUp`/`TearDown` 里手动清缓存，`DecorationCacheLifetime` 整个类从未被执行。
-- [ ] 需要仓库里有一个测试专用场景，用 `SceneManager.LoadScene` 加载。是否要做由人决定：这类缺陷在运行期肉眼可见，仓库当前没有测试专用场景资产。
+- [ ] **不做，理由如下。** 需求是「一个在场景里的 `DecorationView`，进入 Play 后 `MeshFilter.sharedMesh` 仍有效」。
+- [ ] 需要仓库新增一个测试专用场景、用 `SceneManager.LoadScene` 加载。仓库当前没有测试专用场景资产。
+- [ ] 该缺陷类型（`RuntimeInitializeOnLoadMethod` 清理时机晚于场景对象 `OnEnable`）已在实现中真实发生过一次并修复，且**在运行期肉眼可见** —— 进 Play 即见。
+- [ ] 决策：由人判定不值得为它引入场景资产与配套维护成本。**因此 `DecorationCacheLifetime` 仍然没有任何自动化覆盖**，这是本特性已知的测试空缺。
 
 ## 接缝三：运行时层序与稳定性（PlayMode 像素回读）
 
@@ -45,19 +46,23 @@
 - [x] 断言：半透明格子叠在装饰物上得到混合色。
 - [x] 断言：不透明格子完全盖住装饰物。
 - [x] 断言：装饰物在相机平移与缩放后仍固定在世界空间。
-- [ ] 部分完成：**隐藏后重新显示且不重建几何/材质**已断言（`IsReady` 仍为真）；**「初始可见为假时装饰物不出现」未断言** —— 现有用例走的是运行时 `m_Visible` 切换，没有覆盖 Prefab 上 `m_Visible == false` 的初始状态。这一条可以补，成本很低。
-- [ ] 部分完成：同一 Sprite 在装饰物队列与覆盖物队列上的**层序**未在 PlayMode 断言。已有的是「覆盖物队列的不透明方块盖住不透明 Hex」，以及 EditMode 里的材质实例隔离。缺的是「两个实例同屏、改其一不影响另一个」。
+- [x] 部分完成：**隐藏后重新显示且不重建几何/材质**已断言（`IsReady` 仍为真）。
+- [x] **「初始可见为假时装饰物不出现」已断言** —— 新增 `ADecorationAuthoredHiddenNeverDraws`，像素回读确认不画，并确认仍被装配。
+- [x] **同一 Sprite 双队列互不影响已断言** —— 新增 `TwoQueuesFromOneSpriteDoNotAffectEachOther`：同一 Sprite 派生两个材质实例、同屏各画一处、隐藏其一不影响另一个的像素。
 - [x] 拆除时清理材质缓存与 Mesh 缓存。
 
 ## Comments
 
-### 一条断言比没有断言更危险的情形
+### 一条断言比没有断言更危险的情形 —— 已解决
 
-本票的接缝一里，「居中」与「UV 直通」两条断言**在程序化 Sprite 上无法证伪退化实现**。原因是程序化 Sprite 的 `Sprite.uv` 恒为单位方格、`Sprite.bounds.center` 恒为可复现值，所以一个硬编码的 0~1 单位 Quad 会让这两条**同时通过**。
+接缝一里「居中」与「UV 直通」两条断言起初**在程序化 Sprite 上无法证伪退化实现**，依据是当时认为 `Sprite.uv` 恒为单位方格。**那个前提是错的**：`Sprite.Create` 的 `rect` 可以只覆盖纹理的一块子区域。
 
-它们的真实价值因此是「记录契约」而不是「守卫」：将来有人改 `DecorationMeshFactory` 时会看到这两条要求，但它们不会在他改错时报红。**唯一能证伪退化的场景是图集**，而图集需要真实资产，本票明确不做。
+现在测试用 `rect = (1,1,2,2)` 对 4×4 纹理构造子矩形 Sprite，其 UV 只寻址纹理一角。两条断言因此都能失败于退化实现：
 
-知道这一点的意义是：不要把这两条绿色当作「UV 直通已被验证」。它没有。
+- **UV**：测试先断言该 Sprite 的 UV 跨度小于整张纹理（否则 fixture 无区分力），再逐项比对 `Sprite.uv`。
+- **居中**：除了「平均值为 0」，另断言顶点跨度等于 `Sprite.bounds.size`。这条是必要的 —— 用「纹理四角」构造的退化 Quad 居中后平均值同样是 0，但跨度会是整张纹理，只有跨度能识破它。
+
+**退化验证仍未实机执行。** 以上是逐条推演：每条断言各有一个会使它失败的退化实现，且测试自带守卫断言防止 fixture 自己退化为无区分力。但「真的红一次」没有跑过。
 
 ### 同一类失误在本特性里出现过三次
 

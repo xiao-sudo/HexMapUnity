@@ -13,19 +13,17 @@ namespace HexMap.UnityRuntime.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>What this seam cannot cover.</b> The reason decorations must pass <c>Sprite.uv</c> through
-    /// rather than synthesise a 0..1 quad is Sprite Atlas packing, and that case is not testable
-    /// here. A procedurally created Sprite always reports UVs covering the whole 0..1 square: its UV
-    /// space is normalised to the rect it occupies in whatever texture backs it, so neither the
-    /// texture size nor the pivot can push those UVs outside the unit square. Only atlas packing
-    /// remaps them into a sub-region of a larger page, and a procedural Sprite has no <c>.meta</c>,
-    /// so no Sprite Atlas can pack it.
+    /// <b>How far this seam reaches.</b> A Sprite covering a sub-rect of a larger texture reports
+    /// UVs that address only a corner of that texture, which is the same situation as a packed
+    /// atlas page. The UV assertion builds exactly that Sprite, so a hard-coded 0..1 quad fails it.
+    /// It first asserts that the fixture is discriminating, so a Sprite whose UVs happened to span
+    /// the whole texture cannot make the test pass vacuously.
     /// </para>
     /// <para>
-    /// So the passthrough test below asserts the contract (mesh UVs equal <c>Sprite.uv</c> element by
-    /// element) without being able to falsify it against a hard-coded quad. The atlas case is left to
-    /// manual verification: put an atlas-packed Sprite on a decoration and confirm it draws the
-    /// Sprite rather than a slice of the atlas page.
+    /// A real Sprite Atlas asset is still not used, because a procedural <c>Texture2D</c> has no
+    /// <c>.meta</c> and cannot be packed. What that leaves unverified is the packing step itself,
+    /// not the UV handling — which is why the manual check remains: put an atlas-packed Sprite on a
+    /// decoration and confirm it draws the Sprite rather than a slice of the page.
     /// </para>
     /// </remarks>
     [TestFixture]
@@ -93,15 +91,54 @@ namespace HexMap.UnityRuntime.Tests
 
             Assert.That(centre.x, Is.EqualTo(0f).Within(Tolerance), "quad must be centred on x");
             Assert.That(centre.y, Is.EqualTo(0f).Within(Tolerance), "quad must be centred on y");
-            Assert.That(mesh.bounds.size.x, Is.EqualTo(expectedSize.x).Within(Tolerance));
-            Assert.That(mesh.bounds.size.y, Is.EqualTo(expectedSize.y).Within(Tolerance));
+
+            // Centring alone cannot falsify a degenerate quad: one built from the texture's corners
+            // and then re-centred would still average to zero. Its extent gives it away, because it
+            // would be a whole texture in size rather than this Sprite's bounds.
+            var min = mesh.vertices[0];
+            var max = mesh.vertices[0];
+            for (var index = 1; index < mesh.vertices.Length; index++)
+            {
+                min = Vector3.Min(min, mesh.vertices[index]);
+                max = Vector3.Max(max, mesh.vertices[index]);
+            }
+
+            Assert.That(
+                max.x - min.x,
+                Is.EqualTo(expectedSize.x).Within(Tolerance),
+                "the quad must span the Sprite, not the whole texture");
+            Assert.That(
+                max.y - min.y,
+                Is.EqualTo(expectedSize.y).Within(Tolerance),
+                "the quad must span the Sprite, not the whole texture");
         }
 
         [Test]
-        public void SpriteGeometryPassesTheSpriteUvsThrough()
+        public void SubRectSpritePassesItsUvsThrough()
         {
-            var sprite = CreateSprite(3, 2, 1f, new Vector2(0.25f, 0.75f));
+            // A Sprite is a sub-rect of a texture in exactly this way, whether the reason is a
+            // packed atlas page or a Sprite that genuinely shares its texture with others. Its UVs
+            // therefore address a corner of the texture rather than the whole 0..1 square.
+            var sprite = CreateSubRectSprite();
             var expectedUvs = sprite.uv;
+
+            var minU = float.MaxValue;
+            var minV = float.MaxValue;
+            var maxU = float.MinValue;
+            var maxV = float.MinValue;
+            for (var index = 0; index < expectedUvs.Length; index++)
+            {
+                minU = Mathf.Min(minU, expectedUvs[index].x);
+                minV = Mathf.Min(minV, expectedUvs[index].y);
+                maxU = Mathf.Max(maxU, expectedUvs[index].x);
+                maxV = Mathf.Max(maxV, expectedUvs[index].y);
+            }
+
+            Assert.That(
+                maxU - minU < 1f - Tolerance || maxV - minV < 1f - Tolerance,
+                Is.True,
+                "test fixture is not discriminating: this Sprite's UVs must not span the whole " +
+                "texture, or a hard-coded unit quad would pass this test");
 
             var mesh = DecorationMeshFactory.GetOrCreateMesh(sprite);
 
@@ -311,8 +348,27 @@ namespace HexMap.UnityRuntime.Tests
             return sprite;
         }
 
-        private Sprite CreateSprite(int width, int height, float pixelsPerUnit, Vector2 pivot)
+        /// <summary>
+        /// Builds a Sprite covering a sub-rect of a larger texture, the way a packed-atlas Sprite
+        /// does: it is backed by a texture several times its size, and its own region starts at an
+        /// offset. That is what makes its UVs address a corner of the texture instead of the whole
+        /// 0..1 square, and therefore what lets the UV assertion falsify a hard-coded unit quad.
+        /// </summary>
+        private Sprite CreateSubRectSprite()
         {
+            var texture = CreateTexture(4, 4);
+            var sprite = Sprite.Create(
+                texture,
+                new Rect(1f, 1f, 2f, 2f),
+                new Vector2(0.5f, 0.5f),
+                4f,
+                0,
+                SpriteMeshType.FullRect);
+            m_Created.Add(sprite);
+            return sprite;
+        }
+
+        private Sprite CreateSprite(int width, int height, float pixelsPerUnit, Vector2 pivot)        {
             var texture = CreateTexture(width, height);
             var sprite = Sprite.Create(
                 texture,

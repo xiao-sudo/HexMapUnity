@@ -202,11 +202,72 @@ namespace HexMap.UnityRuntime.Tests
             AssertRgb(Vector3.zero, Color.green, "an opaque overlay draws over an opaque Hex");
         }
 
-        private DecorationView CreateDrawableDecoration(Sprite sprite, int queue, Vector3 localScale)
+        [UnityTest]
+        public IEnumerator ADecorationAuthoredHiddenNeverDraws()
+        {
+            var sprite = CreateSprite(
+                4, 1,
+                new[] { Color.blue, Color.blue, Color.blue, Color.blue });
+
+            var view = CreateDrawableDecoration(sprite, DecorationQueue.Decoration, new Vector3(2f, 4f, 1f));
+            SetField(view, "m_Visible", false);
+            view.Apply();
+
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            ReadFrame();
+
+            AssertRgb(Vector3.zero, Color.black, "a decoration authored hidden must not draw");
+            Assert.That(
+                view.IsReady,
+                Is.True,
+                "authored-hidden is a prefab setting, so the decoration is still assembled and " +
+                "showing it later rebuilds nothing");
+        }
+
+        [UnityTest]
+        public IEnumerator TwoQueuesFromOneSpriteDoNotAffectEachOther()
+        {
+            var sprite = CreateSprite(
+                4, 1,
+                new[] { Color.blue, Color.blue, Color.blue, Color.blue });
+
+            // One texture, one Sprite, two decorations: the material cache must key on the queue as
+            // well, or both would end up sharing a material and one queue would win for both.
+            var decoration = CreateDrawableDecoration(
+                sprite, DecorationQueue.Decoration, new Vector3(0.5f, 0.5f, 1f), new Vector3(-1.5f, 0f, 0f));
+            var overlay = CreateDrawableDecoration(
+                sprite, DecorationQueue.Overlay, new Vector3(0.5f, 0.5f, 1f), new Vector3(1.5f, 0f, 0f));
+
+            Assert.That(
+                overlay.GetComponentInChildren<MeshRenderer>(true).sharedMaterial,
+                Is.Not.SameAs(decoration.GetComponentInChildren<MeshRenderer>(true).sharedMaterial),
+                "one texture at two queues must derive two materials");
+
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            ReadFrame();
+            AssertRgb(new Vector3(-1.5f, 0f, 0f), Color.blue, "the decoration draws");
+            AssertRgb(new Vector3(1.5f, 0f, 0f), Color.blue, "the overlay draws");
+
+            decoration.Visible = false;
+
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            ReadFrame();
+            AssertRgb(new Vector3(-1.5f, 0f, 0f), Color.black, "hiding the decoration clears its half");
+            AssertRgb(new Vector3(1.5f, 0f, 0f), Color.blue, "hiding the decoration must not touch the overlay");
+        }
+
+        private DecorationView CreateDrawableDecoration(
+            Sprite sprite,
+            int queue,
+            Vector3 localScale,
+            Vector3 localPosition = default(Vector3))
         {
             var root = new GameObject("Decoration " + queue);
             root.transform.SetParent(m_Root.transform, false);
-            root.transform.position = new Vector3(0f, 0f, -0.2f);
+            root.transform.position = new Vector3(localPosition.x, localPosition.y, -0.2f);
             root.layer = Layer;
 
             var child = new GameObject("Renderer");
@@ -238,6 +299,18 @@ namespace HexMap.UnityRuntime.Tests
                 "m_Queue", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, "DecorationView must keep a serialized queue field");
             field.SetValue(view, queue);
+        }
+
+        /// <summary>
+        /// Writes a serialized field directly, standing in for the prefab asset. Visibility before
+        /// the first enable is a prefab setting: the component has no way to express it otherwise.
+        /// </summary>
+        private static void SetField(DecorationView view, string name, object value)
+        {
+            var field = typeof(DecorationView).GetField(
+                name, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, "DecorationView must keep a serialized field named " + name);
+            field.SetValue(view, value);
         }
 
         private void BuildHexMap(Color appearance)
