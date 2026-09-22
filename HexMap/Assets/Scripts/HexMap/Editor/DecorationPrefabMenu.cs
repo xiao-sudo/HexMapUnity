@@ -30,14 +30,14 @@ namespace HexMap.Editor
     /// </remarks>
     internal static class DecorationPrefabMenu
     {
-        private const string DecorationSpriteXyMenuPath = "Assets/Create/HexMap/Decoration (XY)";
-        private const string DecorationSpriteXzMenuPath = "Assets/Create/HexMap/Decoration (XZ)";
-        private const string OverlaySpriteXyMenuPath = "Assets/Create/HexMap/Overlay (XY)";
-        private const string OverlaySpriteXzMenuPath = "Assets/Create/HexMap/Overlay (XZ)";
-        private const string DecorationSkeletonXyMenuPath = "HexMap/Create Decoration Prefab (XY)";
-        private const string DecorationSkeletonXzMenuPath = "HexMap/Create Decoration Prefab (XZ)";
-        private const string OverlaySkeletonXyMenuPath = "HexMap/Create Overlay Prefab (XY)";
-        private const string OverlaySkeletonXzMenuPath = "HexMap/Create Overlay Prefab (XZ)";
+        private const string DecorationSpriteXyMenuPath = "Assets/Hex Map/Decoration (XY)";
+        private const string DecorationSpriteXzMenuPath = "Assets/Hex Map/Decoration (XZ)";
+        private const string OverlaySpriteXyMenuPath = "Assets/Hex Map/Overlay (XY)";
+        private const string OverlaySpriteXzMenuPath = "Assets/Hex Map/Overlay (XZ)";
+        private const string DecorationSkeletonXyMenuPath = "Hex Map/Create Decoration Prefab (XY)";
+        private const string DecorationSkeletonXzMenuPath = "Hex Map/Create Decoration Prefab (XZ)";
+        private const string OverlaySkeletonXyMenuPath = "Hex Map/Create Overlay Prefab (XY)";
+        private const string OverlaySkeletonXzMenuPath = "Hex Map/Create Overlay Prefab (XZ)";
 
         [MenuItem(DecorationSpriteXyMenuPath, false, 1)]
         private static void CreateDecorationFromSpriteOnXy()
@@ -115,9 +115,18 @@ namespace HexMap.Editor
         /// Creates one prefab per selected Sprite, next to the texture it came from.
         /// </summary>
         /// <remarks>
-        /// The prefab goes beside its Sprite rather than into a configured output folder: a
-        /// decoration prefab is meaningless without the Sprite it references, so keeping the two
-        /// together is what makes deleting a texture and finding its dependants a single operation.
+        /// <para>
+        /// The prefab goes beside its Sprite rather than into a configured output folder: a decoration
+        /// prefab is meaningless without the Sprite it references, so keeping the two together is what
+        /// makes deleting a texture and finding its dependants a single operation.
+        /// </para>
+        /// <para>
+        /// <b>A Sprite that already has its prefab is left alone.</b> This menu gets invoked on the
+        /// same selection every time somebody reaches for that prefab again, so without the check it
+        /// would leave a trail of <c> 1</c>, <c> 2</c> files behind -- and writing over the file it
+        /// finds would throw away whatever the author had hand-tuned on it. Neither is acceptable, so
+        /// an occupied path ends the attempt for that Sprite and the summary says which case it was.
+        /// </para>
         /// </remarks>
         private static void CreateFromSelectedSprites(DecorationBand band, HexPlane plane)
         {
@@ -128,6 +137,9 @@ namespace HexMap.Editor
             }
 
             var created = new List<GameObject>(sprites.Count);
+            var occupied = new List<string>();
+            var alreadyCreated = 0;
+
             for (var index = 0; index < sprites.Count; index++)
             {
                 var sprite = sprites[index];
@@ -140,11 +152,25 @@ namespace HexMap.Editor
                     continue;
                 }
 
-                var fileName = DecorationPrefabBuilder.BuildAssetName(sprite.name, band, plane)
-                    + ".prefab";
-                var assetPath = AssetDatabase.GenerateUniqueAssetPath(folder + "/" + fileName);
+                var assetPath = DecorationPrefabBuilder.BuildAssetPath(folder, sprite.name, band, plane);
+                var target = DecorationPrefabBuilder.InspectTarget(assetPath, sprite);
+
+                if (target == DecorationPrefabTargetState.AlreadyCreated)
+                {
+                    alreadyCreated++;
+                    continue;
+                }
+
+                if (target == DecorationPrefabTargetState.Occupied)
+                {
+                    occupied.Add(assetPath);
+                    continue;
+                }
+
                 created.Add(DecorationPrefabBuilder.CreateAsset(assetPath, band, plane, sprite));
             }
+
+            Report(band, plane, created.Count, alreadyCreated, occupied);
 
             if (created.Count == 0)
             {
@@ -181,6 +207,31 @@ namespace HexMap.Editor
             var prefab = DecorationPrefabBuilder.CreateAsset(path, band, plane, null);
             EditorGUIUtility.PingObject(prefab);
             Selection.activeObject = prefab;
+        }
+
+        /// <summary>
+        /// Says what the run did, because a run that creates nothing looks exactly like a menu entry
+        /// that is broken.
+        /// </summary>
+        private static void Report(
+            DecorationBand band,
+            HexPlane plane,
+            int created,
+            int alreadyCreated,
+            List<string> occupied)
+        {
+            Debug.Log(
+                band + " " + plane + ": " + created + " created, " + alreadyCreated +
+                " already there (skipped), " + occupied.Count + " blocked by an occupied name.");
+
+            for (var index = 0; index < occupied.Count; index++)
+            {
+                Debug.LogWarning(
+                    "'" + occupied[index] + "' already exists, but it is not a " + band + " " + plane +
+                    " prefab for this Sprite, so nothing was created for it. Delete or rename that " +
+                    "asset if that is what you meant; this menu will neither overwrite it nor pick " +
+                    "another name beside it.");
+            }
         }
 
         private static bool CanCreateFromSelectedSprites()

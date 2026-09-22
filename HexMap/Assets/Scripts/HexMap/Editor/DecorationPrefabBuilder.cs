@@ -88,6 +88,61 @@ namespace HexMap.Editor
         }
 
         /// <summary>
+        /// The asset path a prefab for <paramref name="sourceName"/> would be created at.
+        /// </summary>
+        /// <remarks>
+        /// The menu asks where the prefab would go and then whether anything is already there, so both
+        /// questions are answered from one function. Two spellings of the same path would let the
+        /// existence check look somewhere the creation does not.
+        /// </remarks>
+        public static string BuildAssetPath(
+            string folder,
+            string sourceName,
+            DecorationBand band,
+            HexPlane plane)
+        {
+            return folder + "/" + BuildAssetName(sourceName, band, plane) + ".prefab";
+        }
+
+        /// <summary>
+        /// Whether anything already occupies the path a prefab for <paramref name="sprite"/> would be
+        /// created at, and whether that something is that prefab.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>The menu uses this to stay out of the way rather than to be clever.</b> A created prefab
+        /// is an asset the author is expected to hand-tune, and the menu is invoked on the same Sprite
+        /// every time somebody wants that prefab again, so creating a second one would both pile up
+        /// <c> 1</c>, <c> 2</c> files and risk overwriting edits. Anything already at the path
+        /// therefore ends the attempt for that Sprite -- never a rename, never an overwrite.
+        /// </para>
+        /// <para>
+        /// Separating the matching case from the occupied one is worth it even though both stop the
+        /// creation: a prefab that is <i>not</i> a decoration for this Sprite usually means the Sprite
+        /// asset was deleted and re-imported, which leaves the old prefab holding a broken reference.
+        /// Reporting that as "occupied" is what turns a silent no-op into a diagnosis.
+        /// </para>
+        /// </remarks>
+        public static DecorationPrefabTargetState InspectTarget(string assetPath, Sprite sprite)
+        {
+            if (string.IsNullOrEmpty(assetPath))
+            {
+                return DecorationPrefabTargetState.Empty;
+            }
+
+            var occupying = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+            if (occupying == null)
+            {
+                return DecorationPrefabTargetState.Empty;
+            }
+
+            var view = occupying.GetComponent<DecorationView>();
+            return view != null && view.Sprite == sprite
+                ? DecorationPrefabTargetState.AlreadyCreated
+                : DecorationPrefabTargetState.Occupied;
+        }
+
+        /// <summary>
         /// Creates the prefab hierarchy in memory. The caller owns the returned object and must
         /// destroy it; use <see cref="CreateAsset"/> when it is meant to become an asset.
         /// </summary>
@@ -198,6 +253,26 @@ namespace HexMap.Editor
             sortingOrder.intValue = DecorationBands.SortingOrder(band);
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
+    }
+
+    /// <summary>
+    /// What is already at the path a decoration prefab would be created at.
+    /// </summary>
+    /// <remarks>
+    /// The menu has to tell "already done" apart from "somebody else's asset": both stop the creation,
+    /// but only the second is something the author has to resolve, and it is the one that would
+    /// otherwise look like the menu entry silently failing.
+    /// </remarks>
+    public enum DecorationPrefabTargetState
+    {
+        /// <summary>Nothing is there; a prefab can be created.</summary>
+        Empty = 0,
+
+        /// <summary>A decoration for this Sprite is already there, so there is nothing to do.</summary>
+        AlreadyCreated = 1,
+
+        /// <summary>Something else occupies the path; it is left alone and reported.</summary>
+        Occupied = 2
     }
 }
 #endif

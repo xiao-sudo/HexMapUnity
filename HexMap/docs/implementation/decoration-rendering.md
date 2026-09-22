@@ -109,13 +109,24 @@ DecorationView Prefab
 | `HexMap/Create Overlay Prefab (XY)` | 无 | 用户选路径的空骨架 |
 | `HexMap/Create Overlay Prefab (XZ)` | 无 | 用户选路径的空骨架 |
 
-命名模板是 `{sourceName}_{band}_{plane}`，两段都写成枚举成员名 —— 磁盘上的标签与代码里的 token 是同一个词，改不动其中一半。一个 Sprite 合法地可以派生出**四个** Prefab（两带 × 两平面），所以四者必须彼此不同；重名走 `AssetDatabase.GenerateUniqueAssetPath`，不弹框。
+命名模板是 `{sourceName}_{band}_{plane}`，两段都写成枚举成员名 —— 磁盘上的标签与代码里的 token 是同一个词，改不动其中一半。一个 Sprite 合法地可以派生出**四个** Prefab（两带 × 两平面），所以四者必须彼此不同。
 
 **`DecorationBand` 是构建器侧唯一的带表**，它从 `DecorationQueue` 取数，不重述 2800 / 3005 / -100 / 100 —— 那些数字的主人只有一个。写成枚举而不是两个散落的 int，是为了让「队列 2800 配排序号 100」这种组合**不可表达**：它的症状是装饰物静默盖住地图，正是第 8 节陷阱 1 那条。
 
 骨架版也会带上所属带的队列与排序号，即使它还没有任何东西可画 —— 否则美术事后填 Sprite 会得到一个站在 -100 的「覆盖物」。
 
-校验器同时接受 **`Texture2D` 主资产与展开后的子 `Sprite`**：Project 窗口点中一张 Sprite 贴图时给的是 `Texture2D`，只有展开点中子 Sprite 才是 `Sprite`。`spriteMode = Multiple` 的主资产被拒绝而不是静默取第一张子图 —— 那会为一张用户没指的图建出 Prefab。重名走 `AssetDatabase.GenerateUniqueAssetPath`，不弹框。
+校验器同时接受 **`Texture2D` 主资产与展开后的子 `Sprite`**：Project 窗口点中一张 Sprite 贴图时给的是 `Texture2D`，只有展开点中子 Sprite 才是 `Sprite`。`spriteMode = Multiple` 的主资产被拒绝而不是静默取第一张子图 —— 那会为一张用户没指的图建出 Prefab。
+
+**这个菜单是幂等的：目标路径已被占用就什么都不做。** 菜单会被同一个人在同一张图上反复调用，不检查就会堆出 ` 1`、` 2` 文件；而覆盖已有文件会丢掉美术手调过的缩放、位置与排序号 —— 两者都不可接受。`DecorationPrefabBuilder.InspectTarget` 把两种情况分开，因为只有第二种需要人去处理：
+
+| 路径上是什么 | 处理 | 为什么分开 |
+| --- | --- | --- |
+| 已经是**这张图**的装饰物 | 跳过，计入 `already there` | 正常的重复调用，不是错误 |
+| 别的东西（引用别的 Sprite，或根本不是装饰物） | 跳过 + `LogWarning` | 通常是 Sprite 资产被删掉重导、旧 Prefab 的引用已断 |
+
+每次调用都打一条汇总（`created` / `already there` / `blocked`），否则「什么都没发生」与「菜单坏了」长得一模一样。**任一情况都不改名、不覆盖**：路径被占就是这个 Sprite 这一次不创建。
+
+骨架版菜单不走这条路 —— 它用保存面板让用户选路径，覆盖与否由 Unity 的保存面板管。
 
 **`DecorationView` 不加平面字段。** `Queue` 与 `SortingOrder` 都刻意只读，理由是「摆放决策不是运行时状态」；朝向是同一类东西，做成可写字段会让 `Apply()` 开始反向覆盖美术手改的 `Transform`。
 

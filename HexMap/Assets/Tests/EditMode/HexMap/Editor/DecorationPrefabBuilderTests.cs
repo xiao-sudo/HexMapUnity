@@ -113,6 +113,85 @@ namespace HexMap.Editor.Tests
         }
 
         [Test]
+        public void TheAssetPathIsWhereTheExistenceCheckLooks()
+        {
+            Assert.That(
+                DecorationPrefabBuilder.BuildAssetPath(
+                    "Assets/HexMap/Res",
+                    "Tree",
+                    DecorationBand.Overlay,
+                    HexPlane.XZ),
+                Is.EqualTo("Assets/HexMap/Res/Tree_Overlay_XZ.prefab"));
+        }
+
+        [Test]
+        public void AnUnoccupiedPathIsEmpty()
+        {
+            Assert.That(
+                DecorationPrefabBuilder.InspectTarget(TestAssetFolder + "/NothingHere.prefab", null),
+                Is.EqualTo(DecorationPrefabTargetState.Empty));
+        }
+
+        [Test]
+        public void APathThatAlreadyHoldsThisDecorationsPrefabIsAlreadyCreated()
+        {
+            var prefab = CreatePrefab(DecorationBand.Overlay, HexPlane.XZ);
+
+            Assert.That(
+                DecorationPrefabBuilder.InspectTarget(AssetDatabase.GetAssetPath(prefab), null),
+                Is.EqualTo(DecorationPrefabTargetState.AlreadyCreated),
+                "the menu has to leave a prefab it already made alone rather than add ' 1' beside it");
+        }
+
+        [Test]
+        public void APathHoldingADecorationForAnotherSpriteIsOccupied()
+        {
+            var prefab = CreatePrefab(DecorationBand.Overlay, HexPlane.XZ);
+            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            var otherSprite = Sprite.Create(
+                texture,
+                new Rect(0f, 0f, 4f, 4f),
+                new Vector2(0.5f, 0.5f),
+                4f,
+                0,
+                SpriteMeshType.FullRect);
+
+            try
+            {
+                Assert.That(
+                    DecorationPrefabBuilder.InspectTarget(
+                        AssetDatabase.GetAssetPath(prefab),
+                        otherSprite),
+                    Is.EqualTo(DecorationPrefabTargetState.Occupied),
+                    "a prefab that is not this Sprite's decoration has to be reported, not overwritten");
+            }
+            finally
+            {
+                Object.DestroyImmediate(otherSprite);
+                Object.DestroyImmediate(texture);
+            }
+        }
+
+        [Test]
+        public void APathHoldingSomethingThatIsNotADecorationIsOccupied()
+        {
+            var path = TestAssetFolder + "/NotADecoration.prefab";
+            var plain = new GameObject("NotADecoration");
+            try
+            {
+                PrefabUtility.SaveAsPrefabAsset(plain, path);
+            }
+            finally
+            {
+                Object.DestroyImmediate(plain);
+            }
+
+            Assert.That(
+                DecorationPrefabBuilder.InspectTarget(path, null),
+                Is.EqualTo(DecorationPrefabTargetState.Occupied));
+        }
+
+        [Test]
         public void BothPlanesDifferOnlyByTheRendererChildsRotation()
         {
             var xy = CreatePrefab(DecorationBand.Decoration, HexPlane.XY);

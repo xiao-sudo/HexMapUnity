@@ -65,6 +65,7 @@
 - 写成枚举而不是两个散落的 int，是为了让「队列 2800 配排序号 100」这种组合**不可表达**。
 - 队列与排序号经 `SerializedObject` 写进 `DecorationView` 的私有序列化字段：那是 Inspector 自己的机制，`Queue` / `SortingOrder` 的公开 API 继续只读。**必须在 `Apply()` 之前写**。
 - 骨架菜单也带所属带的数字，否则美术事后填 Sprite 会得到一个站在 −100 的「覆盖物」。
+- **菜单幂等**：目标路径已被占用就跳过，不改名也不覆盖。`InspectTarget` 区分「已经是这张图的装饰物」（正常重复调用）与「被别的东西占用」（通常意味着 Sprite 被删掉重导、旧 Prefab 引用已断），只有后者需要人去处理。每次调用打一条汇总 —— 否则「什么都没发生」与「菜单坏了」长得一样。原因：建出来的 Prefab 是美术会手调缩放/位置/排序号的资产，覆盖会抹掉它们；而菜单会被同一个人在同一张图上反复调用。
 
 **队列号不承载层级，这条又实测了一次（反方向）。** 把 `Overlay` 临时改成 2800 后，`AnOverlayIsOpaqueAndCoversTheHexMap` 与 `OverlayStaysAboveTheHexMap` 两条像素回读用例**仍然通过** —— 拿掉队列优势，覆盖物照样盖住地图。测量已还原（`git diff` 为空），结论记进 `docs/reference/unity-render-order-rules.md` 第 3 节。
 
