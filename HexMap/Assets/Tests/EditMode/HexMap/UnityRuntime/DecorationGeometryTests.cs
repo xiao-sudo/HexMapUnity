@@ -134,15 +134,27 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void ClearDropsCachedMeshes()
+        public void ClearDropsBothCaches()
         {
+            var shader = FindDecorationShader();
             var sprite = CreateSprite(4, 4, 1f, new Vector2(0.5f, 0.5f));
-            var first = DecorationMeshFactory.GetOrCreateMesh(sprite);
+            var texture = sprite.texture;
+
+            var firstMesh = DecorationMeshFactory.GetOrCreateMesh(sprite);
+            var firstMaterial = DecorationMaterialCache.GetOrCreateMaterial(
+                texture, shader, DecorationQueue.Decoration);
 
             DecorationMeshFactory.Clear();
-            var second = DecorationMeshFactory.GetOrCreateMesh(sprite);
+            DecorationMaterialCache.Clear();
 
-            Assert.That(second, Is.Not.SameAs(first), "clearing the cache must force a rebuild");
+            Assert.That(
+                DecorationMeshFactory.GetOrCreateMesh(sprite),
+                Is.Not.SameAs(firstMesh),
+                "clearing the mesh cache must force a rebuild");
+            Assert.That(
+                DecorationMaterialCache.GetOrCreateMaterial(texture, shader, DecorationQueue.Decoration),
+                Is.Not.SameAs(firstMaterial),
+                "clearing the material cache must force a rebuild");
         }
 
         [Test]

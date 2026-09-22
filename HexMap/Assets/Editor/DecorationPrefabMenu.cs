@@ -38,7 +38,6 @@ namespace HexMap.Editor
                 rendererObject.AddComponent<MeshRenderer>();
 
                 var view = root.AddComponent<DecorationView>();
-                view.Sprite = null;
                 view.Apply();
 
                 PrefabUtility.SaveAsPrefabAsset(root, path);

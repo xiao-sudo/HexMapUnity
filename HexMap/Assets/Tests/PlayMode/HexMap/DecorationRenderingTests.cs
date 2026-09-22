@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using HexMap.Core;
 using HexMap.Runtime;
 using NUnit.Framework;
@@ -217,12 +218,26 @@ namespace HexMap.UnityRuntime.Tests
 
             var view = root.AddComponent<DecorationView>();
             view.Sprite = sprite;
-            view.Queue = queue;
+            SetQueue(view, queue);
             view.Apply();
 
             Assert.That(view.IsReady, Is.True, "the decoration component must resolve its child MeshRenderer");
             Assert.That(filter.sharedMesh, Is.Not.Null, "the decoration component must assign a mesh");
             return view;
+        }
+
+        /// <summary>
+        /// Writes the queue the way the prefab asset would, by setting the field rather than a
+        /// setter. The component exposes no queue setter on purpose: changing the queue derives
+        /// another Material that stays resident for the session, so it is a prefab setting, not
+        /// something to drive at runtime.
+        /// </summary>
+        private static void SetQueue(DecorationView view, int queue)
+        {
+            var field = typeof(DecorationView).GetField(
+                "m_Queue", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, "DecorationView must keep a serialized queue field");
+            field.SetValue(view, queue);
         }
 
         private void BuildHexMap(Color appearance)

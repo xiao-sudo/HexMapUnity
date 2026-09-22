@@ -57,23 +57,20 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// The render queue this decoration is drawn in. Changing it after initialization derives a
-        /// new Material, because a Material carries exactly one queue and a cached Material is
-        /// shared by every decoration using the same texture.
+        /// The render queue this decoration is drawn in, set on the prefab. Decorations use
+        /// <see cref="DecorationQueue.Decoration"/>; an overlay is the same prefab with this set to
+        /// <see cref="DecorationQueue.Overlay"/>.
         /// </summary>
+        /// <remarks>
+        /// Read-only on purpose. A Material carries exactly one queue and cached Materials are
+        /// shared by every decoration using the same texture, so changing this derives a new
+        /// Material that then stays resident in <see cref="DecorationMaterialCache"/> for the rest
+        /// of the session. Exposing a setter would invite a per-frame change that leaks one
+        /// Material per value. To retarget a decoration, edit the field on the prefab instead.
+        /// </remarks>
         public int Queue
         {
             get { return m_Queue; }
-            set
-            {
-                if (m_Queue == value)
-                {
-                    return;
-                }
-
-                m_Queue = value;
-                Apply();
-            }
         }
 
         /// <summary>Ordering inside the queue. Only nudges placement between decorations.</summary>
@@ -182,8 +179,7 @@ namespace HexMap.UnityRuntime
                 renderer.sharedMaterial = material;
             }
 
-            DecorationMaterialConfig.Apply(renderer);
-            renderer.sortingLayerID = 0;
+            DecorationRenderSettings.Apply(renderer);
             renderer.sortingOrder = m_SortingOrder;
             renderer.enabled = m_Visible;
         }
