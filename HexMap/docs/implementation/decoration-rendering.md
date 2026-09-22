@@ -261,6 +261,8 @@ DecorationView.Visible = false
 | 装饰贴图导入规则 | `DecorationSpriteImportTests`（EditMode，同上） | 命中、子目录、前缀陷阱（`Res` vs `Resources`）、多目录、空目录、兜底计划、配置驱动设置 |
 | 跨带层序 | `DecorationLayerOrderTests`（PlayMode） | HexMap 盖住装饰物、覆盖物盖住 HexMap、隐藏装饰物 |
 | 装饰物渲染与相机移动 | `DecorationRenderingTests`（PlayMode） | 半透明 Hex 混合、相机平移缩放稳定、显隐、队列隔离 |
+| 容器规则 | `DecorationContainerPolicyTests`（EditMode，同上） | band 反查与 `BandFor(Queue(band)) == band` 互逆、容器名以字面量钉住、精确匹配（`Decoration 1` 不命中）、不递归、同名装饰被跳过并告警、两个可用候选取第一个并告警、null 父级落到场景根、非法 band 不留半成品 |
+| 保存时归一化 | `DecorationNormalizerTests`（EditMode，同上） | 按 band 分容器、复用已有容器、幂等（第二次移动 0）、跨容器纠正、嵌套实例上移到根容器、世界位姿不变、未知 queue 留原地并告警、嵌套在别的 Prefab 实例里的不动、一趟处理多个 |
 
 **已知空缺**：
 
@@ -269,6 +271,7 @@ DecorationView.Visible = false
 - **真实 Sprite Atlas 资产未自动化覆盖。** 子矩形 Sprite 复现了图集的几何情形，但打包这一步本身留给人工验证。
 - **`GetInstanceID()` 被复用的理论风险。** 两个缓存都以实例 ID 为键；若对象被销毁后 ID 被复用，可能命中陈旧网格。静态地图场景下不可达，未加防护。
 - **菜单项本身没有自动化覆盖。** `DecorationPrefabMenu` 读的是 `Selection` 与保存面板，两者都不适合在测试里驱动。被覆盖的是它唯一会出错的产物 —— 构建器建出来的 Prefab 结构与旋转（`DecorationPrefabBuilderTests`）。菜单的接线仍靠人工点一次确认。
+- **归一化钩子没有自动化覆盖（见第 14.3 节）。** 保存钩子（`PrefabStage.prefabSaving` / `EditorSceneManager.sceneSaving`）无法在测试里驱动；判定逻辑全部在 `DecorationContainerPolicy` 与 `DecorationNormalizer` 里，由 EditMode 单测覆盖。
 
 ## 11. 验证方法
 
@@ -318,3 +321,85 @@ DecorationImportConfig（可选）  →  DecorationSpriteImporter.OnPreprocessTe
 **`OnPreprocessTexture` 只对之后的导入生效**，所以菜单 `HexMap/Reimport Decoration Sprite Folders` 负责补历史：它只对**当前设置与目标不一致**的纹理调 `SaveAndReimport`（重导会重写 meta 并重打所属图集，全量扫一遍的代价远大于比较本身），并对重叠目录去重。
 
 **缓存与失效。** 每个导入批次只解析一次（`DecorationSpriteImportPolicy.Plan`），`OnPostprocessAllAssets` 之后失效一次：每张纹理解析一次会在拖入一整个目录时反复做资产搜索，整个会话只解析一次则会让五分钟后新加的目录不生效。整条解析路径包在 `try/catch` 里 —— 它跑在 `OnPreprocessTexture` 内部，那里资产查询可能失败，而「装饰目录不再导入纹理」远比「按默认设置导入」糟。
+
+## 13. 拖入时自动归入容器（已被第 14 节取代）
+
+> **本节的设计已废弃（2026-09-22）。** 它把归位绑在每一次拖放上，代价是拖放的"创建"与"收编"落在两个 undo 组里，于是**第一次 Ctrl+Z 会把实例退回场景根**——看起来就像工具从未生效（实测：收编与随后那次 Ctrl+Z 相隔 12 毫秒，撤销掉的正是"收编"这一步）。现行设计见第 14 节。本节保留，作为"为什么不能按创建事件归位"的记录。
+
+需求：把装饰物 Prefab 从 Project 窗口拖进 Scene 窗口时，实例应当落到一个按带命名的容器下，容器已存在就复用、不存在就在同一层级新建。它只是**场景组织**，不影响任何观感（排序由 `sortingOrder` 承担，与层级无关，见第 2 节）。
+
+### 13.1 规则
+
+| 项 | 决定 |
+| --- | --- |
+| 触发 | 监听 `ObjectChangeEvents.changesPublished` 里的 `CreateGameObjectHierarchy`。**不拦截拖放** |
+| 收编对象 | 新建对象的**根本身**挂有 `DecorationView`（子物体不算）。Prefab 模式显式排除 |
+| 容器层级 | 实例**当时的父级**下（场景空白 → 场景根）。只在**直接子物体**里找，不递归 |
+| 容器名 | `DecorationBand` 的枚举名：`Decoration` / `Overlay`。`DecorationBands.BandFor(queue)` 是 queue → band 的唯一反查 |
+| 容器判定 | 名字精确相等 **且** 自身没有 `DecorationView`（`DecorationContainerPolicy.IsContainer`）。其余组件一概不管 |
+| 找不到 | 同一父级下新建 + `Undo.RegisterCreatedObjectUndo` |
+| 世界坐标 | 换父级后写回世界坐标与旋转（`AdoptPreservingWorldPose`），落点仍由 Unity 决定 |
+| 判不了 | 未知 queue → 留在原地 + `LogWarning`；实例已不存在 → 跳过 |
+
+### 13.2 为什么是事后收编，而不是拦截拖放
+
+需求只改父级、不改落点，而拦截意味着要自己复刻鼠标落点、拖到对象上的改父级、多选拖拽；复刻不全的症状是「偶尔放错地方」，没有人会怀疑是工具引起的。事后收编走的是公开 API，且天然覆盖 Scene 之外的同类操作（`Ctrl+D`、粘贴、从 Hierarchy 拖入）—— 这是有意的：规则只有一条，一个 `DecorationView` 实例落在某个父级下就归入该父级下的容器。（这条推理本身仍然成立，只是"事后"从"帧末"改成了"保存前"，见第 14 节。）
+
+### 13.3 实测事实（Unity 2022.3.50f1）
+
+- 一次拖放发布**恰好 1 条** `CreateGameObjectHierarchy`，对象是实例根、带 `DecorationView`、`parent=<null>`（空白处投放）。
+- `args.scene` **可能是空的/无效场景** → 场景必须取自实例（`instance.scene`），不能用事件里的。
+- `EditorUtility.InstanceIDToObject(args.instanceId)` **可能返回 null**（同一帧内被创建又被销毁）→ 必须判空跳过。
+- 同一帧的多条事件**批量发布** → 所以是「收集 → `EditorApplication.delayCall` 处理」，而不是在回调里直接改层级。
+- 事件参数在本版本**只有 `instanceId` 与 `scene`**，没有 `parent` / `createdGameObject`，父级要自己从对象上读。
+
+### 13.4 陷阱
+
+1. **Undo 是两步。** 实测：第一次 `Ctrl+Z` 把实例退回原父级（`ChangeGameObjectParent`），第二次才移除它（`DestroyGameObjectHierarchy`）。创建（拖放帧）与收编（`delayCall`）分处两组，公开 API 拿不到一个还没关闭的 undo 组来合并。
+2. **拖放与收编是两条事件。** 日志顺序是 `CreateGameObjectHierarchy`（此时 `parent=<null>`）→ 约 80ms 后 `ChangeGameObjectParent`。任何「读事件里的父级判断收编结果」的写法看到的都是收编前的状态。
+3. **`Undo.SetTransformParent` 没有 `worldPositionStays` 重载。** 本版本只有 `(Transform, Transform, string name)`，文档写明它等价于 `transform.parent = newParent`，保留**局部**位姿。照抄 `(t, parent, true)` 会得到 `CS1503`；世界位姿必须自己写回，不能指望容器恰好在原点。
+4. **容器判定只管「名字」与「不是一个装饰物」。** 给容器挂别的组件不影响判定；但若给它挂上 `DecorationView`，它就不再是容器，工具会另建一个空容器 —— 属于「看起来正常的静默失效」。
+5. **容器名会被写进场景资产。** 重命名 `DecorationBand` 的成员不会有任何编译错误，只会让工具找不到既有容器；`DecorationContainerPolicyTests.TheContainerNameIsTheBandName` 用字面量钉住这两个名字。
+
+### 13.5 已知空缺
+
+- **收编钩子本身没有自动化覆盖。** 拖放无法在测试里驱动（与第 10 节「菜单项本身没有自动化覆盖」同类），所以判定逻辑全部下沉到 `DecorationContainerPolicy`（19 条单测），钩子只保留订阅、判空、延后与换父级。人工验证于 2026-09-22 通过：两个拖入的实例都落进了 `Decoration`。
+- **「收编是否写入多余的位置覆写」未做最终确认。** 容器在原点 + 单位旋转，且收编会写回世界位姿，理论上最多写一条与拖放本身相同的覆写；要亲眼确认需要留一个已收编的实例在场景里再读 YAML。
+
+## 14. 保存时归一化（现行设计）
+
+需求不变，触发时机改变：**把「装饰物落到容器下」从每次拖放改成每次保存**。保存不是 undo 步骤，也不与编辑动作抢时间轴，所以第 13 节里那一整类问题（undo 组、`delayCall`、事件时序）都不存在。
+
+### 14.1 规则
+
+| 项 | 决定 |
+| --- | --- |
+| 触发 | `PrefabStage.prefabSaving`（Prefab 模式写盘前）+ `EditorSceneManager.sceneSaving`（场景写盘前）+ 两个菜单项兜底 |
+| 归一化对象 | 一个根下面的所有 `DecorationView`（`GetComponentsInChildren(_, true)`）。**Prefab 路径不含根本身**：根本身带 `DecorationView` 说明它自己是装饰物，不是合集——这条也让"对任意 Prefab 跑一遍"变成安全操作 |
+| 容器位置 | **Prefab 路径**：Prefab 根的直接子物体。**场景路径**：优先用某个 Prefab 实例**已经提供**的容器（合集 Prefab 的工作流——往场景里新拖的装饰物应当进 `GVGRoot` 实例里的 `Decoration`，而不是在场景根另起一个）；场景里没有这样的实例时才用场景根。不再有"投放落点父级"这条分支 |
+| Prefab 边界 | 装饰物**不跨** Prefab 边界：已经落在某个实例**内部**的，只在该实例内部归位；自由的（普通对象，或它自己就是实例根）可以**进入**某个实例——那就是 Unity 的"添加到实例"覆写，与手动把物体拖到实例上等价。Prefab 模式下，嵌套在别人 Prefab 实例里的装饰物**不动**（那属于嵌套资产） |
+| 容器名与判定 | 与第 13.1 节相同：`DecorationBand` 的枚举名 + `IsContainer`（名字精确相等且自身不是装饰物） |
+| 嵌套在别的 Prefab 实例里的装饰物 | **跳过**：移动它等于去改那个预制体，保存期不允许。装饰物本身是嵌套预制体实例，所以该处理的永远是最外层那些 |
+| 世界位姿 | `transform.SetParent(container, true)`，与手动拖拽一致 |
+| Undo | **不注册**。这是结构不变量而不是用户动作，写进文件的事实为准。后果是刻意的：Ctrl+Z 不会把实例挪出容器，拖出去再保存会被放回来 |
+| 幂等 | 是。第二次跑移动计数为 0（这也是自动保存下不产生循环的根据） |
+
+### 14.2 钩子选型（据 2022.3 源码与文档核对）
+
+| 钩子 | 结论 |
+| --- | --- |
+| `PrefabStage.prefabSaving`（`Action<GameObject>`，载荷是 Prefab 内容根） | **采用**。`PrefabStage.SavePrefab` 的顺序是 `prefabSaving` → `SaveAsPrefabAsset` → `prefabSaved`，所以回调里改的层级会进文件 |
+| `EditorSceneManager.sceneSaving`（`(Scene, string)`） | **采用**。同样在写盘前 |
+| `AssetModificationProcessor.OnWillSaveAssets` | **不用**：对 Prefab 不可靠（Apply 改动时不触发，Unity 有在案 issue） |
+| `PrefabUtility.prefabInstanceUpdated` | **不用**：资产已经写完，太晚 |
+| Apply（场景实例覆写写回 Prefab 资产） | **没有公开前置钩子** → 菜单兜底 |
+
+**不能在保存回调里用 `EditorApplication.delayCall`**：那会在资产写完**之后**才跑，改动要等到下一次保存才落盘——正好是反的。
+
+**Prefab 模式的自动保存默认开着**（项目开关 `EditorSettings.prefabModeAllowAutoSave`），它每次编辑都会触发 `prefabSaving`。所以归一化必须廉价、幂等、防重入：布局已经正确时它什么都不做；确实需要纠正时会在保存期间再次弄脏 stage，最多多触发一次自动保存，之后收敛。
+
+### 14.3 兜底菜单与已知空缺
+
+- `HexMap/Normalize Decoration Containers in Scene`：手动整理当前场景（仅在真的移动了东西时标脏）。
+- `HexMap/Normalize Decoration Containers in Selected Prefabs`：对选中的 Prefab 资产走 `LoadPrefabContents` → 归一化 → `SaveAsPrefabAsset` → `UnloadPrefabContents`。**Apply 那条路没有钩子，靠它兜底。**
+- **归一化钩子本身没有自动化覆盖**（保存钩子无法在测试里驱动）；判定逻辑全在 `DecorationContainerPolicy` 与 `DecorationNormalizer`，由 EditMode 单测覆盖（策略 17 条 + 归一化 10 条）。

@@ -58,6 +58,33 @@ namespace HexMap.Editor
         }
 
         /// <summary>
+        /// The band a prefab's render queue belongs to -- the inverse of <see cref="Queue"/>.
+        /// </summary>
+        /// <remarks>
+        /// <b>This is the only reverse mapping, and it exists for the tooling that has to read a band
+        /// off an instance rather than write one.</b> The container a dropped decoration belongs under
+        /// is named after its band, and the only band fact an instance carries is its
+        /// <see cref="DecorationView.Queue"/>. Two switches that each knew half the table would be a
+        /// second owner of the same numbers; the pair is guarded by an inverse assertion in
+        /// <c>DecorationContainerPolicyTests</c>.
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="queue"/> is not one of the declared bands' queues.
+        /// </exception>
+        public static DecorationBand BandFor(int queue)
+        {
+            switch (queue)
+            {
+                case DecorationQueue.Decoration:
+                    return DecorationBand.Decoration;
+                case DecorationQueue.Overlay:
+                    return DecorationBand.Overlay;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(queue), queue, null);
+            }
+        }
+
+        /// <summary>
         /// The sorting order that puts the band where it belongs relative to
         /// <see cref="DecorationQueue.HexMapSortingOrder"/>. Smaller draws first.
         /// </summary>
