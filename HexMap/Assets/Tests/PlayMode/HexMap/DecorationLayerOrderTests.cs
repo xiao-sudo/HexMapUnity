@@ -152,16 +152,19 @@ namespace HexMap.UnityRuntime.Tests
                 Is.EqualTo(DecorationQueue.HexMap),
                 "the layering contract names the queue the hex shader must own");
 
+            // Both rectangles sit at the origin, where the single Hex covers them and where the Hex
+            // itself is covered. A Pointy hex spans x in [-1, 1] through its centre, so a rectangle
+            // placed off to the side would prove nothing about the map covering it.
             var decoration = CreateRectangle(
                 DecorationQueue.Decoration,
                 DecorationQueue.DecorationSortingOrder,
                 Color.blue,
-                new Vector3(-1.5f, 0f, 0f));
+                Vector3.zero);
             var overlay = CreateRectangle(
                 DecorationQueue.Overlay,
                 DecorationQueue.OverlaySortingOrder,
                 Color.green,
-                new Vector3(1.5f, 0f, 0f));
+                Vector3.zero);
 
             // The bands are separated by sorting order. It outranks the render queue, so a
             // decoration at or above the HexMap baseline would draw over the map.
@@ -192,10 +195,51 @@ namespace HexMap.UnityRuntime.Tests
             yield return new WaitForEndOfFrame();
             ReadFrame();
 
-            // The Hex is opaque and covers the decoration's half; the overlay is opaque and covers
-            // the Hex on its own half.
-            AssertPixel(new Vector3(-1.5f, 0f, 0f), Color.red, "the HexMap must cover the decoration");
-            AssertPixel(new Vector3(1.5f, 0f, 0f), Color.green, "the overlay must cover the HexMap");
+            var diagnostic = DescribeFrames(new[]
+            {
+                Vector3.zero,
+                new Vector3(-0.5f, 0f, 0f),
+                new Vector3(-0.7f, 0f, 0f),
+                new Vector3(0.7f, 0f, 0f)
+            });
+
+            // The overlay is in a band above the Hex, so it wins; hiding it exposes the Hex, which
+            // is in a band above the decoration and so wins in turn.
+            AssertPixel(Vector3.zero, Color.green, "the overlay must cover the HexMap" + diagnostic);
+
+            overlay.Visible = false;
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            ReadFrame();
+
+            AssertPixel(Vector3.zero, Color.red, "the HexMap must cover the decoration" + diagnostic);
+
+            decoration.Visible = false;
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            ReadFrame();
+
+            AssertPixel(Vector3.zero, Color.black, "with both hidden nothing is drawn" + diagnostic);
+        }
+
+        private string DescribeFrames(Vector3[] points)
+        {
+            var text = new System.Text.StringBuilder(" | sampled: ");
+            for (var index = 0; index < points.Length; index++)
+            {
+                var viewport = m_Camera.WorldToViewportPoint(points[index]);
+                var pixelX = Mathf.FloorToInt(viewport.x * Resolution);
+                var pixelY = Mathf.FloorToInt(viewport.y * Resolution);
+                var colour = m_Readback.GetPixel(pixelX, pixelY);
+                text.Append('(').Append(points[index].x.ToString("0.##")).Append(",0)=")
+                    .Append(colour.r.ToString("0.##")).Append('/')
+                    .Append(colour.g.ToString("0.##")).Append('/')
+                    .Append(colour.b.ToString("0.##"))
+                    .Append(" @px").Append(pixelX).Append(',').Append(pixelY)
+                    .Append("; ");
+            }
+
+            return text.ToString();
         }
 
         private DecorationView CreateRectangle(
