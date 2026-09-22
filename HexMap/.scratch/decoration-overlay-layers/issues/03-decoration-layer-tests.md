@@ -22,7 +22,21 @@
 - [ ] 断言：同一纹理不同队列返回互相独立的实例（这是装饰物不会改到覆盖物队列的保证）。
 - [ ] 断言：写入的队列值与请求一致。
 - [ ] 断言：清理后缓存为空。
+- [ ] 断言：纹理或 Shader 为空时返回 null 而不是抛异常，并各自报告一条错误日志（用 `LogAssert.Expect` 声明）。
 - [ ] 无直接先例；旧 `StaticDecorationRenderer` 的按纹理材质字典是半个前身。
+
+## 接缝二之补充：`DecorationView` 的编辑期装配（EditMode）
+
+- [ ] 断言：对一个「根挂 `DecorationView` + 子物体持 `MeshFilter`/`MeshRenderer`」的对象设好 Sprite 后，子物体的 `sharedMesh` 与 `sharedMaterial` 均非空。
+- [ ] 这一条守的是**编辑模式可见**这个能力本身：它执行的是 `[ExecuteAlways]` → `OnEnable` → `Apply()` 这条链路，而几何接缝与 PlayMode 测试都不经过它。
+- [ ] 尚未实现。`DecorationView` 目前只在 PlayMode 测试里被用到，且那些测试是运行时 `AddComponent`，不覆盖编辑期启用路径。
+
+## 接缝二之补充二：生命周期钩子（PlayMode，尚未实现）
+
+- [ ] 断言：一个**在场景里**（而非运行时 `AddComponent`）的 `DecorationView`，在进入 Play 之后 `MeshFilter.sharedMesh` 仍然有效。
+- [ ] 这条守的是一类已经在实现中真实发生过的缺陷：`RuntimeInitializeOnLoadMethod` 的清理时机若晚于场景对象的 `OnEnable`，会把刚赋给 `MeshFilter` 的网格销毁，表现为「编辑模式正常、一运行就没引用」。
+- [ ] 现有 PlayMode 测试抓不到它，因为它们在 `SetUp`/`TearDown` 里手动清缓存，`DecorationCacheLifetime` 整个类从未被执行。
+- [ ] 需要仓库里有一个测试专用场景，用 `SceneManager.LoadScene` 加载。是否要做由人决定：这类缺陷在运行期肉眼可见，仓库当前没有测试专用场景资产。
 
 ## 接缝三：运行时层序与稳定性（PlayMode 像素回读）
 

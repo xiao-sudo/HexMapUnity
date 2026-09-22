@@ -8,6 +8,7 @@
 
 - **装饰物（Decoration）是 Prefab**，一装饰一 Prefab，根挂 `DecorationView` 组件，子物体持 `MeshFilter` + `MeshRenderer`。
 - **覆盖物（Overlay）共用同一套 Shader**，只在材质上使用不同 `renderQueue`；它有装饰物不具备的视觉能力时，才需要重新讨论 Shader 边界（关键字会翻倍 shader 变体、打掉 SetPass 预算）。
+- **网格拓扑跟随 Sprite 导入设置**：`Full Rect` 得到一个 Quad，`Tight` 得到 Unity 为不透明区域生成的轮廓网格。实现不假设顶点数，只拒绝无几何、UV 数与顶点数不匹配、索引数非 3 的倍数、索引越界。**推荐 `Tight`**：它减少片元填充，并让图集打包更紧凑。
 - **分层不靠深度缓冲，也不靠几何高度**，只靠 renderQueue 子区间。`sortingLayer` 一律留 `Default`，`sortingOrder` 只做队列内微调。
 - **不做**：Prefab 批量生成工具、装饰物之间的正确互相遮挡、Billboard、运行时变换更新、运行时队列值逐帧修改。
 
@@ -17,6 +18,8 @@
 - **`Texture2DArray` 或纹理图集共享材质，把 Draw Call 压到 1~3** —— 否决。纹理数组要求所有纹理同尺寸同格式，且在微信 WebGL 2.0 上未验证；纹理图集重新打包会使 Prefab 的纹理引用漂移，与"一装饰一纹理一 Prefab"的工作流直接冲突。
 - **覆盖物复用装饰物 Shader 的关键字** —— 否决。关键字翻倍 shader 变体，与 SRP Batcher 的"变体越少越好"直接冲突。
 - **每纹理每队列手写 `.mat` 资产** —— 否决。材质是 `(Texture, Queue)` 的纯派生数据，没有需要人工调校的参数；100 个 `.mat` 进版本控制是净负债。
+- **要求装饰 Sprite 必须是四边形（`Full Rect` 导入）** —— 否决。最初按「一装饰一 Quad」写死了 4 顶点 / 6 索引的校验，但装饰网格本来就可能不是四边形：导入器的 `Tight` 模式会按不透明区域的 alpha 轮廓与 Tessellation Detail 生成轮廓网格，顶点更多却不必为透明像素做片元着色，因而更省填充率。硬性要求四边形等于把「必须记得改导入设置」变成一条隐形前提，且失败模式是「看不见 + 一行日志」，容易被误判成代码缺陷。代价是消费方必须接受任意顶点数。
+  注意两个容易混淆的收益：**图集打包更紧凑**来自 `Tight` 本身；**省填充率**来自轮廓细分（Tessellation Detail），二者是导入器里两个独立的开关。另外轮廓网格**只能由导入管线生成**——`Sprite.Create(..., SpriteMeshType.Tight)` 返回的仍是 4 顶点矩形。
 
 ## Consequences
 

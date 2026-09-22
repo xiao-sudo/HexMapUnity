@@ -6,9 +6,10 @@
 
 **Status:** ready-for-agent
 
-- [ ] `DecorationMeshFactory`：从 Sprite 产出单个 Quad。顶点取 `Sprite.vertices`、三角形取 `Sprite.triangles`、UV 取 `Sprite.uv`，以 `Sprite.bounds.center` 居中。与既有 `HexCellMeshFactory` 同形态、同程序集。
+- [ ] `DecorationMeshFactory`：从 Sprite 产出网格。顶点取 `Sprite.vertices`、三角形取 `Sprite.triangles`、UV 取 `Sprite.uv`，以 `Sprite.bounds.center` 居中。与既有 `HexCellMeshFactory` 同形态、同程序集。
 - [ ] **UV 直通是硬约束。** 正因直通 `Sprite.uv`，Sprite Atlas 的重映射、Trim、自定义 Pivot 三者自动成立，实现里不需要任何判断分支。绝不使用顶点与 UV 都硬编码 0~1 的单位 Quad——那会采样到整张图集页。
-- [ ] 一个 Sprite 一个 Quad，不做 tight mesh 或自定义多顶点轮廓。
+- [ ] 保留 Sprite 报告的网格拓扑：`Full Rect` 导入得到一个 Quad，`Tight` 导入得到 Unity 为不透明区域生成的轮廓网格。不按顶点数做任何假设，也不要求渲染器必须是四边形。
+- [ ] `Tight` 是**支持**的导入方式。约束放宽为「任意合法网格拓扑」——顶点数不限，只拒绝无几何、UV 数与顶点数不匹配、索引数非 3 的倍数、以及索引越界。注意轮廓网格只能由导入管线生成，`Sprite.Create(..., SpriteMeshType.Tight)` 在运行时返回的仍是 4 顶点矩形。
 - [ ] `DecorationMaterialCache`：按 `(Texture2D, 队列值)` 派生材质，场景里不存在材质资产。**键必须包含队列值**——只按纹理缓存会让装饰物与覆盖物互相覆盖对方的队列。
 - [ ] 队列值在材质创建时写入。组件不提供任何会在运行时逐帧改队列值的入口，并在注释写明"改队列值会创建新的常驻材质"。
 - [ ] 两个缓存都必须提供显式清理入口，供域重载与测试拆除使用。
