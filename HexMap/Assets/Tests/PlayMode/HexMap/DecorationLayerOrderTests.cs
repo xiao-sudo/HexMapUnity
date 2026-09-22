@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using HexMap.Core;
 using HexMap.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -16,21 +15,20 @@ namespace HexMap.UnityRuntime.Tests
     /// <para>
     /// This is measured, not assumed. The project's render-order reference once derived the sort key
     /// as <c>sortingLayer → renderQueue → sortingOrder</c> and labelled that derivation as inference.
-    /// A probe falsified it: <c>sortingOrder</c> outranks <c>renderQueue</c>, so a decoration at
-    /// queue 2800 given <c>sortingOrder = 1</c> drew over a HexMap at queue 3000. The key is really
+    /// A probe falsified it: <c>sortingOrder</c> outranks <c>renderQueue</c>, so the key is really
     /// <c>sortingLayer → sortingOrder → renderQueue</c>.
     /// </para>
     /// <para>
-    /// Because <c>sortingOrder</c> outranks <c>renderQueue</c>, it is the only knob that can order
-    /// these bands, and it is the one the decoration component writes. That also makes it the one
-    /// field that can silently break the layering: a decoration ordered at or above the HexMap
-    /// baseline draws over the map. These tests check both the assigned band values and the result
-    /// on screen, so a changed constant or a changed renderer setting shows up as a failing pixel
-    /// rather than as a decoration that quietly covers the map.
+    /// Because <c>sortingOrder</c> outranks the queue, it is the only knob that can order these
+    /// bands, and it is the one the decoration component writes. A sweep over decoration orders
+    /// measured the boundary: at -2, -1 and 0 the HexMap covers the decoration, and at 1 the
+    /// decoration covers the HexMap. Smaller draws first, and the decoration band is negative.
     /// </para>
     /// <para>
-    /// Each case draws one opaque rectangle against the opaque HexMap and reads the centre pixel, so
-    /// the answer comes from the screen rather than from reasoning about sort flags.
+    /// Each case builds one rectangle against the opaque HexMap and reads the centre pixel, so the
+    /// answer comes from the screen rather than from reasoning about sort flags. Every case renders
+    /// its own frame from a fresh visibility state, because a previous case's state is what made an
+    /// earlier version of this fixture report the wrong layer.
     /// </para>
     /// </remarks>
     [TestFixture]
@@ -135,58 +133,23 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [UnityTest]
-        public IEnumerator DecorationStaysBelowTheHexMapAndOverlayStaysAbove()
+        public IEnumerator DecorationStaysBelowTheHexMap()
         {
-            Assert.That(
-                m_HexMaterial == null,
-                Is.True,
-                "the map is built below so the material queue can be asserted first");
-
-            var hexShader = Shader.Find("HexMap/InstancedHexCell");
-            Assert.That(hexShader, Is.Not.Null);
-            m_HexMaterial = new Material(hexShader);
-            m_HexMaterial.SetFloat("_InteriorAlpha", 1f);
-
-            Assert.That(
-                m_HexMaterial.renderQueue,
-                Is.EqualTo(DecorationQueue.HexMap),
-                "the layering contract names the queue the hex shader must own");
-
-            // Both rectangles sit at the origin, where the single Hex covers them and where the Hex
-            // itself is covered. A Pointy hex spans x in [-1, 1] through its centre, so a rectangle
-            // placed off to the side would prove nothing about the map covering it.
             var decoration = CreateRectangle(
                 DecorationQueue.Decoration,
                 DecorationQueue.DecorationSortingOrder,
                 Color.blue,
-                Vector3.zero);
-            var overlay = CreateRectangle(
-                DecorationQueue.Overlay,
-                DecorationQueue.OverlaySortingOrder,
-                Color.green,
-                Vector3.zero);
+                new Vector2(4f, 2f));
 
-            // The bands are separated by sorting order. It outranks the render queue, so a
-            // decoration at or above the HexMap baseline would draw over the map.
-            var decorationRenderer = decoration.GetComponentInChildren<MeshRenderer>(true);
-            var overlayRenderer = overlay.GetComponentInChildren<MeshRenderer>(true);
-
+            var renderer = decoration.GetComponentInChildren<MeshRenderer>(true);
             Assert.That(
-                decorationRenderer.sortingOrder,
+                renderer.sortingOrder,
                 Is.EqualTo(DecorationQueue.DecorationSortingOrder),
                 "a decoration must take the decoration band");
             Assert.That(
-                decorationRenderer.sortingOrder,
+                renderer.sortingOrder,
                 Is.LessThan(DecorationQueue.HexMapSortingOrder),
-                "a decoration must sit below the HexMap baseline");
-            Assert.That(
-                overlayRenderer.sortingOrder,
-                Is.EqualTo(DecorationQueue.OverlaySortingOrder),
-                "an overlay must take the overlay band");
-            Assert.That(
-                overlayRenderer.sortingOrder,
-                Is.GreaterThan(DecorationQueue.HexMapSortingOrder),
-                "an overlay must sit above the HexMap baseline");
+                "a decoration must sit below the HexMap baseline, because smaller draws first");
 
             BuildHexMap(Color.red);
 
@@ -195,58 +158,65 @@ namespace HexMap.UnityRuntime.Tests
             yield return new WaitForEndOfFrame();
             ReadFrame();
 
-            var diagnostic = DescribeFrames(new[]
-            {
-                Vector3.zero,
-                new Vector3(-0.5f, 0f, 0f),
-                new Vector3(-0.7f, 0f, 0f),
-                new Vector3(0.7f, 0f, 0f)
-            });
+            AssertPixel(Vector3.zero, Color.red, "the HexMap must cover the decoration");
+        }
 
-            // The overlay is in a band above the Hex, so it wins; hiding it exposes the Hex, which
-            // is in a band above the decoration and so wins in turn.
-            AssertPixel(Vector3.zero, Color.green, "the overlay must cover the HexMap" + diagnostic);
+        [UnityTest]
+        public IEnumerator OverlayStaysAboveTheHexMap()
+        {
+            var overlay = CreateRectangle(
+                DecorationQueue.Overlay,
+                DecorationQueue.OverlaySortingOrder,
+                Color.green,
+                new Vector2(4f, 2f));
 
-            overlay.Visible = false;
+            var renderer = overlay.GetComponentInChildren<MeshRenderer>(true);
+            Assert.That(
+                renderer.sortingOrder,
+                Is.EqualTo(DecorationQueue.OverlaySortingOrder),
+                "an overlay must take the overlay band");
+            Assert.That(
+                renderer.sortingOrder,
+                Is.GreaterThan(DecorationQueue.HexMapSortingOrder),
+                "an overlay must sit above the HexMap baseline, because larger draws later");
+
+            BuildHexMap(Color.red);
+
             yield return null;
+            m_Map.Render();
             yield return new WaitForEndOfFrame();
             ReadFrame();
 
-            AssertPixel(Vector3.zero, Color.red, "the HexMap must cover the decoration" + diagnostic);
+            AssertPixel(Vector3.zero, Color.green, "the overlay must cover the HexMap");
+        }
+
+        [UnityTest]
+        public IEnumerator HidingADecorationRevealsTheHexMapAndNothingElse()
+        {
+            var decoration = CreateRectangle(
+                DecorationQueue.Decoration,
+                DecorationQueue.DecorationSortingOrder,
+                Color.blue,
+                new Vector2(4f, 2f));
+
+            BuildHexMap(Color.red);
+
+            yield return null;
+            m_Map.Render();
+            yield return new WaitForEndOfFrame();
+            ReadFrame();
+            AssertPixel(Vector3.zero, Color.red, "the decoration starts hidden behind the map");
 
             decoration.Visible = false;
             yield return null;
+            m_Map.Render();
             yield return new WaitForEndOfFrame();
             ReadFrame();
 
-            AssertPixel(Vector3.zero, Color.black, "with both hidden nothing is drawn" + diagnostic);
+            AssertPixel(Vector3.zero, Color.red, "hiding the decoration must not disturb the HexMap");
         }
 
-        private string DescribeFrames(Vector3[] points)
-        {
-            var text = new System.Text.StringBuilder(" | sampled: ");
-            for (var index = 0; index < points.Length; index++)
-            {
-                var viewport = m_Camera.WorldToViewportPoint(points[index]);
-                var pixelX = Mathf.FloorToInt(viewport.x * Resolution);
-                var pixelY = Mathf.FloorToInt(viewport.y * Resolution);
-                var colour = m_Readback.GetPixel(pixelX, pixelY);
-                text.Append('(').Append(points[index].x.ToString("0.##")).Append(",0)=")
-                    .Append(colour.r.ToString("0.##")).Append('/')
-                    .Append(colour.g.ToString("0.##")).Append('/')
-                    .Append(colour.b.ToString("0.##"))
-                    .Append(" @px").Append(pixelX).Append(',').Append(pixelY)
-                    .Append("; ");
-            }
-
-            return text.ToString();
-        }
-
-        private DecorationView CreateRectangle(
-            int queue,
-            int sortingOrder,
-            Color colour,
-            Vector3 position)
+        private DecorationView CreateRectangle(int queue, int sortingOrder, Color colour, Vector2 size)
         {
             var texture = new Texture2D(4, 1, TextureFormat.RGBA32, false, true)
             {
@@ -268,12 +238,15 @@ namespace HexMap.UnityRuntime.Tests
 
             var root = new GameObject("Rectangle " + queue);
             root.transform.SetParent(m_Root.transform, false);
-            root.transform.position = new Vector3(position.x, position.y, -0.2f);
+
+            // Behind the HexMap in depth, so that the render queue would order it first on its own if
+            // the sorting order did not decide. Depth is deliberately not the mechanism under test.
+            root.transform.position = new Vector3(0f, 0f, -0.2f);
             root.layer = Layer;
 
             var child = new GameObject("Renderer");
             child.transform.SetParent(root.transform, false);
-            child.transform.localScale = new Vector3(0.5f, 0.5f, 1f);
+            child.transform.localScale = new Vector3(size.x, size.y, 1f);
             child.layer = Layer;
             child.AddComponent<MeshFilter>();
             child.AddComponent<MeshRenderer>();
@@ -290,6 +263,16 @@ namespace HexMap.UnityRuntime.Tests
 
         private void BuildHexMap(Color appearance)
         {
+            var hexShader = Shader.Find("HexMap/InstancedHexCell");
+            Assert.That(hexShader, Is.Not.Null);
+            m_HexMaterial = new Material(hexShader);
+            m_HexMaterial.SetFloat("_InteriorAlpha", 1f);
+
+            Assert.That(
+                m_HexMaterial.renderQueue,
+                Is.EqualTo(DecorationQueue.HexMap),
+                "the layering contract names the queue the hex shader must own");
+
             m_Map = new HexMapRenderer(
                 new RuntimeHexMap(new HexMapDefinition(0)),
                 new HexLayout(HexOrientation.Pointy, HexPlane.XY, 1f, Vector3.zero),
@@ -336,9 +319,17 @@ namespace HexMap.UnityRuntime.Tests
                 Mathf.FloorToInt(viewport.x * Resolution),
                 Mathf.FloorToInt(viewport.y * Resolution));
 
-            Assert.That(actual.r, Is.EqualTo(expected.r).Within(0.06f), message + " (red)");
-            Assert.That(actual.g, Is.EqualTo(expected.g).Within(0.06f), message + " (green)");
-            Assert.That(actual.b, Is.EqualTo(expected.b).Within(0.06f), message + " (blue)");
+            var detail = message
+                + " | world " + world
+                + " -> pixel " + Mathf.FloorToInt(viewport.x * Resolution)
+                + "," + Mathf.FloorToInt(viewport.y * Resolution)
+                + " sampled r" + actual.r.ToString("0.##")
+                + " g" + actual.g.ToString("0.##")
+                + " b" + actual.b.ToString("0.##");
+
+            Assert.That(actual.r, Is.EqualTo(expected.r).Within(0.06f), detail + " (red)");
+            Assert.That(actual.g, Is.EqualTo(expected.g).Within(0.06f), detail + " (green)");
+            Assert.That(actual.b, Is.EqualTo(expected.b).Within(0.06f), detail + " (blue)");
         }
     }
 }
