@@ -9,7 +9,8 @@
 - **装饰物（Decoration）是 Prefab**，一装饰一 Prefab，根挂 `DecorationView` 组件，子物体持 `MeshFilter` + `MeshRenderer`。
 - **覆盖物（Overlay）共用同一套 Shader**，只在材质上使用不同 `renderQueue`；它有装饰物不具备的视觉能力时，才需要重新讨论 Shader 边界（关键字会翻倍 shader 变体、打掉 SetPass 预算）。
 - **网格拓扑跟随 Sprite 导入设置**：`Full Rect` 得到一个 Quad，`Tight` 得到 Unity 为不透明区域生成的轮廓网格。实现不假设顶点数，只拒绝无几何、UV 数与顶点数不匹配、索引数非 3 的倍数、索引越界。**推荐 `Tight`**：它减少片元填充，并让图集打包更紧凑。
-- **分层不靠深度缓冲，也不靠几何高度**，只靠 renderQueue 子区间。`sortingLayer` 一律留 `Default`，`sortingOrder` 只做队列内微调。
+- **分层不靠深度缓冲，也不靠几何高度**，只靠 renderQueue 子区间。`sortingLayer` 一律留 `Default`；**`sortingOrder` 一律不写，保持默认 0**（原因见下条）。
+- **实测前提：`sortingOrder` 的优先级高于 `renderQueue`。** 排序键是 `sortingLayer → sortingOrder → renderQueue`，只有 `sortingOrder` 相等时 `renderQueue` 才参与比较。因此「队列 2800 的装饰物永远先于队列 3000 的 HexMap」**只在双方 `sortingOrder` 相等时成立**。给装饰物设 `sortingOrder = 1` 会实测让它盖住 HexMap，静默破坏需求 3。这是本决策最容易被违反的地方，所以组件不提供该字段。
 - **不做**：Prefab 批量生成工具、装饰物之间的正确互相遮挡、Billboard、运行时变换更新、运行时队列值逐帧修改。
 
 ## Considered Options
@@ -25,7 +26,8 @@
 
 - **Draw Call = 纹理数（按 50 以内规划）**。将来要降这个数字，必须改"共享材质 + 纹理图集"，那是推翻本决策。
 - **材质数 = 纹理数 × 实际用到的队列数（≤ 100）**，SRP Batcher 为每个材质在 GPU 常驻一份 `UnityPerMaterial` 常量缓冲。这是微信小游戏真机内存的待验证项。
-- **`sortingOrder` 不增加材质数**（它是 `Renderer` 属性而非材质属性），但会按排序值把 draw call 序列切成若干段。
+- **`sortingOrder` 不增加材质数**（它是 `Renderer` 属性而非材质属性），但**组件不暴露它**：它与相邻组的 `renderQueue` 谁优先是个反直觉的陷阱（见决策中的实测前提），暴露出去等于给分层契约开一个静默失效的旋钮。组内先后改用 `renderQueue` 的相邻取值。
+- **这份契约依赖一个曾经的错误推理。** 项目的渲染排序参考文档原先推导出 `sortingLayer → renderQueue → sortingOrder`，并自行标注为推理而非官方结论。该推导被实测证伪，文档已更正。改动分层相关代码前先读那份文档第 3 节。
 - **`Graphics.DrawMeshInstanced` 不参与常规排序流程**，而生产场景的 HexMap 走的是该路径。已有验证只覆盖了 `MeshRenderer` 策略，因此"装饰物不插到 HexMap 之前"必须在真实生产场景里用 Frame Debugger 确认。
 - **覆盖物不会被压暗**：它画在 HexMap 之上，不需要也不应该被半透明格子压暗。
 - 旧实现的 `StaticDecoration*` 系列类型、`decorate.unity`、`Decoration.mat` 全部作废；旧 PlayMode 测试的断言随之废弃，但像素回读手法照搬。

@@ -28,7 +28,6 @@ namespace HexMap.UnityRuntime
 
         [SerializeField] private Sprite m_Sprite;
         [SerializeField] private int m_Queue = DecorationQueue.Decoration;
-        [SerializeField] private int m_SortingOrder;
         [SerializeField] private bool m_Visible = true;
 
         [Tooltip("The child that carries the MeshFilter and MeshRenderer. Found automatically when left empty.")]
@@ -71,22 +70,6 @@ namespace HexMap.UnityRuntime
         public int Queue
         {
             get { return m_Queue; }
-        }
-
-        /// <summary>Ordering inside the queue. Only nudges placement between decorations.</summary>
-        public int SortingOrder
-        {
-            get { return m_SortingOrder; }
-            set
-            {
-                if (m_SortingOrder == value)
-                {
-                    return;
-                }
-
-                m_SortingOrder = value;
-                Apply();
-            }
         }
 
         /// <summary>
@@ -180,7 +163,6 @@ namespace HexMap.UnityRuntime
             }
 
             DecorationRenderSettings.Apply(renderer);
-            renderer.sortingOrder = m_SortingOrder;
             renderer.enabled = m_Visible;
         }
 

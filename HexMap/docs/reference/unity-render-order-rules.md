@@ -93,15 +93,29 @@ var sortFlags = (data.m_IsOpaque)
 
 ### 3. 结论：透明物体的排序键
 
-由上两条推出，本仓库这种"两个不同 shader、不同 material"的场景，实际排序键是：
+**以下是实测结论，取代了本文件早先的推理版本。**
 
 ```
-sortingLayer  →  renderQueue  →  sortingOrder  →  距离（从后到前）
+sortingLayer  →  sortingOrder  →  renderQueue  →  距离（从后到前）
 ```
 
-其中 `sortingOrder` 参与 `RenderQueue` 这一级的桶内比较（它是 `Renderer` 的属性，与 material 的 renderQueue 共同决定桶）。
+> **实测（2026-09-22）**：本文件早先写的是 `sortingLayer → renderQueue → sortingOrder`，并自行标注为「推理，不是官方文档逐字结论」。该推理**已被实测证伪** —— 两者的先后是反的。
+>
+> 测量方法：同一场景内，不透明红 Hex（`renderQueue = 3000`，自身 `sortingOrder = 0`，经 `DrawMeshInstanced` 绘制）与不透明蓝装饰物（`renderQueue = 2800`，`MeshRenderer`），只改装饰物的 `sortingOrder`，读中心像素：
+>
+> | 装饰物 `sortingOrder` | 采样 | 谁在上面 |
+> | --- | --- | --- |
+> | −1 | 红 | Hex ✓ |
+> | 0 | 红 | Hex ✓ |
+> | 1 | **蓝** | **装饰物** ✗ |
+> | 3 | **蓝** | **装饰物** ✗ |
+>
+> **`sortingOrder` 的优先级高于 `renderQueue`。** 只有当两者 `sortingOrder` 相等时，`renderQueue` 才参与比较 —— 这解释了为什么 `sortingOrder = 0` 时队列顺序（装饰物 2800 先于 Hex 3000）生效，而非零值会让装饰物越过队列盖住 Hex。
 
-> **推理标注**：官方文档把 `SortingLayer` 和 `RenderQueue` 列为两个 flag，没有单独把 `Renderer.sortingOrder` 列成 flag。`sortingOrder` 属于 `RenderQueue` 这一级的比较键，是本仓库从"排序层→队列→顺序"的常见语义推得的，不是官方文档逐字写明的结论。实践上该模型与现有 PlayMode 测试的观测结果一致。
+**由此得到一条硬约束**：`renderQueue` 子区间分层**只在所有参与对象的 `sortingOrder` 相等时有效**。任何一方设了不同的 `sortingOrder`，队列差异就被忽略。所以跨组分层不能依赖「反正队列不同」这一想法，必须同时保证 `sortingOrder` 一致。
+
+**建议**：跨组关系只用 `renderQueue` 表达，且**各组一律不写 `sortingOrder`（保持默认 0）**。需要组内先后时，同样用 `renderQueue` 的相邻取值，而不是 `sortingOrder` —— 因为后者一旦被写成非零值，就可能越过相邻组。
+
 
 ### 三个容易踩的约束
 
@@ -208,26 +222,28 @@ sortingLayer  →  renderQueue  →  sortingOrder  →  距离（从后到前）
 
 ### 分层原则
 
-**让 renderQueue 决定跨组的前后关系，让 sortingOrder 只做组内微调，sorting layer 全部保持默认。**
+**让 renderQueue 决定跨组的前后关系，各组一律不写 sortingOrder（保持默认 0），sorting layer 全部保持默认。**
 
 | 目标 | 用什么 | 不要用什么 |
 | --- | --- | --- |
-| A 组整体在 B 组之下 | A 的 renderQueue < B 的 renderQueue | sorting layer、sorting order |
-| 同组内固定排序 | 组内统一的 `Renderer.sortingOrder` | 混用不同值（切批次） |
+| A 组整体在 B 组之下 | A 的 renderQueue < B 的 renderQueue，**且两组的 `sortingOrder` 相等** | sorting layer、单方面改 `sortingOrder` |
+| 同组内固定排序 | 组内统一的 `renderQueue` 相邻取值 | 混用不同 `sortingOrder` |
 | 同组内按距离排序 | 不动，默认行为 | — |
 
 ### 本仓库的推荐取值
 
 | | RenderQueue | Sorting Layer | Sorting Order |
 | --- | --- | --- | --- |
-| 装饰物 | 2800（`DecorationQueue.Decoration`） | Default | 组件上的 `sortingOrder`，组内微调用 |
-| InstancedHexCell | 3000（shader 拥有，`DecorationQueue.HexMap` 引用） | Default | 组内统一即可，任意固定值 |
-| 覆盖物 | 3005（`DecorationQueue.Overlay`） | Default | 组件上的 `sortingOrder`，组内微调用 |
+| 装饰物 | 2800（`DecorationQueue.Decoration`） | Default | **不写，保持默认 0** |
+| InstancedHexCell | 3000（shader 拥有，`DecorationQueue.HexMap` 引用） | Default | **不写，保持默认 0** |
+| 覆盖物 | 3005（`DecorationQueue.Overlay`） | Default | **不写，保持默认 0** |
+
+组内先后不要用 `sortingOrder`：它与相邻组的 `renderQueue` 谁优先取决于本文件第 3 节的实测结论，非零值会让该组越过相邻组。需要组内先后时用 `renderQueue` 的相邻取值（如 2800 / 2801）。
 
 ### 反例
 
-- **给 Hex 用比装饰物更低的 sorting layer。** 因为 `SortingLayer` 排序在 `RenderQueue` 之前，这会越过队列差异，破坏 Hex 覆盖装饰物的关系。
-- **用 `sortingOrder` 让 Hex 超过装饰物，而把两者放在同一队列。** 同队列时组内退化为距离排序，跨组关系变得依赖相机位置。
+- **给 Hex 用比装饰物更低的 sorting layer。** `SortingLayer` 排序最优先，这会越过队列差异，破坏 Hex 覆盖装饰物的关系。
+- **给任何一组设非零 `sortingOrder`。** `sortingOrder` 优先于 `renderQueue`，所以非零值会越过相邻组的队列差异。实测：装饰物 2800 设 `sortingOrder = 1` 后盖住了 3000 的 Hex。**这是本仓库已经踩过的一个坑。**
 - **给同一组内不同对象设不同 `sortingOrder`。** 会切出额外批次。对 SRP Batcher 是切 SRP Batch，对 instancing 是切 instanced draw call。
 
 ## 验证
