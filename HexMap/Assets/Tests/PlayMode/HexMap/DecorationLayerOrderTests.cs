@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using HexMap.Core;
 using HexMap.Runtime;
 using NUnit.Framework;
 using UnityEngine;
