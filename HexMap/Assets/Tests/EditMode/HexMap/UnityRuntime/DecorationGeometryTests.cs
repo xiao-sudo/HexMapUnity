@@ -113,6 +113,46 @@ namespace HexMap.UnityRuntime.Tests
                 "the quad must span the Sprite, not the whole texture");
         }
 
+        /// <summary>
+        /// Pins the contract that lets one mesh serve both render planes.
+        /// </summary>
+        /// <remarks>
+        /// The render plane is carried by the <c>Renderer</c> child's rotation in the prefab, never by
+        /// the mesh. Building a mesh per plane would double the mesh cache and break "one Sprite, one
+        /// mesh" — and it would still look correct to whoever did it, because they would be looking at
+        /// one of the two planes. <c>DecorationPrefabBuilderTests</c> guards the rotation half; this
+        /// guards the half that would make the rotation unnecessary.
+        /// </remarks>
+        [Test]
+        public void TheDecorationMeshLiesInTheLocalXyPlane()
+        {
+            var sprite = CreateSprite(4, 4, 4f, new Vector2(0.5f, 0.5f));
+
+            var mesh = DecorationMeshFactory.GetOrCreateMesh(sprite);
+
+            Assert.That(mesh, Is.Not.Null, "a full-rect Sprite must produce a mesh");
+
+            var min = mesh.vertices[0];
+            var max = mesh.vertices[0];
+            for (var index = 0; index < mesh.vertices.Length; index++)
+            {
+                var vertex = mesh.vertices[index];
+
+                Assert.That(
+                    vertex.z,
+                    Is.EqualTo(0f).Within(Tolerance),
+                    "every decoration mesh vertex stays in the local XY plane");
+
+                min = Vector3.Min(min, vertex);
+                max = Vector3.Max(max, vertex);
+            }
+
+            // Guard the guard: an empty mesh, or one collapsed to a point, would satisfy the loop
+            // above without asserting anything at all.
+            Assert.That(max.x - min.x, Is.GreaterThan(0f), "the mesh must span the Sprite in x");
+            Assert.That(max.y - min.y, Is.GreaterThan(0f), "the mesh must span the Sprite in y");
+        }
+
         [Test]
         public void SubRectSpritePassesItsUvsThrough()
         {
