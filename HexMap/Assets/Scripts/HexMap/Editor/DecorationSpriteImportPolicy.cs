@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using UnityEditor;
 using UnityEngine;
@@ -169,3 +170,4 @@ namespace HexMap.Editor
         public bool IsFallback { get; }
     }
 }
+#endif

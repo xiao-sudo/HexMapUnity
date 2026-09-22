@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using HexMap.UnityRuntime;
@@ -362,3 +363,4 @@ namespace HexMap.Editor
         }
     }
 }
+#endif

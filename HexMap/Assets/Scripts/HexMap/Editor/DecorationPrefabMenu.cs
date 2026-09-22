@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System.Collections.Generic;
 using HexMap.Core;
 using UnityEditor;
@@ -280,3 +281,4 @@ namespace HexMap.Editor
         }
     }
 }
+#endif

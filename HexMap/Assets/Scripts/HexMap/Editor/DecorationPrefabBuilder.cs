@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using HexMap.Core;
 using HexMap.UnityRuntime;
@@ -199,3 +200,4 @@ namespace HexMap.Editor
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using UnityEditor;
 
 namespace HexMap.Editor
@@ -45,3 +46,4 @@ namespace HexMap.Editor
         }
     }
 }
+#endif

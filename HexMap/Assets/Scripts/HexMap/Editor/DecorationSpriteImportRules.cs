@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 namespace HexMap.Editor
 {
     /// <summary>
@@ -72,3 +73,4 @@ namespace HexMap.Editor
         }
     }
 }
+#endif
