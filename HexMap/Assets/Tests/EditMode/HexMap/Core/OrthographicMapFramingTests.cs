@@ -168,7 +168,10 @@ namespace HexMap.Core.Tests
 
             Assert.That(aboveThreshold.IsLockedToCenter, Is.True);
             Assert.That(belowThreshold.IsLockedToCenter, Is.False);
-            Assert.That(belowThreshold.MaxOffset, Is.EqualTo(1.8076f).Within(0.001f));
+            Assert.That(
+                belowThreshold.MaxOffset,
+                Is.EqualTo(belowThreshold.MapHalfWidth - belowThreshold.VisibleWidth * 0.5f).Within(0.00001f));
+            Assert.That(belowThreshold.MaxOffset, Is.EqualTo(2.80747f).Within(0.001f));
             Assert.That(belowThreshold.VisibleHeight, Is.GreaterThanOrEqualTo(belowThreshold.MapDepth));
         }
 
