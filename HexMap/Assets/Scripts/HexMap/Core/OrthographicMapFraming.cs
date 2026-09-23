@@ -228,6 +228,13 @@ namespace HexMap.Core
             float aspect,
             float zoom = DefaultZoom)
         {
+            // Validate the zoom here rather than letting TryCreate fold it into a layout error, so a
+            // bad zoom reports the same exception type and parameter name as WithZoom does.
+            if (!IsFinitePositive(zoom))
+            {
+                throw new ArgumentOutOfRangeException(nameof(zoom), zoom, "Zoom must be positive and finite.");
+            }
+
             OrthographicMapFraming framing;
             string error;
             if (!TryCreate(layout, mapRadius, viewMargin, aspect, zoom, out framing, out error))
