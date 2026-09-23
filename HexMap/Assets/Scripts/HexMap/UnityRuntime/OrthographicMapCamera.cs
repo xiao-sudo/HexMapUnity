@@ -143,6 +143,9 @@ namespace HexMap.UnityRuntime
         private HexLayout m_AppliedLayout;
         private Transform m_AppliedTransform;
         private float m_AppliedScale = 1f;
+        private int m_AppliedRadius;
+        private float m_AppliedViewMargin;
+        private float m_AppliedAspect;
         private int m_AppliedCullingMask = -1;
         private bool m_HasFraming;
         private Vector2 m_Focus;
@@ -400,6 +403,17 @@ namespace HexMap.UnityRuntime
                 return true;
             }
 
+            // The scalar inputs that feed the base framing are validated here rather than further down,
+            // because the cheap path below must not be able to accept a configuration the long path would
+            // reject. A view margin below one, for instance, silently clips rows, and reporting that only
+            // on a full rebuild would make the refusal depend on whether the map happened to change.
+            if (!IsFinite(m_ViewMargin) || m_ViewMargin < OrthographicMapFraming.MinimumViewMargin)
+            {
+                error = "View margin must be finite and at least " + OrthographicMapFraming.MinimumViewMargin
+                    + " so that every row stays inside the frame.";
+                return false;
+            }
+
             if (m_HexMapView == null)
             {
                 error = "A HexMapView reference is required.";
@@ -411,6 +425,23 @@ namespace HexMap.UnityRuntime
                 error = "A Camera reference is required.";
                 return false;
             }
+
+            if (!m_HexMapView.HasMap)
+            {
+                // Without this the layout is default and the envelope maths fails with a message about the
+                // outer radius, which points at the wrong problem entirely.
+                error = "HexMapView must be built before the camera can frame it.";
+                return false;
+            }
+
+            if (m_HexMapView.Radius <= 0)
+            {
+                error = "HexMapView radius must be positive.";
+                return false;
+            }
+
+            var layout = m_HexMapView.Layout;
+            var aspect = ResolveAspect();
 
             if (!m_Camera.orthographic)
             {
@@ -427,12 +458,6 @@ namespace HexMap.UnityRuntime
             if (!IsFinite(m_Height))
             {
                 error = "Camera height must be finite.";
-                return false;
-            }
-
-            HexLayout layout;
-            if (!TryGetLayout(out layout, out error))
-            {
                 return false;
             }
 
@@ -453,7 +478,7 @@ namespace HexMap.UnityRuntime
                 layout,
                 m_HexMapView.Radius,
                 m_ViewMargin,
-                ResolveAspect(),
+                aspect,
                 out baseFraming,
                 out error))
             {
@@ -464,6 +489,9 @@ namespace HexMap.UnityRuntime
             m_AppliedLayout = layout;
             m_AppliedTransform = m_HexMapView.transform;
             m_AppliedScale = scale;
+            m_AppliedRadius = m_HexMapView.Radius;
+            m_AppliedViewMargin = m_ViewMargin;
+            m_AppliedAspect = aspect;
             m_AppliedCullingMask = cullingMask;
             m_HasFraming = true;
 
@@ -509,11 +537,26 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            HexLayout layout;
-            if (!TryGetLayout(out layout, out error))
+            if (!m_HexMapView.HasMap)
             {
+                error = "HexMapView must be built before the camera can frame it.";
                 return false;
             }
+
+            if (m_HexMapView.Radius <= 0)
+            {
+                error = "HexMapView radius must be positive.";
+                return false;
+            }
+
+            if (!IsFinite(m_ViewMargin) || m_ViewMargin < OrthographicMapFraming.MinimumViewMargin)
+            {
+                error = "View margin must be finite and at least " + OrthographicMapFraming.MinimumViewMargin
+                    + " so that every row stays inside the frame.";
+                return false;
+            }
+
+            var layout = m_HexMapView.Layout;
 
             if (!TryResolvePlaneAndOrientation(layout, out error))
             {
@@ -747,7 +790,9 @@ namespace HexMap.UnityRuntime
         /// </summary>
         /// <summary>
         /// True when nothing the base framing depends on has changed since the last refresh, so the base
-        /// framing can be reused. Deliberately lenient: a false positive only costs one extra rebuild.
+        /// framing can be reused. Deliberately lenient: a false positive only costs one extra rebuild, but a
+        /// false negative silently ignores a configuration change, so every input that feeds the base
+        /// framing is compared here.
         /// </summary>
         private bool IsCameraConfigurationUnchanged()
         {
@@ -766,7 +811,12 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            return LayoutEquals(m_AppliedLayout, m_HexMapView.Layout);
+            // Scalars matter as much as the layout: the view margin and the aspect ratio both change the
+            // base framing, and skipping them let a bad margin through on a repeat refresh.
+            return m_AppliedRadius == m_HexMapView.Radius
+                && m_AppliedViewMargin == m_ViewMargin
+                && m_AppliedAspect == ResolveAspect()
+                && LayoutEquals(m_AppliedLayout, m_HexMapView.Layout);
         }
 
         private static bool LayoutEquals(HexLayout left, HexLayout right)
@@ -903,28 +953,6 @@ namespace HexMap.UnityRuntime
             }
 
             return (value - min) / range;
-        }
-
-        private bool TryGetLayout(out HexLayout layout, out string error)
-        {
-            layout = default(HexLayout);
-
-            if (!m_HexMapView.HasMap)
-            {
-                error = "HexMapView must be built before the camera can frame it.";
-                return false;
-            }
-
-            layout = m_HexMapView.Layout;
-
-            if (m_HexMapView.Radius <= 0)
-            {
-                error = "HexMapView radius must be positive.";
-                return false;
-            }
-
-            error = string.Empty;
-            return true;
         }
 
         private bool TryResolvePlaneAndOrientation(HexLayout layout, out string error)
