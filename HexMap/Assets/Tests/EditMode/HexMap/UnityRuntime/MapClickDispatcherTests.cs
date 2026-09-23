@@ -44,17 +44,19 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         /// <summary>
-        /// A camera looking straight down. The position is what decides where on the plane a viewport
-        /// click lands, so tests that need to miss the map move the camera rather than tilt it: tilting
-        /// away from the plane makes the ray never meet it at all, which is a different failure.
+        /// A camera looking straight down at the middle of the map. Its position is fixed on purpose:
+        /// a click arrives in screen space and is unprojected back to the plane, so the two round-trip.
+        /// Moving this camera would not move where a click lands, only which part of the map the screen
+        /// covers. Tests that need a click to land somewhere specific aim through
+        /// <see cref="ScreenPointOf"/> instead.
         /// </summary>
-        private Camera CreateCamera(Vector3? position = null)
+        private Camera CreateCamera()
         {
             m_CameraObject = new GameObject("Map Click Camera");
             var camera = m_CameraObject.AddComponent<Camera>();
             camera.orthographic = true;
             camera.aspect = 9f / 16f;
-            camera.transform.position = position ?? new Vector3(0f, 30f, 0f);
+            camera.transform.position = new Vector3(0f, 30f, 0f);
             camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             return camera;
         }
@@ -121,7 +123,7 @@ namespace HexMap.UnityRuntime.Tests
             RecordingHandler handler;
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
 
-            var consumed = dispatcher.OnMapClicked(ScreenCentre(camera));
+            var consumed = dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
 
             Assert.That(consumed, Is.True);
             Assert.That(handler.CallCount, Is.EqualTo(1));
@@ -141,7 +143,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(dispatcher.Register(TopDownChannel, topDown), Is.True);
 
             dispatcher.SetActiveChannel(TopDownChannel);
-            dispatcher.OnMapClicked(ScreenCentre(camera));
+            dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
 
             Assert.That(gameplay.CallCount, Is.EqualTo(0));
             Assert.That(topDown.CallCount, Is.EqualTo(1));
@@ -162,8 +164,8 @@ namespace HexMap.UnityRuntime.Tests
                 LogType.Error,
                 new Regex(Regex.Escape(NoHandlerMessage(TopDownChannel))));
 
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(gameplay.CallCount, Is.EqualTo(0));
         }
 
@@ -176,7 +178,7 @@ namespace HexMap.UnityRuntime.Tests
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
             dispatcher.SetActiveChannel(MapClickChannels.None);
 
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
         }
 
@@ -192,7 +194,7 @@ namespace HexMap.UnityRuntime.Tests
             // A missing camera is reported rather than silently dropping the click.
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NoCameraMessage())));
 
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
         }
 
@@ -204,16 +206,19 @@ namespace HexMap.UnityRuntime.Tests
             var handler = new RecordingHandler();
             Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
 
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
         }
 
         [Test]
         public void AClickThatLandsOutsideTheMapIsStillDeliveredWithNoPlot()
         {
-            // Move the camera away from the map so the viewport centre still meets the plane but lands
-            // beyond a radius-9 map. This is the OutsideMap path, not a ray that misses everything.
-            var camera = CreateCamera(new Vector3(200f, 30f, 0f));
+            // Zoom out until the map no longer fills the viewport, so a click can land on screen past
+            // its edge. The ray still meets the plane, and the pick gets far enough to see that no cell
+            // is out there: that is the OutsideMap reason, as opposed to a ray that never reaches the
+            // plane at all. Clicking off screen would test the same path on a shakier assumption.
+            var camera = CreateCamera();
+            camera.orthographicSize = 25f;
             var controller = CreateController(9);
             Assert.That(
                 controller.TryInitialize(CreateOnePlotPerCell(controller.HexMapView.Map)),
@@ -222,7 +227,9 @@ namespace HexMap.UnityRuntime.Tests
             var handler = new RecordingHandler();
             Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
 
-            var consumed = dispatcher.OnMapClicked(ScreenCentre(camera));
+            // Past the map's edge in depth: the radius-9 map reaches about 14.5 world units, and the
+            // zoomed-out viewport reaches 25, so 20 is outside the map and well inside the screen.
+            var consumed = dispatcher.OnMapClicked(ScreenPointOf(camera, new Vector3(0f, 0f, 20f)));
 
             Assert.That(consumed, Is.True, "clicking empty space must reach the handler so it can dismiss");
             Assert.That(handler.CallCount, Is.EqualTo(1));
@@ -241,7 +248,7 @@ namespace HexMap.UnityRuntime.Tests
 
             // The camera looks up and away from the plane, so the ray never meets it.
             camera.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
-            var consumed = dispatcher.OnMapClicked(ScreenCentre(camera));
+            var consumed = dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
 
             Assert.That(consumed, Is.True);
             Assert.That(handler.LastContext.HasPlot, Is.False);
@@ -255,7 +262,7 @@ namespace HexMap.UnityRuntime.Tests
             Camera camera;
             RecordingHandler handler;
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
-            var position = ScreenCentre(camera);
+            var position = ScreenPointOf(camera, Vector3.zero);
 
             dispatcher.OnMapClicked(position);
 
@@ -271,7 +278,7 @@ namespace HexMap.UnityRuntime.Tests
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
             handler.Consume = false;
 
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(1));
         }
 
@@ -284,8 +291,8 @@ namespace HexMap.UnityRuntime.Tests
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
             handler.Consume = false;
 
-            dispatcher.OnMapClicked(ScreenCentre(camera));
-            dispatcher.OnMapClicked(ScreenCentre(camera));
+            dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
+            dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
 
             Assert.That(handler.CallCount, Is.EqualTo(2), "a refusal must not unregister the handler");
         }
@@ -302,7 +309,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(dispatcher.Register(GameplayChannel, second), Is.False);
             Assert.That(dispatcher.HandlerCount, Is.EqualTo(1));
 
-            dispatcher.OnMapClicked(ScreenCentre(camera));
+            dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
             Assert.That(first.CallCount, Is.EqualTo(1), "the original handler keeps the channel");
             Assert.That(second.CallCount, Is.EqualTo(0));
         }
@@ -336,7 +343,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(dispatcher.Unregister(GameplayChannel, handler), Is.False, "a second unregister is a no-op");
             Assert.That(dispatcher.HandlerCount, Is.EqualTo(0));
 
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
         }
 
@@ -352,7 +359,7 @@ namespace HexMap.UnityRuntime.Tests
             var replacement = new RecordingHandler();
             Assert.That(dispatcher.Register(GameplayChannel, replacement), Is.True);
 
-            dispatcher.OnMapClicked(ScreenCentre(camera));
+            dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
             Assert.That(replacement.CallCount, Is.EqualTo(1));
             Assert.That(first.CallCount, Is.EqualTo(0));
         }
@@ -381,8 +388,8 @@ namespace HexMap.UnityRuntime.Tests
                 LogType.Error,
                 new Regex(Regex.Escape(DeadHandlerMessage(TopDownChannel))));
 
-            Assert.DoesNotThrow(() => dispatcher.OnMapClicked(ScreenCentre(camera)));
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.DoesNotThrow(() => dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)));
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
         }
 
         [Test]
@@ -396,12 +403,12 @@ namespace HexMap.UnityRuntime.Tests
             MapClickContext context;
             Assert.That(dispatcher.TryGetLastContext(out context), Is.False, "nothing has been clicked yet");
 
-            dispatcher.OnMapClicked(ScreenCentre(camera));
+            dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
             Assert.That(dispatcher.TryGetLastContext(out context), Is.True);
             Assert.That(context.HasPlot, Is.True);
 
             dispatcher.SetActiveChannel(MapClickChannels.None);
-            dispatcher.OnMapClicked(ScreenCentre(camera));
+            dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
             Assert.That(
                 dispatcher.TryGetLastContext(out context),
                 Is.False,
@@ -419,14 +426,19 @@ namespace HexMap.UnityRuntime.Tests
             var handler = new RecordingHandler();
             Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
 
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.True, "the click is still delivered");
+            Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.True, "the click is still delivered");
             Assert.That(handler.LastContext.HasPlot, Is.False);
             Assert.That(handler.LastContext.PickStatus, Is.EqualTo(PlotScreenPickStatus.MapNotInitialized));
         }
 
-        private static Vector2 ScreenCentre(Camera camera)
+        /// <summary>
+        /// Where a world point appears on screen, which is also the screen position a click has to use
+        /// to land on that world point. Aiming through this keeps a test stating the map location it
+        /// means rather than a screen coordinate that only happens to name it.
+        /// </summary>
+        private static Vector2 ScreenPointOf(Camera camera, Vector3 worldPoint)
         {
-            return camera.WorldToScreenPoint(Vector3.zero);
+            return camera.WorldToScreenPoint(worldPoint);
         }
 
         /// <summary>
