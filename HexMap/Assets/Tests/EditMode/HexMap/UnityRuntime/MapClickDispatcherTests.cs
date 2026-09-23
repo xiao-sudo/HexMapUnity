@@ -358,6 +358,12 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(dispatcher.Unregister(GameplayChannel, handler), Is.False, "a second unregister is a no-op");
             Assert.That(dispatcher.HandlerCount, Is.EqualTo(0));
 
+            // Clicking is how this proves the handler stopped receiving clicks, and an empty channel is
+            // reported by contract: "no mode reacts to clicks" is expressed with MapClickChannels.None,
+            // so a channel nobody holds means the wiring is wrong. Hence the declared error, which is
+            // the whole reason this assertion is worth making rather than trusting HandlerCount alone.
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NoHandlerMessage(GameplayChannel))));
+
             Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
         }
