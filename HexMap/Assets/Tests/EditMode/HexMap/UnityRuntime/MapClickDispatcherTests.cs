@@ -43,14 +43,19 @@ namespace HexMap.UnityRuntime.Tests
             target = null;
         }
 
-        private Camera CreateCamera(Quaternion? rotation = null)
+        /// <summary>
+        /// A camera looking straight down. The position is what decides where on the plane a viewport
+        /// click lands, so tests that need to miss the map move the camera rather than tilt it: tilting
+        /// away from the plane makes the ray never meet it at all, which is a different failure.
+        /// </summary>
+        private Camera CreateCamera(Vector3? position = null)
         {
             m_CameraObject = new GameObject("Map Click Camera");
             var camera = m_CameraObject.AddComponent<Camera>();
             camera.orthographic = true;
             camera.aspect = 9f / 16f;
-            camera.transform.position = new Vector3(0f, 30f, 0f);
-            camera.transform.rotation = rotation ?? Quaternion.Euler(90f, 0f, 0f);
+            camera.transform.position = position ?? new Vector3(0f, 30f, 0f);
+            camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             return camera;
         }
 
@@ -206,10 +211,9 @@ namespace HexMap.UnityRuntime.Tests
         [Test]
         public void AClickThatLandsOutsideTheMapIsStillDeliveredWithNoPlot()
         {
-            // Point the camera back to front so the viewport centre lands on the plane far outside the
-            // radius-9 map. The ray still hits the plane, so this exercises the OutsideMap path rather
-            // than a ray that misses everything.
-            var camera = CreateCamera(Quaternion.Euler(-90f, 0f, 0f));
+            // Move the camera away from the map so the viewport centre still meets the plane but lands
+            // beyond a radius-9 map. This is the OutsideMap path, not a ray that misses everything.
+            var camera = CreateCamera(new Vector3(200f, 30f, 0f));
             var controller = CreateController(9);
             Assert.That(
                 controller.TryInitialize(CreateOnePlotPerCell(controller.HexMapView.Map)),
@@ -235,12 +239,13 @@ namespace HexMap.UnityRuntime.Tests
             RecordingHandler handler;
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
 
-            // Far outside the viewport, so the ray does not reach the map plane at all.
-            var consumed = dispatcher.OnMapClicked(new Vector2(-10000f, -10000f));
+            // The camera looks up and away from the plane, so the ray never meets it.
+            camera.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
+            var consumed = dispatcher.OnMapClicked(ScreenCentre(camera));
 
             Assert.That(consumed, Is.True);
             Assert.That(handler.LastContext.HasPlot, Is.False);
-            Assert.That(handler.LastContext.PickStatus, Is.Not.EqualTo(PlotScreenPickStatus.Found));
+            Assert.That(handler.LastContext.PickStatus, Is.EqualTo(PlotScreenPickStatus.NoPlaneIntersection));
         }
 
         [Test]
