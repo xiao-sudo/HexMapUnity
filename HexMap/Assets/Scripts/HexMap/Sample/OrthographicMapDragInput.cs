@@ -18,7 +18,7 @@ namespace HexMap.Sample
         /// Positive means the camera moves right when the pointer moves right, which drags the content
         /// left and makes the map feel grabbed. Flipping this sign flips the whole gesture.
         /// </summary>
-        private const float DragDirection = 1f;
+        private const float DragDirection = -1f;
 
         [SerializeField]
         private OrthographicMapCamera m_MapCamera;
