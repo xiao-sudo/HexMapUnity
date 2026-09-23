@@ -207,7 +207,8 @@ namespace HexMap.UnityRuntime.Tests
             OrthographicMapFraming flatFraming;
             Assert.That(flatController.TryGetFraming(out flatFraming), Is.True);
             Assert.That(flatFraming.VisibleHeight, Is.GreaterThanOrEqualTo(flatFraming.MapDepth));
-            Assert.That(flatFraming.MapHalfDepth, Is.EqualTo(19.05256f + 0.7794229f).Within(0.001f));
+            // Flat: half depth = sqrt(3) * 11 * 0.9 + sqrt(3)/2 * 0.9, half width = 1.5 * 11 * 0.9 + 1
+            Assert.That(flatFraming.MapHalfDepth, Is.EqualTo(17.9267255f).Within(0.001f));
             Assert.That(flatFraming.MapHalfWidth, Is.EqualTo(14.85f + 1f).Within(0.00001f));
             Assert.That(flatController.IsLockedToCenter, Is.False);
             AssertEveryRowIsInsideTheFrustum(flatCamera, flatFraming);
