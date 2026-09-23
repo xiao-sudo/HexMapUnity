@@ -491,11 +491,16 @@ namespace HexMap.Core.Tests
                 ProductionViewMargin,
                 PortraitAspect);
 
-            // At zoom 1 the vertical range is exactly zero, which is why panning starts out horizontal.
-            Assert.That(framing.VisibleHeight, Is.EqualTo(framing.MapDepth).Within(0.0001f));
-            Assert.That(framing.VisibleHeight, Is.GreaterThanOrEqualTo(framing.MapDepth - 0.0001f));
+            // At zoom 1 the frame is taller than the map by the view margin, so there is no vertical
+            // room to pan and panning starts out purely horizontal. Note it is the margin that makes
+            // this true, not an exact fit: visible height is map depth times the margin.
+            Assert.That(framing.VisibleHeight, Is.EqualTo(framing.MapDepth * ProductionViewMargin).Within(0.0001f));
+            Assert.That(framing.VisibleHeight, Is.GreaterThan(framing.MapDepth));
 
+            // Zooming in shrinks the visible height until the map no longer fits vertically, and the
+            // vertical slack turns negative, which is what opens up vertical panning.
             var zoomed = framing.WithZoom(1.5f);
+            Assert.That(framing.WithZoom(2f).VisibleHeight, Is.LessThan(zoomed.VisibleHeight));
             Assert.That(zoomed.VisibleHeight, Is.LessThan(zoomed.MapDepth));
         }
 
