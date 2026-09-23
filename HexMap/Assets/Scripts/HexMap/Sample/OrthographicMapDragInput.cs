@@ -42,17 +42,31 @@ namespace HexMap.Sample
         }
 
         /// <summary>
-        /// Converts a pointer delta in screen pixels into a change of the camera offset along the map's
-        /// local +X axis. Pure so the mapping can be reasoned about without a device.
+        /// Converts a pointer delta in screen pixels into a change of the camera centre along the map's
+        /// local plane axes. Pure so the mapping can be reasoned about without a device.
         /// </summary>
-        public static float ScreenDeltaToOffsetDelta(float screenDeltaX, float visibleWidth, float screenWidth)
+        /// <param name="screenDelta">Pointer movement in screen pixels.</param>
+        /// <param name="visibleWidth">The world width the frame currently covers.</param>
+        /// <param name="visibleHeight">The world height the frame currently covers.</param>
+        /// <param name="screenWidth">The viewport width in pixels.</param>
+        /// <param name="screenHeight">The viewport height in pixels.</param>
+        public static Vector2 ScreenDeltaToOffsetDelta(
+            Vector2 screenDelta,
+            float visibleWidth,
+            float visibleHeight,
+            float screenWidth,
+            float screenHeight)
         {
-            if (screenWidth <= 0f || visibleWidth <= 0f)
+            if (screenWidth <= 0f || screenHeight <= 0f || visibleWidth <= 0f || visibleHeight <= 0f)
             {
-                return 0f;
+                return Vector2.zero;
             }
 
-            return screenDeltaX / screenWidth * visibleWidth * DragDirection;
+            // Screen X runs along the map's local X and screen Y along its local plane axis, so a
+            // full-width drag is worth exactly one visible width on either axis.
+            return new Vector2(
+                screenDelta.x / screenWidth * visibleWidth * DragDirection,
+                screenDelta.y / screenHeight * visibleHeight * DragDirection);
         }
 
         private void Update()
@@ -77,10 +91,12 @@ namespace HexMap.Sample
                 return;
             }
 
-            var screenDeltaX = pointerPosition.x - m_PreviousPointerPosition.x;
+            var screenDelta = new Vector2(
+                pointerPosition.x - m_PreviousPointerPosition.x,
+                pointerPosition.y - m_PreviousPointerPosition.y);
             m_PreviousPointerPosition = pointerPosition;
 
-            if (Mathf.Approximately(screenDeltaX, 0f))
+            if (Mathf.Approximately(screenDelta.x, 0f) && Mathf.Approximately(screenDelta.y, 0f))
             {
                 return;
             }
@@ -91,14 +107,19 @@ namespace HexMap.Sample
                 return;
             }
 
-            var offsetDelta = ScreenDeltaToOffsetDelta(screenDeltaX, framing.VisibleWidth, UnityEngine.Screen.width);
-            if (Mathf.Approximately(offsetDelta, 0f))
+            var offsetDelta = ScreenDeltaToOffsetDelta(
+                screenDelta,
+                framing.VisibleWidth,
+                framing.VisibleHeight,
+                UnityEngine.Screen.width,
+                UnityEngine.Screen.height);
+            if (Mathf.Approximately(offsetDelta.x, 0f) && Mathf.Approximately(offsetDelta.y, 0f))
             {
                 return;
             }
 
             string error;
-            if (!m_MapCamera.TrySetOffset(m_MapCamera.Offset + offsetDelta, out error))
+            if (!m_MapCamera.TrySetOffset(m_MapCamera.Center + offsetDelta, out error))
             {
                 // A failed pan is a scene wiring problem, not something to throw at the player.
                 Debug.LogWarning("OrthographicMapDragInput could not pan the map: " + error, this);

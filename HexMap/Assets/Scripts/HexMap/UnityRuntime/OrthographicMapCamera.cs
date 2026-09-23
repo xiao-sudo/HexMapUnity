@@ -27,18 +27,21 @@ namespace HexMap.UnityRuntime
 
     /// <summary>
     /// Drives a scene <see cref="Camera"/> into a straight-down orthographic view of a
-    /// <see cref="HexMapView"/> map, and pans it left and right along the map's local X axis.
+    /// <see cref="HexMapView"/> map, pans it over the plane, and zooms it between a widest level that
+    /// shows every row and a closest level limited by <see cref="MinVisibleWidthRatio"/>.
     /// <para>
-    /// The framing comes from <see cref="OrthographicMapFraming"/>, so every row of the map is always
-    /// inside the frame and the visible width follows from the viewport aspect ratio. With a portrait
-    /// viewport (the shipped target) only part of the map's width fits, which is what makes panning
-    /// meaningful; with a landscape viewport the frame can swallow the whole map and the camera then
-    /// locks to the center with a zero panning range. That lock is geometry, not a defect.
+    /// The framing comes from <see cref="OrthographicMapFraming"/>. Zoom 1 is the only level that keeps
+    /// the whole map depth inside the frame; zooming in is allowed to drop rows, which is what opens up
+    /// vertical panning.
     /// </para>
     /// <para>
-    /// Nothing here runs per frame. Call <see cref="TryRefresh"/> when the view or the viewport changes.
-    /// <see cref="TrySetOffset"/> afterwards only re-applies the camera, so panning never re-derives the
-    /// framing and never needs the renderer to have been built.
+    /// The camera always aims at a center point expressed in the map's two plane coordinates. A focus
+    /// is a request, not a position: the center is the focus clamped into the current panning range, so
+    /// a focus at the map's edge ends up beside the viewport center rather than outside the map.
+    /// </para>
+    /// <para>
+    /// The focus is applied when it is set and when a zoom change happens outside a gesture. Dragging
+    /// moves the center without clearing the focus, so the next non-gesture zoom change re-aims at it.
     /// </para>
     /// </summary>
     [DisallowMultipleComponent]
@@ -49,6 +52,22 @@ namespace HexMap.UnityRuntime
         /// serialized target is kept instead of being replaced by a negligible difference.
         /// </summary>
         public const float AspectTolerance = 0.001f;
+
+        /// <summary>
+        /// The zoom level that keeps every row inside the frame.
+        /// </summary>
+        public const float MinZoom = 1f;
+
+        /// <summary>
+        /// The origin cell of a radius based map, which is what <see cref="FocusOn"/> measures against.
+        /// </summary>
+        private static readonly HexCoord HexCoordOrigin = new HexCoord(0, 0);
+
+        /// <summary>
+        /// The smallest visible fraction of the map width the zoom clamps to, which sets the closest
+        /// zoom level. Expressed as a fraction so a different map does not need a different number.
+        /// </summary>
+        public const float DefaultMinVisibleWidthRatio = 0.15f;
 
         [SerializeField]
         private HexMapView m_HexMapView;
@@ -84,15 +103,46 @@ namespace HexMap.UnityRuntime
         private MapPlaneMode m_PlaneMode = MapPlaneMode.FollowMapView;
 
         [SerializeField]
-        [HideInInspector]
-        private float m_Offset;
+        [Tooltip("Smallest visible fraction of the map width. Smaller means a closer maximum zoom.")]
+        private float m_MinVisibleWidthRatio = DefaultMinVisibleWidthRatio;
 
+        [SerializeField]
+        [Tooltip("Zoom levels per second while easing towards the target zoom.")]
+        private float m_ZoomSpeed = 6f;
+
+        [SerializeField]
+        [HideInInspector]
+        private Vector2 m_DesiredCenter;
+
+        [SerializeField]
+        [HideInInspector]
+        private bool m_HasCenter;
+
+        [SerializeField]
+        [HideInInspector]
+        private float m_Zoom = MinZoom;
+
+        [SerializeField]
+        [HideInInspector]
+        private float m_TargetZoom = MinZoom;
+
+        [SerializeField]
+        [Tooltip("Optional starting focus, in map plane coordinates. Applied on the first refresh.")]
+        private Vector2 m_InitialFocus;
+
+        [SerializeField]
+        private bool m_HasInitialFocus;
+
+        private OrthographicMapFraming m_BaseFraming;
         private OrthographicMapFraming m_Framing;
         private HexLayout m_AppliedLayout;
         private Transform m_AppliedTransform;
         private float m_AppliedScale = 1f;
         private int m_AppliedCullingMask = -1;
         private bool m_HasFraming;
+        private Vector2 m_Focus;
+        private bool m_HasFocus;
+        private bool m_IsGestureActive;
 
         public HexMapView HexMapView
         {
@@ -136,45 +186,166 @@ namespace HexMap.UnityRuntime
             set { m_Height = value; }
         }
 
+        public float MinVisibleWidthRatio
+        {
+            get { return m_MinVisibleWidthRatio; }
+            set { m_MinVisibleWidthRatio = value; }
+        }
+
+        public float ZoomSpeed
+        {
+            get { return m_ZoomSpeed; }
+            set { m_ZoomSpeed = value; }
+        }
+
         public bool HasFraming
         {
             get { return m_HasFraming; }
         }
 
         /// <summary>
-        /// The offset along the map's local +X axis. Writing it clamps into the movable range.
+        /// The zoom level in use. Zoom 1 is the widest and keeps every row inside the frame.
         /// </summary>
-        public float Offset
+        public float Zoom
         {
-            get { return m_Offset; }
+            get { return m_Zoom; }
             set
             {
-                if (!m_HasFraming)
+                m_Zoom = m_HasFraming ? ClampZoom(value) : NormalizeZoom(value);
+                m_TargetZoom = m_Zoom;
+                if (m_HasFraming)
                 {
-                    m_Offset = value;
-                    return;
+                    ApplyZoom();
                 }
-
-                m_Offset = m_Framing.ClampOffset(value);
-                ApplyToCamera();
             }
         }
 
         /// <summary>
-        /// True when the frame is at least as wide as the map, so panning cannot move anything.
+        /// The zoom level the camera is easing towards. Writing it clamps into the allowed range.
         /// </summary>
-        public bool IsLockedToCenter
+        public float TargetZoom
         {
-            get { return !m_HasFraming || m_Framing.IsLockedToCenter; }
+            get { return m_TargetZoom; }
+            set { m_TargetZoom = m_HasFraming ? ClampZoom(value) : NormalizeZoom(value); }
         }
 
         /// <summary>
-        /// Copies the current framing snapshot. Returns false before the first successful refresh.
+        /// The highest zoom level allowed, derived from <see cref="MinVisibleWidthRatio"/>.
+        /// </summary>
+        public float MaxZoom
+        {
+            get
+            {
+                if (!m_HasFraming || m_MinVisibleWidthRatio <= 0f)
+                {
+                    return MinZoom;
+                }
+
+                var limit = 1f / (m_MinVisibleWidthRatio * m_BaseFraming.Aspect);
+                return limit > MinZoom ? limit : MinZoom;
+            }
+        }
+
+        /// <summary>
+        /// The center the camera is aiming at, in the map's local plane coordinates.
+        /// </summary>
+        public Vector2 Center
+        {
+            get { return m_DesiredCenter; }
+        }
+
+        /// <summary>
+        /// The focus last requested, in the map's local plane coordinates. Reading it does not imply
+        /// the camera is aiming at it; <see cref="Center"/> is where the camera actually is.
+        /// </summary>
+        public Vector2 Focus
+        {
+            get { return m_Focus; }
+        }
+
+        public bool HasFocus
+        {
+            get { return m_HasFocus; }
+        }
+
+        /// <summary>
+        /// True when a gesture owns the pan and zoom. While true, a zoom change does not re-aim at the focus.
+        /// </summary>
+        public bool IsGestureActive
+        {
+            get { return m_IsGestureActive; }
+        }
+
+        /// <summary>
+        /// The current framing with the camera zoom applied. Returns false before the first refresh.
         /// </summary>
         public bool TryGetFraming(out OrthographicMapFraming framing)
         {
             framing = m_Framing;
             return m_HasFraming;
+        }
+
+        /// <summary>
+        /// The panning limits along the map's local plane axes. Zero on an axis the frame covers entirely.
+        /// </summary>
+        public Vector2 MinOffset
+        {
+            get
+            {
+                if (!m_HasFraming)
+                {
+                    return Vector2.zero;
+                }
+
+                return new Vector2(-m_Framing.MovableHalfRange, -VerticalHalfRange);
+            }
+        }
+
+        /// <summary>
+        /// The panning limits along the map's local plane axes. Zero on an axis the frame covers entirely.
+        /// </summary>
+        public Vector2 MaxOffset
+        {
+            get
+            {
+                if (!m_HasFraming)
+                {
+                    return Vector2.zero;
+                }
+
+                return new Vector2(m_Framing.MovableHalfRange, VerticalHalfRange);
+            }
+        }
+
+        /// <summary>
+        /// The center mapped to 0..1 per axis, where the range is empty on an axis the frame covers.
+        /// </summary>
+        public Vector2 NormalizedOffset
+        {
+            get
+            {
+                var min = MinOffset;
+                var max = MaxOffset;
+                return new Vector2(
+                    NormalizeAxis(m_DesiredCenter.x, min.x, max.x),
+                    NormalizeAxis(m_DesiredCenter.y, min.y, max.y));
+            }
+        }
+
+        /// <summary>
+        /// True when the frame covers the map on both axes, so panning cannot move anything.
+        /// </summary>
+        public bool IsLockedToCenter
+        {
+            get
+            {
+                if (!m_HasFraming)
+                {
+                    return true;
+                }
+
+                return m_Framing.MovableHalfRange <= 0f && VerticalHalfRange <= 0f;
+            }
         }
 
         /// <summary>
@@ -242,26 +413,49 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            OrthographicMapFraming framing;
+            OrthographicMapFraming baseFraming;
             if (!OrthographicMapFraming.TryCreate(
                 layout,
                 m_HexMapView.Radius,
                 m_ViewMargin,
                 ResolveAspect(),
-                out framing,
+                out baseFraming,
                 out error))
             {
                 return false;
             }
 
-            m_Framing = framing;
+            m_BaseFraming = baseFraming;
             m_AppliedLayout = layout;
             m_AppliedTransform = m_HexMapView.transform;
             m_AppliedScale = scale;
             m_AppliedCullingMask = cullingMask;
             m_HasFraming = true;
-            m_Offset = framing.ClampOffset(m_Offset);
 
+            if (!IsFinitePositive(m_Zoom))
+            {
+                // A freshly added component serializes zero, which would mean an infinite magnification.
+                m_Zoom = MinZoom;
+            }
+
+            if (!IsFinitePositive(m_TargetZoom))
+            {
+                m_TargetZoom = m_Zoom;
+            }
+
+            m_Zoom = ClampZoom(m_Zoom);
+            m_TargetZoom = ClampZoom(m_TargetZoom);
+
+            ApplyInitialFocus();
+
+            if (!m_HasFocus && !HasUserCenter)
+            {
+                m_DesiredCenter = Vector2.zero;
+            }
+
+            m_Framing = m_BaseFraming.WithZoom(m_Zoom);
+            AlignCenterToFocus();
+            ClampCenter();
             ApplyToCamera();
             error = string.Empty;
             return true;
@@ -296,14 +490,15 @@ namespace HexMap.UnityRuntime
                 m_HexMapView.Radius,
                 m_ViewMargin,
                 ResolveAspect(),
+                m_Zoom,
                 out framing,
                 out error);
         }
 
         /// <summary>
-        /// Moves the camera to the requested offset along the map's local +X axis, clamped into range.
+        /// Moves the camera center along the map's local plane axes, clamped per axis.
         /// </summary>
-        public bool TrySetOffset(float offset, out string error)
+        public bool TrySetOffset(Vector2 offset, out string error)
         {
             if (!m_HasFraming)
             {
@@ -311,16 +506,325 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            float clamped;
-            if (!m_Framing.TrySetOffset(offset, out clamped, out error))
+            if (!IsFinite(offset.x))
             {
+                error = "Offset X must be finite.";
                 return false;
             }
 
-            m_Offset = clamped;
+            if (!IsFinite(offset.y))
+            {
+                error = "Offset Y must be finite.";
+                return false;
+            }
+
+            m_DesiredCenter = ClampToRange(offset);
+            m_HasCenter = true;
+
+            // Dragging moves the camera without forgetting the focus: the next non-gesture zoom change
+            // re-aims at it. Clearing the focus here would make zoom stop tracking it silently.
             ApplyToCamera();
             error = string.Empty;
             return true;
+        }
+
+        /// <summary>
+        /// Sets the zoom and keeps the point under the viewport anchor where it is.
+        /// </summary>
+        /// <param name="targetZoom">The requested zoom level, clamped into range.</param>
+        /// <param name="viewportAnchor">
+        /// The anchor in viewport coordinates: each component runs -1 to 1 from the center. X maps to the
+        /// map's local X axis and Y to its local plane axis. Zero is the viewport center and degenerates
+        /// to plain centered zooming.
+        /// </param>
+        public bool TryZoomTo(float targetZoom, Vector2 viewportAnchor, out string error)
+        {
+            if (!m_HasFraming)
+            {
+                error = "Refresh the camera before zooming.";
+                return false;
+            }
+
+            if (!IsFinite(targetZoom))
+            {
+                error = "Target zoom must be finite.";
+                return false;
+            }
+
+            if (!IsFinite(viewportAnchor.x) || !IsFinite(viewportAnchor.y))
+            {
+                error = "Viewport anchor must be finite.";
+                return false;
+            }
+
+            var clamped = ClampZoom(targetZoom);
+            var oldSize = m_Framing.OrthographicSize;
+            var newSize = m_BaseFraming.OrthographicSize / clamped;
+
+            var anchorOffset = new Vector2(
+                viewportAnchor.x * m_Framing.VisibleWidth * 0.5f,
+                viewportAnchor.y * m_Framing.VisibleHeight * 0.5f);
+            var growth = 1f - newSize / oldSize;
+
+            m_DesiredCenter = m_DesiredCenter + anchorOffset * growth;
+            m_DesiredCenter = ClampToRange(m_DesiredCenter);
+            m_HasCenter = true;
+            m_Zoom = clamped;
+            m_TargetZoom = clamped;
+
+            // An anchored zoom is itself a gesture, so it outranks the focus. Without this the
+            // re-aim rule would discard the anchored center and snap the camera back to the focus,
+            // which is exactly the case the anchor exists to serve.
+            var wasGestureActive = m_IsGestureActive;
+            m_IsGestureActive = true;
+            ApplyZoom();
+            m_IsGestureActive = wasGestureActive;
+
+            error = string.Empty;
+            return true;
+        }
+
+        /// <summary>
+        /// Aims the camera at a cell. The center ends up clamped, so an edge cell sits beside the
+        /// viewport center rather than outside the map.
+        /// </summary>
+        public bool FocusOn(HexCoord coordinate, out string error)
+        {
+            if (!m_HasFraming)
+            {
+                error = "Refresh the camera before focusing.";
+                return false;
+            }
+
+            // A radius-R hex map is exactly the set of cells within R steps of the origin, so the
+            // distance test is the membership test and needs nothing from the renderer.
+            if (HexCoord.Distance(HexCoordOrigin, coordinate) > m_HexMapView.Radius)
+            {
+                error = "The coordinate is outside the map.";
+                return false;
+            }
+
+            var world = m_AppliedTransform.TransformPoint(m_AppliedLayout.HexToWorld(coordinate));
+            return FocusOnWorld(world, out error);
+        }
+
+        /// <summary>
+        /// Aims the camera at a world point. The center ends up clamped, so a point outside the
+        /// panning range sits at the edge of the frame instead.
+        /// </summary>
+        public bool FocusOnWorld(Vector3 worldPoint, out string error)
+        {
+            if (!m_HasFraming)
+            {
+                error = "Refresh the camera before focusing.";
+                return false;
+            }
+
+            if (!IsFinite(worldPoint))
+            {
+                error = "World point must be finite.";
+                return false;
+            }
+
+            m_Focus = ToPlaneCoordinates(worldPoint);
+            m_HasFocus = true;
+            m_DesiredCenter = ClampToRange(m_Focus);
+            m_HasCenter = true;
+            ApplyToCamera();
+            error = string.Empty;
+            return true;
+        }
+
+        /// <summary>
+        /// Clears the focus so later zoom changes stop re-aiming at it.
+        /// </summary>
+        public void ClearFocus()
+        {
+            m_HasFocus = false;
+        }
+
+        /// <summary>
+        /// Declares that a gesture owns the pan and zoom. Zoom changes while a gesture is active do not
+        /// re-aim at the focus.
+        /// </summary>
+        public void BeginGesture()
+        {
+            m_IsGestureActive = true;
+        }
+
+        /// <summary>
+        /// Ends the gesture. The focus is kept, so the next non-gesture zoom change re-aims at it.
+        /// </summary>
+        public void EndGesture()
+        {
+            m_IsGestureActive = false;
+        }
+
+        private bool HasUserCenter
+        {
+            get { return m_HasCenter; }
+        }
+
+        private float VerticalHalfRange
+        {
+            get
+            {
+                if (!m_HasFraming)
+                {
+                    return 0f;
+                }
+
+                var range = m_Framing.MapHalfDepth - m_Framing.VisibleHeight * 0.5f;
+                return range > 0f ? range : 0f;
+            }
+        }
+
+        private void Update()
+        {
+            Tick(Time.deltaTime);
+        }
+
+        /// <summary>
+        /// Advances the zoom easing by one step. Exposed so a caller or a test can drive the easing
+        /// without owning the frame loop; <see cref="Update"/> calls it with the frame delta.
+        /// </summary>
+        public void Tick(float deltaTime)
+        {
+            if (!m_HasFraming)
+            {
+                return;
+            }
+
+            if (Mathf.Approximately(m_Zoom, m_TargetZoom))
+            {
+                return;
+            }
+
+            m_Zoom = m_ZoomSpeed > 0f && deltaTime > 0f
+                ? Mathf.MoveTowards(m_Zoom, m_TargetZoom, m_ZoomSpeed * deltaTime)
+                : m_TargetZoom;
+
+            ApplyZoom();
+        }
+
+        /// <summary>
+        /// Rebuilds the framing for the current zoom, re-aims at the focus when it should, and writes
+        /// the camera. This is the single place a zoom change flows through.
+        /// </summary>
+        private void ApplyZoom()
+        {
+            if (!m_HasFraming)
+            {
+                return;
+            }
+
+            m_Zoom = ClampZoom(m_Zoom);
+            m_Framing = m_BaseFraming.WithZoom(m_Zoom);
+
+            if (m_Zoom <= MinZoom)
+            {
+                // The widest level is the "see everything" state, so it is always centered.
+                m_DesiredCenter = Vector2.zero;
+                m_HasCenter = false;
+            }
+            else if (m_HasFocus && !m_IsGestureActive)
+            {
+                m_DesiredCenter = ClampToRange(m_Focus);
+                m_HasCenter = true;
+            }
+
+            ClampCenter();
+            ApplyToCamera();
+        }
+
+        private void AlignCenterToFocus()
+        {
+            if (m_HasFocus)
+            {
+                m_DesiredCenter = ClampToRange(m_Focus);
+                m_HasCenter = true;
+            }
+        }
+
+        private void ApplyInitialFocus()
+        {
+            if (!m_HasInitialFocus || m_HasFocus)
+            {
+                return;
+            }
+
+            // The initial focus is already in map plane coordinates, so it only needs the plane's
+            // perpendicular axis filled in to become a local point.
+            var local = m_AppliedLayout.Plane == HexPlane.XY
+                ? new Vector3(m_InitialFocus.x, m_InitialFocus.y, m_AppliedLayout.Origin.z)
+                : new Vector3(m_InitialFocus.x, m_AppliedLayout.Origin.y, m_InitialFocus.y);
+
+            m_Focus = ToPlaneCoordinates(m_AppliedTransform.TransformPoint(local));
+            m_HasFocus = true;
+        }
+
+        private Vector2 ClampToRange(Vector2 offset)
+        {
+            var min = MinOffset;
+            var max = MaxOffset;
+            return new Vector2(
+                offset.x < min.x ? min.x : (offset.x > max.x ? max.x : offset.x),
+                offset.y < min.y ? min.y : (offset.y > max.y ? max.y : offset.y));
+        }
+
+        private void ClampCenter()
+        {
+            m_DesiredCenter = ClampToRange(m_DesiredCenter);
+        }
+
+        private float ClampZoom(float zoom)
+        {
+            if (!IsFinitePositive(zoom))
+            {
+                return MinZoom;
+            }
+
+            var max = MaxZoom;
+            return zoom < MinZoom ? MinZoom : (zoom > max ? max : zoom);
+        }
+
+        /// <summary>
+        /// Guards a zoom written before the framing exists. The upper limit is unknown until then, so
+        /// only the floor and non-finite values are handled here and the ceiling waits for the refresh.
+        /// </summary>
+        private static float NormalizeZoom(float zoom)
+        {
+            return IsFinitePositive(zoom) ? zoom : MinZoom;
+        }
+
+        private Vector2 ToPlaneCoordinates(Vector3 worldPoint)
+        {
+            var local = m_AppliedTransform.InverseTransformPoint(worldPoint);
+
+            // The plane axes are the layout's plane coordinate plus X, so XY uses Y and XZ uses Z.
+            return m_AppliedLayout.Plane == HexPlane.XY
+                ? new Vector2(local.x, local.y)
+                : new Vector2(local.x, local.z);
+        }
+
+        private static float NormalizeAxis(float value, float min, float max)
+        {
+            var range = max - min;
+            if (range <= 0f)
+            {
+                return 0.5f;
+            }
+
+            if (value < min)
+            {
+                value = min;
+            }
+            else if (value > max)
+            {
+                value = max;
+            }
+
+            return (value - min) / range;
         }
 
         private bool TryGetLayout(out HexLayout layout, out string error)
@@ -408,7 +912,8 @@ namespace HexMap.UnityRuntime
             // forward points from the plane towards the camera's look direction, so the camera has to
             // retreat along -forward to sit above the map.
             var position = m_AppliedTransform.TransformPoint(m_Framing.Origin)
-                + right * (m_Offset * m_AppliedScale)
+                + right * (m_DesiredCenter.x * m_AppliedScale)
+                + up * (m_DesiredCenter.y * m_AppliedScale)
                 - forward * (m_Height * m_AppliedScale);
 
             m_Camera.orthographicSize = m_Framing.OrthographicSize * m_AppliedScale;
@@ -431,6 +936,11 @@ namespace HexMap.UnityRuntime
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
         }
 
         private void Start()
