@@ -80,6 +80,15 @@ namespace HexMap.UnityRuntime
             set { m_RenderStrategy = value; }
         }
 
+        /// <summary>
+        /// The render layer the generated cell meshes are assigned to. Read-only here; the owner of the
+        /// scene decides it, and consumers such as the map camera only need to agree with it.
+        /// </summary>
+        public int CellLayer
+        {
+            get { return m_CellLayer; }
+        }
+
         public RuntimeHexMap Map
         {
             get { return m_Map; }

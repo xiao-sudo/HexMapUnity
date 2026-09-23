@@ -11,6 +11,7 @@ namespace HexMap.Core.Tests
         private const float ProductionOuterRadius = 1f;
         private const float ProductionSecondaryScale = 0.9f;
         private const float ProductionViewMargin = 1.1f;
+        private const float PortraitAspect = 9f / 16f;
         private const float LandscapeAspect = 16f / 9f;
 
         private static HexLayout Layout(HexOrientation orientation, float secondaryScale, HexPlane plane)
@@ -228,7 +229,7 @@ namespace HexMap.Core.Tests
         [Test]
         public void VisibleWidthIsAlwaysTheVisibleHeightTimesTheAspect()
         {
-            foreach (var aspect in new[] { 0.5f, 1f, LandscapeAspect, 3.5f })
+            foreach (var aspect in new[] { 0.5f, PortraitAspect, 1f, LandscapeAspect, 3.5f })
             {
                 foreach (HexOrientation orientation in Enum.GetValues(typeof(HexOrientation)))
                 {
@@ -244,6 +245,57 @@ namespace HexMap.Core.Tests
                         string.Format("{0} at aspect {1}", orientation, aspect));
                 }
             }
+        }
+
+        [Test]
+        public void PortraitViewportFramesEveryRowAndLeavesHalfTheMapWidthToPan()
+        {
+            var framing = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                PortraitAspect);
+
+            // The shipped target: a portrait phone shows every row and roughly half the columns.
+            Assert.That(framing.VisibleWidth, Is.EqualTo(19.49062f).Within(0.001f));
+            Assert.That(framing.VisibleHeight, Is.EqualTo(34.65f).Within(0.001f));
+            Assert.That(framing.VisibleHeight, Is.GreaterThanOrEqualTo(framing.MapDepth));
+            Assert.That(framing.VisibleWidth, Is.LessThan(framing.MapWidth));
+            Assert.That(framing.ShowsEveryColumn, Is.False);
+            Assert.That(framing.IsLockedToCenter, Is.False);
+            Assert.That(framing.MaxOffset, Is.EqualTo(10.1733f).Within(0.001f));
+        }
+
+        [Test]
+        public void LandscapeViewportLocksTheCameraBecauseTheFrameSwallowsTheMap()
+        {
+            // Same map, same margin: only the aspect changed. This is the documented reason the
+            // target is portrait, so a future reader does not mistake the lock for a defect.
+            var portrait = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                PortraitAspect);
+            var landscape = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                LandscapeAspect);
+            var fourThree = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                4f / 3f);
+
+            Assert.That(landscape.VisibleWidth, Is.EqualTo(61.6f).Within(0.01f));
+            Assert.That(landscape.ShowsEveryColumn, Is.True);
+            Assert.That(landscape.IsLockedToCenter, Is.True);
+            Assert.That(fourThree.ShowsEveryColumn, Is.True);
+            Assert.That(fourThree.IsLockedToCenter, Is.True);
+
+            Assert.That(portrait.VisibleHeight, Is.EqualTo(landscape.VisibleHeight).Within(0.00001f));
+            Assert.That(portrait.VisibleWidth, Is.LessThan(landscape.VisibleWidth));
+            Assert.That(portrait.MaxOffset, Is.GreaterThan(0f));
         }
 
         [Test]
