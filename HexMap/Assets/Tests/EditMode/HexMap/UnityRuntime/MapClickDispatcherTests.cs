@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using HexMap.Gvg;
 using HexMap.Runtime;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace HexMap.UnityRuntime.Tests
 {
@@ -141,6 +143,26 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
+        public void AClickOnAnUnregisteredChannelIsReportedOnceAndDropped()
+        {
+            GvgMapRuntimeController controller;
+            Camera camera;
+            RecordingHandler gameplay;
+            var dispatcher = CreateReadyDispatcher(out controller, out camera, out gameplay);
+            dispatcher.SetActiveChannel(TopDownChannel);
+
+            // The drop is deliberately logged, so the framework has to be told to expect it. Repeated
+            // clicks report once, which is the second half of what this test pins.
+            LogAssert.Expect(
+                LogType.Error,
+                new Regex(Regex.Escape(NoHandlerMessage(TopDownChannel))));
+
+            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
+            Assert.That(gameplay.CallCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public void NoChannelActiveDropsTheClickSilently()
         {
             GvgMapRuntimeController controller;
@@ -154,19 +176,6 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void AChannelWithoutAHandlerDropsTheClick()
-        {
-            GvgMapRuntimeController controller;
-            Camera camera;
-            RecordingHandler handler;
-            var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
-            dispatcher.SetActiveChannel(TopDownChannel);
-
-            Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
-            Assert.That(handler.CallCount, Is.EqualTo(0));
-        }
-
-        [Test]
         public void WithoutACameraTheClickIsDropped()
         {
             GvgMapRuntimeController controller;
@@ -174,6 +183,9 @@ namespace HexMap.UnityRuntime.Tests
             RecordingHandler handler;
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
             dispatcher.SetActiveCamera(null);
+
+            // A missing camera is reported rather than silently dropping the click.
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NoCameraMessage())));
 
             Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
@@ -356,6 +368,14 @@ namespace HexMap.UnityRuntime.Tests
             m_HandlerObject = null;
 
             dispatcher.SetActiveChannel(TopDownChannel);
+
+            // Two reports are expected here: destroying the handler without unregistering it leaves the
+            // channel occupied by a dead object, and the click also cannot be delivered. Both are the
+            // loud-instead-of-silent behaviour this path is supposed to have.
+            LogAssert.Expect(
+                LogType.Error,
+                new Regex(Regex.Escape(DeadHandlerMessage(TopDownChannel))));
+
             Assert.DoesNotThrow(() => dispatcher.OnMapClicked(ScreenCentre(camera)));
             Assert.That(dispatcher.OnMapClicked(ScreenCentre(camera)), Is.False);
         }
@@ -402,6 +422,27 @@ namespace HexMap.UnityRuntime.Tests
         private static Vector2 ScreenCentre(Camera camera)
         {
             return camera.WorldToScreenPoint(Vector3.zero);
+        }
+
+        /// <summary>
+        /// Mirrors the messages the dispatcher logs, so an expectation stays in step with the source
+        /// instead of drifting into a substring that happens to still match.
+        /// </summary>
+        private static string NoHandlerMessage(int channel)
+        {
+            return "MapClickDispatcher has no handler registered for channel " + channel
+                + "; the click was dropped.";
+        }
+
+        private static string DeadHandlerMessage(int channel)
+        {
+            return "MapClickDispatcher still has a destroyed handler for channel " + channel
+                + "; unregister it in OnDisable.";
+        }
+
+        private static string NoCameraMessage()
+        {
+            return "MapClickDispatcher has no active camera; the mode owner must call SetActiveCamera before clicks arrive.";
         }
 
         private sealed class RecordingHandler : IMapClickHandler

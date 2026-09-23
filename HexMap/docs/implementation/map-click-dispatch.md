@@ -59,6 +59,14 @@ IMapClickHandler.OnMapClicked(in MapClickContext) → bool   ← 注册进来的
 | **`LastContext` 保留最近一次** | 不用开日志就能问"刚才那下解析成了什么"。注意"在拾取之前就被丢弃的点击"**不会**留下上下文，避免读到过期结果 |
 | **UI 防穿透不在这里** | 那是外围的职责：它知道指针 id，也知道 `EventSystem`。分派器只认屏幕坐标 |
 
+### 被丢弃的点击会报错，且每个问题只报一次
+
+`no-controller` / `no-camera` / `no-handler` 三条路径都调 `Debug.LogError`（**错误级**，不是警告——这三条都意味着接线漏了）。`MapClickChannels.None` 是例外：它**静默丢弃**，因为这个通道的语义就是"这个模式不响应点击"。
+
+去重键让同一个问题**只报一次**：这个函数每次点击都会跑，重复报会把控制台埋掉并拖慢帧率。
+
+**对测试的影响**：Unity Test Framework 会把"未被声明的日志"当作失败。所以任何**故意**走到这几条路径的用例必须在触发日志**之前**声明 `LogAssert.Expect(LogType.Error, new Regex(...))`，且模式要转义（`Regex.Escape`）。测试里为此建了 `NoHandlerMessage` / `DeadHandlerMessage` / `NoCameraMessage` 三个助手，让预期文本跟着源码走，而不是漂成一个"碰巧还能匹配"的子串。
+
 ### 时序上与地图初始化的关系
 
 `GvgMapRuntimeController.Awake` → `BuildMapFromView()` → `HexMapView.Build()` 建好**地图**；但 **Plot 注册表要等 `TryInitialize`**（通常是 `Facade.Start`）。所以：
