@@ -354,6 +354,17 @@ namespace HexMap.UnityRuntime
         /// </summary>
         public bool TryRefresh(out string error)
         {
+            // Panning and zooming call through here, and the base framing only changes when the map or the
+            // viewport configuration changes. When it cannot have changed, keep the snapshot and just
+            // re-apply, which avoids rebuilding layouts and envelope maths per frame.
+            if (m_HasFraming && IsCameraConfigurationUnchanged())
+            {
+                RefreshFramingFromZoom();
+                ApplyToCamera();
+                error = string.Empty;
+                return true;
+            }
+
             if (m_HexMapView == null)
             {
                 error = "A HexMapView reference is required.";
@@ -505,7 +516,6 @@ namespace HexMap.UnityRuntime
                 error = "Refresh the camera before setting an offset.";
                 return false;
             }
-
             if (!IsFinite(offset.x))
             {
                 error = "Offset X must be finite.";
@@ -711,6 +721,50 @@ namespace HexMap.UnityRuntime
         /// Rebuilds the framing for the current zoom, re-aims at the focus when it should, and writes
         /// the camera. This is the single place a zoom change flows through.
         /// </summary>
+        /// <summary>
+        /// True when nothing the base framing depends on has changed since the last refresh, so the base
+        /// framing can be reused. Deliberately lenient: a false positive only costs one extra rebuild.
+        /// </summary>
+        private bool IsCameraConfigurationUnchanged()
+        {
+            if (m_AppliedTransform != m_HexMapView.transform)
+            {
+                return false;
+            }
+
+            if (!m_HexMapView.HasMap || m_HexMapView.Radius <= 0)
+            {
+                return false;
+            }
+
+            if (m_Camera == null || !m_Camera.orthographic)
+            {
+                return false;
+            }
+
+            return LayoutEquals(m_AppliedLayout, m_HexMapView.Layout);
+        }
+
+        private static bool LayoutEquals(HexLayout left, HexLayout right)
+        {
+            return left.Orientation == right.Orientation
+                && left.Plane == right.Plane
+                && left.OuterRadius == right.OuterRadius
+                && left.SecondaryScale == right.SecondaryScale
+                && left.Origin == right.Origin;
+        }
+
+        /// <summary>
+        /// Rebuilds the zoomed framing from the retained base framing and re-applies the centering rules.
+        /// </summary>
+        private void RefreshFramingFromZoom()
+        {
+            m_Zoom = ClampZoom(m_Zoom);
+            m_Framing = m_BaseFraming.WithZoom(m_Zoom);
+            AlignCenterToFocus();
+            ClampCenter();
+        }
+
         private void ApplyZoom()
         {
             if (!m_HasFraming)
