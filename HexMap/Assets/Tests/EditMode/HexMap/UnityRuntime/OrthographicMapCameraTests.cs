@@ -114,7 +114,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(controller.IsLockedToCenter, Is.False);
             Assert.That(framing.MaxOffset, Is.EqualTo(10.1733f).Within(0.001f));
 
-            AssertEveryRowIsInsideTheFrustum(camera, framing);
+            AssertEveryRowIsInsideTheFrustum(mapView, camera, framing);
         }
 
         [Test]
@@ -211,7 +211,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(flatFraming.MapHalfDepth, Is.EqualTo(17.9267255f).Within(0.001f));
             Assert.That(flatFraming.MapHalfWidth, Is.EqualTo(14.85f + 1f).Within(0.00001f));
             Assert.That(flatController.IsLockedToCenter, Is.False);
-            AssertEveryRowIsInsideTheFrustum(flatCamera, flatFraming);
+            AssertEveryRowIsInsideTheFrustum(flat, flatCamera, flatFraming);
 
             var pointy = CreateMap(radius: 11, secondaryScale: 0.9f, orientation: HexOrientation.Pointy);
             var pointyCamera = CreateCamera(PortraitAspect);
@@ -266,7 +266,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(camera.orthographicSize, Is.EqualTo(sizeInPortrait).Within(0.00001f));
             Assert.That(controller.Offset, Is.EqualTo(0f));
             Assert.That(camera.transform.position, Is.EqualTo(new Vector3(0f, 30f, 0f)));
-            AssertEveryRowIsInsideTheFrustum(camera, landscape);
+            AssertEveryRowIsInsideTheFrustum(mapView, camera, landscape);
         }
 
         [Test]
@@ -418,15 +418,53 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(error, Does.Contain("HexMapView"));
         }
 
-        private static void AssertEveryRowIsInsideTheFrustum(Camera camera, OrthographicMapFraming framing)
+        private static void AssertEveryRowIsInsideTheFrustum(
+            HexMapView mapView,
+            Camera camera,
+            OrthographicMapFraming framing)
         {
-            var position = camera.transform.position;
-            var forward = camera.transform.forward;
+            var mapTransform = mapView.transform;
 
+            // Screen up is the map's local +Z turned into world space, which still points straight up
+            // for a flat XZ map but is not simply world +Z in general.
+            var worldUp = mapTransform.TransformDirection(Vector3.forward).normalized;
+
+            // TEMPORARY DIAGNOSTIC: remove once the flat case is understood.
+            UnityEngine.Debug.Log(string.Format(
+                "[orthocam-diag] orientation={0} plane={1} mapPos={2} mapLossy={3} worldUp={4} "
+                + "camPos={5} camRot={6} camFwd={7} camUp={8} dotFwdUp={9} dotFwdDown={10} "
+                + "size={11} halfDepth={12} origin={13}",
+                mapView.Orientation,
+                mapView.Layout.Plane,
+                mapTransform.position,
+                mapTransform.lossyScale,
+                worldUp,
+                camera.transform.position,
+                camera.transform.rotation,
+                camera.transform.forward,
+                camera.transform.up,
+                Vector3.Dot(camera.transform.forward, worldUp),
+                Vector3.Dot(camera.transform.forward, DownwardForward),
+                camera.orthographicSize,
+                framing.MapHalfDepth,
+                framing.Origin));
+
+            // The camera must be on the plane's normal side, looking straight back at the plane.
+            // This is the assertion that catches a camera placed underneath the map.
+            Assert.That(
+                Vector3.Dot(camera.transform.forward, worldUp),
+                Is.EqualTo(0f).Within(0.00001f),
+                "the camera must look perpendicular to the map plane");
+            Assert.That(
+                camera.transform.position.y,
+                Is.GreaterThan(mapTransform.TransformPoint(framing.Origin).y),
+                "the camera must sit above the map plane");
+
+            var mapOrigin = mapTransform.TransformPoint(framing.Origin);
             foreach (var depth in new[] { -framing.MapHalfDepth, framing.MapHalfDepth })
             {
-                var point = position + ScreenUp * depth;
-                var distance = Vector3.Dot(point - position, forward);
+                var point = mapOrigin + worldUp * depth;
+                var distance = Vector3.Dot(point - camera.transform.position, camera.transform.forward);
 
                 Assert.That(
                     distance,
