@@ -6,7 +6,9 @@
         "HexMap.Gvg.Authoring",
         "HexMap.Gvg",
         "HexMap.Runtime",
-        "HexMap.Core"
+        "HexMap.Core",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

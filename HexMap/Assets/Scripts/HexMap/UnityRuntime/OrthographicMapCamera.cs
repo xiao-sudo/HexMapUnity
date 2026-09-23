@@ -230,6 +230,21 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
+        /// Restores a zoom level immediately, without easing towards it. Use this to put the camera back
+        /// the way a caller found it; <see cref="TargetZoom"/> would animate across the difference instead.
+        /// </summary>
+        public void SetZoomImmediate(float zoom)
+        {
+            m_Zoom = m_HasFraming ? ClampZoom(zoom) : NormalizeZoom(zoom);
+            m_TargetZoom = m_Zoom;
+
+            if (m_HasFraming)
+            {
+                ApplyZoom();
+            }
+        }
+
+        /// <summary>
         /// The highest zoom level allowed, derived from <see cref="MinVisibleWidthRatio"/>.
         /// </summary>
         public float MaxZoom
