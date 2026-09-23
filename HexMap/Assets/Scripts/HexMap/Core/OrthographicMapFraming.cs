@@ -33,6 +33,11 @@ namespace HexMap.Core
         public const float MinimumViewMargin = 1f;
 
         /// <summary>
+        /// The zoom level at which the framing is created: the map's whole depth fits the frame.
+        /// </summary>
+        public const float DefaultZoom = 1f;
+
+        /// <summary>
         /// The map's outer envelope half extent along the local X axis: the axis the camera pans on.
         /// </summary>
         public float MapHalfWidth { get; }
@@ -41,6 +46,32 @@ namespace HexMap.Core
         /// The map's outer envelope half extent along the screen's vertical axis.
         /// </summary>
         public float MapHalfDepth { get; }
+
+        /// <summary>
+        /// How much of the map the frame shows. 1 is the whole depth leaving the view margin free,
+        /// and larger values zoom in. Zoom is the only input besides the aspect ratio that changes
+        /// the visible size; the map envelope never depends on it.
+        /// </summary>
+        public float Zoom { get; }
+
+        /// <summary>
+        /// The empty space this framing leaves around the map's depth. Kept so a zoom change can
+        /// recompute the size without the caller repeating its inputs.
+        /// </summary>
+        public float ViewMargin { get; }
+
+        /// <summary>
+        /// The viewport aspect ratio this framing was built for. Kept so a zoom change can recompute
+        /// the visible width. The aspect ratio is never configurable through this type.
+        /// </summary>
+        public float Aspect { get; }
+
+        /// <summary>
+        /// The visible half height at zoom 1, which is the map half depth times the view margin.
+        /// Every zoom is measured against this value rather than against the current one, so
+        /// applying a zoom repeatedly cannot accumulate.
+        /// </summary>
+        public float BaseOrthographicSize { get; }
 
         /// <summary>
         /// The map's outer envelope center in layout local space (the center lattice is centered
@@ -129,16 +160,62 @@ namespace HexMap.Core
             float mapHalfWidth,
             float mapHalfDepth,
             Vector3 origin,
-            float orthographicSize,
-            float visibleHeight,
-            float visibleWidth)
+            float zoom,
+            float viewMargin,
+            float aspect,
+            float baseOrthographicSize)
         {
             MapHalfWidth = mapHalfWidth;
             MapHalfDepth = mapHalfDepth;
             Origin = origin;
-            OrthographicSize = orthographicSize;
-            VisibleHeight = visibleHeight;
-            VisibleWidth = visibleWidth;
+            Zoom = zoom;
+            ViewMargin = viewMargin;
+            Aspect = aspect;
+            BaseOrthographicSize = baseOrthographicSize;
+            OrthographicSize = baseOrthographicSize / zoom;
+            VisibleHeight = OrthographicSize * 2f;
+            VisibleWidth = VisibleHeight * aspect;
+        }
+
+        /// <summary>
+        /// Returns the same map seen at another zoom level. The envelope, origin, view margin and
+        /// aspect ratio are untouched; only the visible size and everything derived from it change.
+        /// Zoom 1 reproduces this framing exactly, and zoom is absolute rather than a factor, so
+        /// applying it twice cannot accumulate.
+        /// </summary>
+        public OrthographicMapFraming WithZoom(float zoom)
+        {
+            if (!IsFinitePositive(zoom))
+            {
+                throw new ArgumentOutOfRangeException(nameof(zoom), zoom, "Zoom must be positive and finite.");
+            }
+
+            return new OrthographicMapFraming(
+                MapHalfWidth,
+                MapHalfDepth,
+                Origin,
+                zoom,
+                ViewMargin,
+                Aspect,
+                BaseOrthographicSize);
+        }
+
+        /// <summary>
+        /// Returns the same map seen at another zoom level, reporting an invalid zoom instead of throwing.
+        /// </summary>
+        public bool TryWithZoom(float zoom, out OrthographicMapFraming framing, out string error)
+        {
+            framing = this;
+
+            if (!IsFinitePositive(zoom))
+            {
+                error = "Zoom must be positive and finite.";
+                return false;
+            }
+
+            framing = WithZoom(zoom);
+            error = string.Empty;
+            return true;
         }
 
         /// <summary>
@@ -148,11 +225,12 @@ namespace HexMap.Core
             HexLayout layout,
             int mapRadius,
             float viewMargin,
-            float aspect)
+            float aspect,
+            float zoom = DefaultZoom)
         {
             OrthographicMapFraming framing;
             string error;
-            if (!TryCreate(layout, mapRadius, viewMargin, aspect, out framing, out error))
+            if (!TryCreate(layout, mapRadius, viewMargin, aspect, zoom, out framing, out error))
             {
                 throw new ArgumentException(error, nameof(layout));
             }
@@ -161,13 +239,28 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Creates a framing snapshot, reporting invalid inputs instead of throwing.
+        /// Creates a framing snapshot at zoom 1, which is the level where the whole map depth fits.
         /// </summary>
         public static bool TryCreate(
             HexLayout layout,
             int mapRadius,
             float viewMargin,
             float aspect,
+            out OrthographicMapFraming framing,
+            out string error)
+        {
+            return TryCreate(layout, mapRadius, viewMargin, aspect, DefaultZoom, out framing, out error);
+        }
+
+        /// <summary>
+        /// Creates a framing snapshot at a zoom level, reporting invalid inputs instead of throwing.
+        /// </summary>
+        public static bool TryCreate(
+            HexLayout layout,
+            int mapRadius,
+            float viewMargin,
+            float aspect,
+            float zoom,
             out OrthographicMapFraming framing,
             out string error)
         {
@@ -210,6 +303,12 @@ namespace HexMap.Core
                 return false;
             }
 
+            if (!IsFinitePositive(zoom))
+            {
+                error = "Zoom must be positive and finite.";
+                return false;
+            }
+
             var outerRadius = layout.OuterRadius;
             var secondaryScale = layout.SecondaryScale;
             var radius = mapRadius;
@@ -248,19 +347,19 @@ namespace HexMap.Core
             var mapHalfWidth = centerAxisExtent + cellAxisExtent;
             var mapHalfDepth = centerSecondaryExtent + cellSecondaryExtent;
 
-            // Camera.orthographicSize is the half height, so the visible height is twice it and
-            // "every row inside the frame" means size >= mapHalfDepth.
-            var orthographicSize = mapHalfDepth * viewMargin;
-            var visibleHeight = orthographicSize * 2f;
-            var visibleWidth = visibleHeight * aspect;
+            // Camera.orthographicSize is the half height, so "every row inside the frame" means
+            // size >= mapHalfDepth at zoom 1. The size is derived from this base and the zoom in the
+            // constructor, so a zoom change never has to know about the margin again.
+            var baseOrthographicSize = mapHalfDepth * viewMargin;
 
             framing = new OrthographicMapFraming(
                 mapHalfWidth,
                 mapHalfDepth,
                 layout.Origin,
-                orthographicSize,
-                visibleHeight,
-                visibleWidth);
+                zoom,
+                viewMargin,
+                aspect,
+                baseOrthographicSize);
             error = string.Empty;
             return true;
         }

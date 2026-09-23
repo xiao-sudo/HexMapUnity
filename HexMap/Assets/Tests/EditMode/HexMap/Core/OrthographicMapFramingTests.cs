@@ -241,7 +241,7 @@ namespace HexMap.Core.Tests
 
                     Assert.That(
                         framing.VisibleWidth,
-                        Is.EqualTo(framing.VisibleHeight * aspect).Within(0.00001f),
+                        Is.EqualTo(framing.VisibleHeight * framing.Aspect).Within(0.00001f),
                         string.Format("{0} at aspect {1}", orientation, aspect));
                 }
             }
@@ -404,6 +404,185 @@ namespace HexMap.Core.Tests
             Assert.That(framing.NormalizeOffset(framing.MaxOffset), Is.EqualTo(1f).Within(0.00001f));
         }
 
+        private static void AssertFramingEquals(OrthographicMapFraming expected, OrthographicMapFraming actual)
+        {
+            Assert.That(actual.MapHalfWidth, Is.EqualTo(expected.MapHalfWidth).Within(0.00001f));
+            Assert.That(actual.MapHalfDepth, Is.EqualTo(expected.MapHalfDepth).Within(0.00001f));
+            Assert.That(actual.Origin, Is.EqualTo(expected.Origin));
+            Assert.That(actual.Zoom, Is.EqualTo(expected.Zoom).Within(0.00001f));
+            Assert.That(actual.ViewMargin, Is.EqualTo(expected.ViewMargin).Within(0.00001f));
+            Assert.That(actual.Aspect, Is.EqualTo(expected.Aspect).Within(0.00001f));
+            Assert.That(actual.OrthographicSize, Is.EqualTo(expected.OrthographicSize).Within(0.00001f));
+            Assert.That(actual.VisibleHeight, Is.EqualTo(expected.VisibleHeight).Within(0.00001f));
+            Assert.That(actual.VisibleWidth, Is.EqualTo(expected.VisibleWidth).Within(0.00001f));
+            Assert.That(actual.MinOffset, Is.EqualTo(expected.MinOffset).Within(0.00001f));
+            Assert.That(actual.MaxOffset, Is.EqualTo(expected.MaxOffset).Within(0.00001f));
+        }
+
+        [Test]
+        public void ZoomOneReproducesTheFramingExactly()
+        {
+            var framing = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                LandscapeAspect);
+
+            Assert.That(framing.Zoom, Is.EqualTo(1f).Within(0.00001f));
+            AssertFramingEquals(framing, framing.WithZoom(1f));
+            AssertFramingEquals(framing, framing.WithZoom(1.0000001f));
+        }
+
+        [Test]
+        public void ZoomingInHalvesTheVisibleSizeAndWidensThePanningRange()
+        {
+            var framing = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                LandscapeAspect);
+            var zoomed = framing.WithZoom(2f);
+
+            Assert.That(zoomed.Zoom, Is.EqualTo(2f).Within(0.00001f));
+            Assert.That(zoomed.OrthographicSize, Is.EqualTo(framing.OrthographicSize * 0.5f).Within(0.00001f));
+            Assert.That(zoomed.VisibleHeight, Is.EqualTo(framing.VisibleHeight * 0.5f).Within(0.00001f));
+            Assert.That(zoomed.VisibleWidth, Is.EqualTo(framing.VisibleWidth * 0.5f).Within(0.00001f));
+
+            // The envelope never depends on zoom.
+            Assert.That(zoomed.MapHalfWidth, Is.EqualTo(framing.MapHalfWidth).Within(0.00001f));
+            Assert.That(zoomed.MapHalfDepth, Is.EqualTo(framing.MapHalfDepth).Within(0.00001f));
+            Assert.That(zoomed.MapWidth, Is.EqualTo(framing.MapWidth).Within(0.00001f));
+            Assert.That(zoomed.MapDepth, Is.EqualTo(framing.MapDepth).Within(0.00001f));
+            Assert.That(zoomed.Origin, Is.EqualTo(framing.Origin));
+            Assert.That(zoomed.ViewMargin, Is.EqualTo(framing.ViewMargin).Within(0.00001f));
+            Assert.That(zoomed.Aspect, Is.EqualTo(framing.Aspect).Within(0.00001f));
+
+            Assert.That(zoomed.MaxOffset, Is.GreaterThan(framing.MaxOffset));
+        }
+
+        [Test]
+        public void ZoomingInPastTheViewMarginDropsRowsFromTheFrame()
+        {
+            var framing = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                PortraitAspect);
+
+            // The hinge of the zoom design: "every row visible" belongs to zoom 1, and zooming in is
+            // allowed to break it. At zoom 1 the frame is already taller than the map by the margin,
+            // so the exact zoom where rows start being dropped is the margin itself, not 1.
+            Assert.That(framing.VisibleHeight, Is.EqualTo(framing.MapDepth * framing.ViewMargin).Within(0.0001f));
+            Assert.That(framing.WithZoom(1f).VisibleHeight, Is.GreaterThanOrEqualTo(framing.MapDepth));
+            Assert.That(framing.WithZoom(framing.ViewMargin).VisibleHeight, Is.EqualTo(framing.MapDepth).Within(0.0001f));
+            Assert.That(framing.WithZoom(framing.ViewMargin).VisibleHeight, Is.EqualTo(framing.MapDepth).Within(0.0001f));
+            Assert.That(framing.WithZoom(2f).VisibleHeight, Is.LessThan(framing.MapDepth));
+
+            // Widening the frame is not part of the shipped range but must stay coherent.
+            Assert.That(framing.WithZoom(0.5f).VisibleHeight, Is.GreaterThanOrEqualTo(framing.MapDepth));
+        }
+
+        [Test]
+        public void ZoomingInCreatesVerticalPanningRoomThatZoomOneDoesNotHave()
+        {
+            var framing = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                PortraitAspect);
+
+            // At zoom 1 the vertical range is exactly zero, which is why panning starts out horizontal.
+            Assert.That(framing.VisibleHeight, Is.EqualTo(framing.MapDepth).Within(0.0001f));
+            Assert.That(framing.VisibleHeight, Is.GreaterThanOrEqualTo(framing.MapDepth - 0.0001f));
+
+            var zoomed = framing.WithZoom(1.5f);
+            Assert.That(zoomed.VisibleHeight, Is.LessThan(zoomed.MapDepth));
+        }
+
+        [Test]
+        public void ZoomIsAbsoluteSoApplyingItAgainChangesNothing()
+        {
+            var framing = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                PortraitAspect);
+
+            // Zoom is an absolute level, not a factor. Re-applying it must be a no-op; the first
+            // draft multiplied the current size, so zoom 2 twice produced zoom 4.
+            AssertFramingEquals(framing.WithZoom(2f), framing.WithZoom(2f).WithZoom(2f));
+            AssertFramingEquals(framing.WithZoom(4f), framing.WithZoom(4f).WithZoom(4f));
+            Assert.That(framing.WithZoom(2f).WithZoom(2f).Zoom, Is.EqualTo(2f).Within(0.00001f));
+
+            // Zooming out from the base doubles the visible size rather than returning to it.
+            Assert.That(
+                framing.WithZoom(0.5f).OrthographicSize,
+                Is.EqualTo(framing.OrthographicSize * 2f).Within(0.00001f));
+
+            // Every level must agree with creating the framing at that level directly.
+            Assert.That(
+                framing.WithZoom(3f).OrthographicSize,
+                Is.EqualTo(OrthographicMapFraming.Create(
+                    ProductionLayout(HexOrientation.Pointy),
+                    ProductionRadius,
+                    ProductionViewMargin,
+                    PortraitAspect,
+                    3f).OrthographicSize).Within(0.00001f));
+        }
+
+        [Test]
+        public void CreatingAtAZoomKeepsTheEnvelopeAndScalesTheVisibleSize()
+        {
+            var atOne = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                PortraitAspect);
+            var atTwo = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                PortraitAspect,
+                2f);
+
+            Assert.That(atTwo.Zoom, Is.EqualTo(2f).Within(0.00001f));
+            Assert.That(atTwo.OrthographicSize, Is.EqualTo(atOne.OrthographicSize * 0.5f).Within(0.00001f));
+            Assert.That(atTwo.MapHalfDepth, Is.EqualTo(atOne.MapHalfDepth).Within(0.00001f));
+        }
+
+        [Test]
+        public void NonPositiveOrNonFiniteZoomIsRejected()
+        {
+            var framing = OrthographicMapFraming.Create(
+                ProductionLayout(HexOrientation.Pointy),
+                ProductionRadius,
+                ProductionViewMargin,
+                PortraitAspect);
+
+            OrthographicMapFraming rejected;
+            string error;
+
+            foreach (var zoom in new[] { 0f, -1f, float.NaN, float.PositiveInfinity })
+            {
+                Assert.That(framing.TryWithZoom(zoom, out rejected, out error), Is.False, "zoom " + zoom);
+                Assert.That(error, Is.Not.Empty);
+                Assert.Throws<ArgumentOutOfRangeException>(() => framing.WithZoom(zoom), "WithZoom " + zoom);
+
+                Assert.That(
+                    OrthographicMapFraming.TryCreate(
+                        ProductionLayout(HexOrientation.Pointy),
+                        ProductionRadius,
+                        ProductionViewMargin,
+                        PortraitAspect,
+                        zoom,
+                        out rejected,
+                        out error),
+                    Is.False,
+                    "TryCreate zoom " + zoom);
+                Assert.That(error, Is.Not.Empty);
+            }
+        }
+
         [Test]
         public void NonPositiveRadiusIsRejected()
         {
@@ -503,6 +682,18 @@ namespace HexMap.Core.Tests
                     0,
                     ProductionViewMargin,
                     LandscapeAspect));
+        }
+
+        [Test]
+        public void CreateThrowsOnANonPositiveZoom()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => OrthographicMapFraming.Create(
+                    ProductionLayout(HexOrientation.Pointy),
+                    ProductionRadius,
+                    ProductionViewMargin,
+                    LandscapeAspect,
+                    0f));
         }
     }
 }
