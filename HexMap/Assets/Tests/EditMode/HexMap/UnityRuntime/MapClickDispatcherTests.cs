@@ -206,6 +206,10 @@ namespace HexMap.UnityRuntime.Tests
             var handler = new RecordingHandler();
             Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
 
+            // A dispatcher with nothing to pick against is reported, not silently dropped. This is
+            // missing scene wiring, so it has to be visible in the console.
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NoControllerMessage())));
+
             Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
         }
@@ -306,6 +310,12 @@ namespace HexMap.UnityRuntime.Tests
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out first);
             var second = new RecordingHandler();
 
+            // Two handlers on one channel is a wiring mistake: the refusal is reported rather than
+            // quietly ignored, which is what makes it findable when it happens at runtime.
+            LogAssert.Expect(
+                LogType.Error,
+                new Regex(Regex.Escape(DuplicateHandlerMessage(GameplayChannel))));
+
             Assert.That(dispatcher.Register(GameplayChannel, second), Is.False);
             Assert.That(dispatcher.HandlerCount, Is.EqualTo(1));
 
@@ -319,6 +329,11 @@ namespace HexMap.UnityRuntime.Tests
         {
             var camera = CreateCamera();
             var dispatcher = CreateDispatcher(null, camera, MapClickChannels.None);
+
+            // Both refusals are reported, in the order the two calls make them. The declaration order
+            // here has to follow the call order, because each message is a distinct report.
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NoneChannelMessage())));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NullHandlerMessage())));
 
             Assert.That(dispatcher.Register(MapClickChannels.None, new RecordingHandler()), Is.False);
             Assert.That(dispatcher.Register(GameplayChannel, null), Is.False);
@@ -381,9 +396,9 @@ namespace HexMap.UnityRuntime.Tests
 
             dispatcher.SetActiveChannel(TopDownChannel);
 
-            // Two reports are expected here: destroying the handler without unregistering it leaves the
-            // channel occupied by a dead object, and the click also cannot be delivered. Both are the
-            // loud-instead-of-silent behaviour this path is supposed to have.
+            // One report is expected for the two clicks below, not two: the first reports the dead
+            // handler and the second is deduplicated, because repeating the same complaint on every
+            // click would bury the console. Both clicks still fail, and neither throws.
             LogAssert.Expect(
                 LogType.Error,
                 new Regex(Regex.Escape(DeadHandlerMessage(TopDownChannel))));
@@ -460,6 +475,27 @@ namespace HexMap.UnityRuntime.Tests
         private static string NoCameraMessage()
         {
             return "MapClickDispatcher has no active camera; the mode owner must call SetActiveCamera before clicks arrive.";
+        }
+
+        private static string NoControllerMessage()
+        {
+            return "MapClickDispatcher has no GvgMapRuntimeController, so clicks cannot be resolved.";
+        }
+
+        private static string DuplicateHandlerMessage(int channel)
+        {
+            return "MapClickDispatcher already has a handler for channel " + channel
+                + "; unregister the previous one first. The new handler was ignored.";
+        }
+
+        private static string NoneChannelMessage()
+        {
+            return "MapClickDispatcher.Register was given the None channel; pick an application channel.";
+        }
+
+        private static string NullHandlerMessage()
+        {
+            return "MapClickDispatcher.Register was given a null handler.";
         }
 
         private sealed class RecordingHandler : IMapClickHandler
