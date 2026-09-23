@@ -429,32 +429,16 @@ namespace HexMap.UnityRuntime.Tests
             // for a flat XZ map but is not simply world +Z in general.
             var worldUp = mapTransform.TransformDirection(Vector3.forward).normalized;
 
-            // TEMPORARY DIAGNOSTIC: remove once the flat case is understood.
-            UnityEngine.Debug.Log(string.Format(
-                "[orthocam-diag] orientation={0} plane={1} mapPos={2} mapLossy={3} worldUp={4} "
-                + "camPos={5} camRot={6} camFwd={7} camUp={8} dotFwdUp={9} dotFwdDown={10} "
-                + "size={11} halfDepth={12} origin={13}",
-                mapView.Orientation,
-                mapView.Layout.Plane,
-                mapTransform.position,
-                mapTransform.lossyScale,
-                worldUp,
-                camera.transform.position,
-                camera.transform.rotation,
-                camera.transform.forward,
-                camera.transform.up,
-                Vector3.Dot(camera.transform.forward, worldUp),
-                Vector3.Dot(camera.transform.forward, DownwardForward),
-                camera.orthographicSize,
-                framing.MapHalfDepth,
-                framing.Origin));
-
-            // The camera must be on the plane's normal side, looking straight back at the plane.
-            // This is the assertion that catches a camera placed underneath the map.
+            // Asserting only that forward is perpendicular would accept a camera that is upside down,
+            // so pin the up axis to the map's own up and pin forward to straight down.
             Assert.That(
-                Vector3.Dot(camera.transform.forward, worldUp),
-                Is.EqualTo(0f).Within(0.00001f),
-                "the camera must look perpendicular to the map plane");
+                Vector3.Dot(camera.transform.up, worldUp),
+                Is.EqualTo(1f).Within(0.00001f),
+                "the camera's up must follow the map's own up axis");
+            Assert.That(
+                Vector3.Dot(camera.transform.forward, DownwardForward),
+                Is.EqualTo(1f).Within(0.00001f),
+                "the camera must look straight down at the map");
             Assert.That(
                 camera.transform.position.y,
                 Is.GreaterThan(mapTransform.TransformPoint(framing.Origin).y),
