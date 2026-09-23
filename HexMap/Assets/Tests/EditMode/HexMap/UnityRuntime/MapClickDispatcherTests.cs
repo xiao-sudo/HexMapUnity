@@ -31,7 +31,7 @@ namespace HexMap.UnityRuntime.Tests
             Destroy(ref m_MapObject);
         }
 
-        private static void Destroy(ref GameObject target)
+        private void Destroy(ref GameObject target)
         {
             if (target != null)
             {
@@ -41,7 +41,7 @@ namespace HexMap.UnityRuntime.Tests
             target = null;
         }
 
-        private static Camera CreateCamera(Quaternion? rotation = null)
+        private Camera CreateCamera(Quaternion? rotation = null)
         {
             m_CameraObject = new GameObject("Map Click Camera");
             var camera = m_CameraObject.AddComponent<Camera>();
@@ -52,7 +52,7 @@ namespace HexMap.UnityRuntime.Tests
             return camera;
         }
 
-        private static GvgMapRuntimeController CreateController(int radius)
+        private GvgMapRuntimeController CreateController(int radius)
         {
             m_MapObject = new GameObject("GVG Map Runtime Controller");
             m_MapObject.SetActive(false);
@@ -64,7 +64,7 @@ namespace HexMap.UnityRuntime.Tests
             return controller;
         }
 
-        private static MapClickDispatcher CreateDispatcher(GvgMapRuntimeController controller, Camera camera, int channel)
+        private MapClickDispatcher CreateDispatcher(GvgMapRuntimeController controller, Camera camera, int channel)
         {
             m_DispatcherObject = new GameObject("Map Click Dispatcher");
             m_DispatcherObject.SetActive(false);
@@ -90,7 +90,7 @@ namespace HexMap.UnityRuntime.Tests
             return rows;
         }
 
-        private static MapClickDispatcher CreateReadyDispatcher(
+        private MapClickDispatcher CreateReadyDispatcher(
             out GvgMapRuntimeController controller,
             out Camera camera,
             out RecordingHandler handler)
