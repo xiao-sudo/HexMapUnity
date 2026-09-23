@@ -376,18 +376,30 @@ namespace HexMap.UnityRuntime.Tests
             controller.LayerSettings = settings;
 
             string error;
+            var cellLayer = mapView.CellLayer;
+
+            // The default mask is everything, which must cover the map.
             Assert.That(settings.TryValidate(out error), Is.True, error);
 
-            settings.CullingMask = 1 << 9;
-            Assert.That(settings.TryValidate(out error), Is.True, error);
-            Assert.That(controller.TryRefresh(out error), Is.True, error);
-            Assert.That(camera.cullingMask, Is.EqualTo(1 << 9));
+            // A mask that omits the cell layer must stop the refresh, not silently blank the map.
+            var blindLayer = cellLayer == 0 ? 1 : 0;
+            settings.CullingMask = 1 << blindLayer;
+            Assert.That(settings.TryValidate(out error), Is.False);
+            Assert.That(error, Is.Not.Empty);
+            Assert.That(controller.TryRefresh(out error), Is.False);
+            Assert.That(error, Does.Contain("cell layer"));
 
-            // The HexMapView's cell layer is 0 by default, so a mask of layer 9 must be rejected.
-            settings.CullingMask = 1 << mapView.CellLayer;
+            // A mask that covers the cell layer is accepted and copied onto the camera.
+            settings.CullingMask = ~0;
             Assert.That(settings.TryValidate(out error), Is.True, error);
             Assert.That(controller.TryRefresh(out error), Is.True, error);
-            Assert.That(camera.cullingMask, Is.EqualTo(1 << mapView.CellLayer));
+            Assert.That(camera.cullingMask, Is.EqualTo(~0));
+
+            var narrowMask = (1 << cellLayer) | (1 << blindLayer);
+            settings.CullingMask = narrowMask;
+            Assert.That(settings.TryValidate(out error), Is.True, error);
+            Assert.That(controller.TryRefresh(out error), Is.True, error);
+            Assert.That(camera.cullingMask, Is.EqualTo(narrowMask));
         }
 
         [Test]
