@@ -126,12 +126,17 @@ namespace HexMap.UnityRuntime
         [HideInInspector]
         private float m_TargetZoom = MinZoom;
 
+        // Assigned by scene serialization only, so the compiler cannot see a write. Nothing in code sets
+        // these, and the inspector is the intended author, so the warning is suppressed rather than faked
+        // with a self-assignment.
+#pragma warning disable 0649
         [SerializeField]
         [Tooltip("Optional starting focus, in map plane coordinates. Applied on the first refresh.")]
         private Vector2 m_InitialFocus;
 
         [SerializeField]
         private bool m_HasInitialFocus;
+#pragma warning restore 0649
 
         private OrthographicMapFraming m_BaseFraming;
         private OrthographicMapFraming m_Framing;
@@ -369,11 +374,26 @@ namespace HexMap.UnityRuntime
         /// </summary>
         public bool TryRefresh(out string error)
         {
+            // The layer mask is validated and adopted on every path. It has to be: the cheap path below
+            // exists for panning and zooming, and skipping the mask there would leave a freshly assigned
+            // LayerSettings silently unapplied, which is the exact failure this feature is meant to catch.
+            var cullingMask = -1;
+            if (m_LayerSettings != null)
+            {
+                if (!m_LayerSettings.TryValidate(out error))
+                {
+                    return false;
+                }
+
+                cullingMask = m_LayerSettings.ResolvedCullingMask;
+            }
+
             // Panning and zooming call through here, and the base framing only changes when the map or the
             // viewport configuration changes. When it cannot have changed, keep the snapshot and just
             // re-apply, which avoids rebuilding layouts and envelope maths per frame.
             if (m_HasFraming && IsCameraConfigurationUnchanged())
             {
+                m_AppliedCullingMask = cullingMask;
                 RefreshFramingFromZoom();
                 ApplyToCamera();
                 error = string.Empty;
@@ -419,17 +439,6 @@ namespace HexMap.UnityRuntime
             if (!TryResolvePlaneAndOrientation(layout, out error))
             {
                 return false;
-            }
-
-            var cullingMask = -1;
-            if (m_LayerSettings != null)
-            {
-                if (!m_LayerSettings.TryValidate(out error))
-                {
-                    return false;
-                }
-
-                cullingMask = m_LayerSettings.ResolvedCullingMask;
             }
 
             var scale = m_HexMapView.transform.lossyScale.x;
