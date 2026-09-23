@@ -1,6 +1,6 @@
 # 正交俯视地图相机
 
-用一台正交相机从正上方观察 Hex 地图，上下容纳地图的**所有行**，左右只容纳**一部分列**，其余靠拖拽浏览。
+用一台正交相机从正上方观察 Hex 地图，上下容纳地图的**所有行**，左右只容纳**一部分列**，其余靠拖拽浏览；支持**缩放到细节**与**对准焦点格**。
 
 决策全文见 `.scratch/orthographic-map-camera/spec.md`。本文只讲**怎么用**、**数字是多少**、**看到异常时先查哪里**。
 
@@ -8,12 +8,13 @@
 
 | 类型 | 程序集 | 职责 |
 | --- | --- | --- |
-| `OrthographicMapFraming` | `HexMap.Core` | 纯数学：给定 `HexLayout` + 半径 + 边距 + 宽高比，算出 `orthographicSize`、地图包络、可移动范围 |
-| `OrthographicMapCamera` | `HexMap.UnityRuntime` | 把上面的结果写进场景相机，并沿地图局部 +X 平移 |
+| `OrthographicMapFraming` | `HexMap.Core` | 纯数学：给定 `HexLayout` + 半径 + 边距 + 宽高比 + zoom，算出 `orthographicSize`、地图包络、可移动范围 |
+| `OrthographicMapCamera` | `HexMap.UnityRuntime` | 把上面的结果写进场景相机，沿平面两轴平移、按 zoom 缩放、对准焦点 |
 | `OrthographicMapLayerSettings` | `HexMap.UnityRuntime` | 独立持有相机的 culling mask，并自检能否看见地图 |
-| `OrthographicMapDragInput` | `HexMap.Sample` | 把水平拖拽翻译成相机偏移（内容跟手） |
+| `OrthographicMapDragInput` | `HexMap.Sample` | 水平/垂直拖拽 → 平移（内容跟手） |
+| `OrthographicMapZoomInput` | `HexMap.Sample` | 双指捏合 / 滚轮 → 缩放（锚点在手指中点或鼠标位置） |
 
-`HexMap.Core` / `HexMap.Runtime` 不引用 `Camera`：相机是观察者，地图是数据。
+`HexMap.Core` / `HexMap.Runtime` 不引用 `Camera`：相机是观察者，地图是数据。`HexMap.UnityRuntime` 不引用输入：输入在最外层的 `Sample`。
 
 ## 取景公式
 
@@ -26,6 +27,41 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 
 四种组合（平面 `XZ`/`XY` × 朝向 `Pointy`/`Flat`）都成立，代码里没有任何平面/朝向分支：平面只决定"屏幕上下"落在哪个世界轴，朝向决定两个铺开量哪个是深度。
 
+## 缩放与焦点
+
+**zoom ≥ 1，越大越近。`zoom = 1` 是唯一"所有行可见"的档位**，放大后允许丢掉上下两端的行——因为这时纵向有了可移动余量，可以拖过去看。
+
+| zoom | `orthographicSize` | 可视宽 × 高 | 所有行可见 | 水平可拖 | 垂直可拖 |
+| --- | --- | --- | --- | --- | --- |
+| **1.0（最远）** | `17.325` | `19.49 × 34.65` | **✅** | `±10.17` | `±0` |
+| 1.5 | `11.550` | `12.99 × 23.10` | ❌ | `±13.42` | `±4.20` |
+| 2.0 | `8.663` | `9.75 × 17.33` | ❌ | `±15.05` | `±7.09` |
+| 4.0 | `4.331` | `4.87 × 8.66` | ❌ | `±17.48` | `±11.42` |
+| **11.85（上限）** | `1.462` | `1.64 × 2.92` | ❌ | `±19.10` | `±14.29` |
+
+**上限公式**：`zoom_max = 1 / (m_MinVisibleWidthRatio × aspect)`。`ratio = 0.15` 时竖屏 `11.85`、横屏 16:9 `3.75` —— 一个参数自动适应两种宽高比。想放大得更近就调小 `ratio`。
+
+**焦点**用 `FocusOn(HexCoord)` 或 `FocusOnWorld(Vector3)` 设置。焦点是**"想去"的中心**，不是相机的实际位置：
+
+```
+目标中心 = clamp(焦点, 当前 zoom 的可移动范围)
+```
+
+所以**边缘格永远到不了视口正中心**——地图在那里就结束了。放大后夹取范围变宽，同一个边缘焦点会**越来越接近**中心但不会到达（`zoom = 2` 时距右边约 42% 屏宽，`zoom = 4` 时约 46%）。
+
+**两条优先级规则**（都实现过、都踩过坑）：
+
+1. **`zoom = 1` 强制居中**，忽略焦点。它代表"看全貌"，偏着看会显得没对齐。焦点本身会被记住，再放大时重新对准。
+2. **拖拽不会被下一次 zoom 变化拉回焦点**；而**非手势**的 zoom 变化会重新对准焦点。焦点只在 `FocusOn` 被调用时、以及非手势 zoom 变化时生效。
+
+**缩放锚点**取双指中点（移动端）或鼠标位置（滚轮），这样"捏住的地方不动"。三个细节：
+
+- **锚点在手势开始时抓一次并固定整个手势**——双指中点会漂移，每帧重取会让地图抖动；
+- **每帧增量式套公式**（比例始终对"手势起始距离"取，不对上一帧取），否则多帧累积会漂；
+- **边缘不加补偿**：夹取会限制偏移，锚点在边缘时会略微滑动，这是可接受的。
+
+**锚点缩放本身算一次手势**，所以它优先于焦点。这条不是可选的：少了它，"zoom 变化重新对准焦点"会立刻把锚点算出的中心丢掉、把镜头弹回焦点（实现时真的发生了，见 `.scratch/orthographic-map-camera/issues/05` 的 Comments）。
+
 ## `map.unity` 的实际数值
 
 参数：`Radius 11`、`Pointy`、`XZ`、`OuterRadius 1`、`SecondaryScale 0.9`、`m_ViewMargin 1.1`。
@@ -33,9 +69,9 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 | 量 | 值 |
 | --- | --- |
 | 地图包络 | `39.8372 × 31.5000` |
-| `orthographicSize` | `17.325` |
+| 最远档（zoom 1）`orthographicSize` | `17.325` |
 | 竖屏 9:16 可视区 | `34.65 × 19.4906` |
-| 竖屏 9:16 可移动范围 | `±10.1733`（约地图宽的一半） |
+| 竖屏 9:16 可移动范围 | 水平 `±10.1733`、垂直 `±0` |
 | 一行占屏高 | `2.86`（约 12 行同屏） |
 | 一列占屏宽 | `3.62`（约 5～6 列同屏） |
 
@@ -56,6 +92,7 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 3. `OrthographicMapLayerSettings`：`m_HexMapView` → **HexMap**；`m_CullingMask` 必须包含 HexMap 的 cell 层（默认 `Everything` 即可）。
 4. 回到 `OrthographicMapCamera`，把 `m_LayerSettings` 指向第 3 步那个组件。
 5. `OrthographicMapDragInput`：`m_MapCamera` → 那个 `OrthographicMapCamera`。它可以从 `HexMap.Sample` 程序集挂到任意常驻物件上。
+6. `OrthographicMapZoomInput`：`m_MapCamera` → 同一个 `OrthographicMapCamera`；`m_UseMouseWheel` 默认开（触摸捏合不受它影响）。
 
 相机在 `Start()` 里自动取景一次。之后**视口变化需要调用方显式调 `TryRefresh()`**，本特性不做逐帧监听。
 
@@ -63,7 +100,7 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 
 | 症状 | 真相 | 怎么办 |
 | --- | --- | --- |
-| 左右拖不动 | 屏宽 ≥ 地图宽。屏高被"所有行"钉死，屏宽 = 屏高 × aspect ⇒ **aspect 越大越拖不动** | 先确认 Game 视图 / `m_TargetAspect` 是竖屏 9:16 |
+| 左右拖不动 | 当前档位下屏宽 ≥ 地图宽。可视高被"所有行"钉死，可视宽 = 可视高 × aspect ⇒ **aspect 越大越拖不动** | 先确认 Game 视图 / `m_TargetAspect` 是竖屏 9:16；放大一档就会有可拖余量 |
 | 编辑器能拖、真机不能（或反之） | 编辑器 Game 视图还是横屏分辨率 | 设为 750×1334 / 1080×1920 |
 | 相机是透视的 | `orthographic` 是摆放设置 | 在场景里勾上，不是运行时问题 |
 | 相机在地图**下方** | 位置必须写成 `原点 − forward × 高度`（`forward` 指向世界 −Y） | 这是实现时真踩过的坑，测试有断言钉住 `position.y == 30` |
@@ -72,15 +109,20 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 | 竖立装饰物不见了 | 垂直俯视的必然结果 | 读"两条已知限制"第 2 条 |
 | 地图绕 X/Z 转了，相机在世界空间是斜的 | "俯视"是相对地图平面的 | 不是 bug |
 | 拖拽手感反了 | 唯一的方向常量是 `OrthographicMapDragInput.DragDirection` | 翻它的符号 |
+| 捏合时地图从手指下面滑走 | 锚点用了屏幕中心而不是双指中点 | 读"缩放与焦点"一节；这是手感问题，不是夹取问题 |
+| 捏合时地图抖动 | 每帧取当前双指中点当锚点，而中点在一个手势内会漂移 | 锚点必须在**手势开始时抓一次并固定整个手势** |
+| 捏合时地图被弹回某个位置 | 锚点缩放没有声明"手势进行中"，于是被"zoom 变化重新对准焦点"覆盖 | 这是实现时真踩过的坑；`TryZoomTo` 内部必须让手势优先于焦点 |
+| 拖拽时地图被拽回焦点，拖不动 | 实现成了"每帧从焦点重算目标中心" | 焦点只在 `FocusOn` 与**非手势** zoom 变化两个时刻生效 |
+| 放大后看不到上下两端的行 | `zoom > 1` 的必然结果（只有 `zoom = 1` 保证所有行可见） | 不是 bug；此时纵向可拖 |
 
 ## 测试与验证
 
 - 取景数学：`Assets/Tests/EditMode/HexMap/Core/OrthographicMapFramingTests.cs`（`HexMap.Tests.EditMode`）。
-- 相机与 Layer：`Assets/Tests/EditMode/HexMap/UnityRuntime/OrthographicMapCameraTests.cs`（`HexMap.UnityRuntime.Tests.EditMode`）。
+- 相机、缩放、焦点、Layer：`Assets/Tests/EditMode/HexMap/UnityRuntime/OrthographicMapCameraTests.cs`（`HexMap.UnityRuntime.Tests.EditMode`）。
 
 ```powershell
 powershell -File scripts\run-tests.ps1 -Assembly HexMap.Tests.EditMode
 powershell -File scripts\run-tests.ps1 -Assembly HexMap.UnityRuntime.Tests.EditMode
 ```
 
-**拖拽适配器没有自动化测试**：`HexMap.Sample` 只被 PlayMode 测试程序集引用，EditMode 测不到它。它的验收靠手动拖一次；所有夹取与边界逻辑都在有测试的 `OrthographicMapCamera` 里。
+**两个输入适配器没有自动化测试**：`HexMap.Sample` 只被 PlayMode 测试程序集引用，EditMode 测不到它。验收靠手动拖一次 / 捏一次；所有夹取、zoom 上下限、焦点与锚点的数学都在有测试的 `OrthographicMapCamera` 里。适配器本身只有两个纯静态函数（`ScreenDeltaToOffsetDelta`、`ScreenToViewportAnchor`、`PinchRatioToZoom`），可以脱离设备推理。
