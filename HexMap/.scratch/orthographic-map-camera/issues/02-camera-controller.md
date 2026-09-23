@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — 正交俯视取景的纯数学
 
-**Status:** in-progress
+**Status:** done
 
 ## 范围
 
@@ -55,10 +55,10 @@
   - Layer 组件：默认 mask 通过、未覆盖 cell 层被拒、覆盖后 mask 真的写进相机、缺视图被拒
   - 非恒等 transform 与 2 倍缩放：位置、size、偏移都按缩放换算，旋转仍垂直朝下
 - [x] **用一个临时 stub harness 把上面这些断言跑通（56 项，全部通过）**，编入的是**真实的** `OrthographicMapFraming` / `OrthographicMapCamera` / `OrthographicMapLayerSettings` 源码；harness 不进仓库
-- [ ] **Unity 内尚未执行**：NUnit 用例由使用者运行（`powershell -File scripts\run-tests.ps1 -Assembly HexMap.UnityRuntime.Tests.EditMode`）
+- [x] **Unity 内已全部通过**：`HexMap.UnityRuntime.Tests.EditMode` 由使用者执行，`OrthographicMapCameraTests` 全绿
 - [ ] `map.unity` 在编辑器里接好线，Game 视图设为竖屏分辨率，看到完整所有行、左右可拖动的余量存在
-- [ ] C# 编译通过（Unity 已生成含新文件的 `.csproj`，未报错）
-- [ ] 回归：`powershell -File scripts\run-tests.ps1 -Assembly HexMap.UnityRuntime.Tests.EditMode`
+- [x] C# 编译通过（Unity 已生成含新文件的 `.csproj`）
+- [x] 回归：`powershell -File scripts\run-tests.ps1 -Assembly HexMap.UnityRuntime.Tests.EditMode`（全绿）
 
 ## 已知取舍
 
