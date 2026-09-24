@@ -164,12 +164,14 @@ if (!baseData.cameraStack.Contains(m_UiCamera)) baseData.cameraStack.Add(m_UiCam
 进入俯视：
   快照常规相机(position / rotation / fieldOfView / orthographicSize)
   迁移 UI 相机栈 → 常规相机 enabled = false → 俯视相机 enabled = true
+  打开平移与缩放手势（它们驱动的是俯视相机）
   切两个 Canvas 根节点
   dispatcher.SetActiveCamera(俯视相机) + SetActiveChannel(TopDown)   ← 与相机切换同一步
   可选：FocusOnWorld(焦点) + SetZoomImmediate(焦点档位)
 
 退出俯视：
   迁移 UI 相机栈 → 俯视相机 enabled = false → 常规相机 enabled = true
+  关闭平移与缩放手势
   还原常规相机快照
   切两个 Canvas 根节点
   dispatcher.SetActiveCamera(常规相机) + SetActiveChannel(Gameplay)
@@ -202,13 +204,30 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 | 类型 | 作用 |
 | --- | --- |
 | `SampleMapClickChannels` | 应用层的通道常量：`Gameplay = 1`、`TopDown = 2`。**运行时库里没有这些名字** |
+| `MapClickTapInput` | **唯一认识指针的组件**：判断一次按下是"点在图上"还是"拖拽/点在 UI 上"，是则调 `MapClickDispatcher.OnMapClicked(屏幕坐标)`。换 Input System 或 EasyTouch 只需替换它 |
 | `GameplayMapClickHandler` | `OnEnable` 注册 `Gameplay`、`OnDisable` 注销；点中则调 `GvgMapRuntimeController.Select`，然后抛 `PlotClicked(int)` 事件 |
 | `TopDownMapClickHandler` | 同样注册 `TopDown`；**不碰玩法选中**（预览不是玩），只抛 `PlotClicked(int)` |
-| `MapViewModeSwitcher` | 模式值的唯一主人：栈迁移与 UI 相机的 render type、相机快照与还原、两个 Canvas 根节点的切换、向分派器推相机与通道 |
+| `IMapPlotClickSource` | 两个处理者共同实现的事件契约，让一个面板类型能服务两个模式而不用写两份 |
+| `MapClickPanel` | 最小面板：`OnEnable` 订阅自己模式的 `PlotClicked`、`OnDisable` 退订；`-1` 关闭，否则显示 PlotId |
+| `MapViewModeSwitcher` | 模式值的唯一主人：栈迁移与 UI 相机的 render type、相机快照与还原、两个 Canvas 根节点的切换、平移/缩放手势的开关、向分派器推相机与通道 |
 
 **处理者为什么只抛事件、不直接操作面板**：面板是 UI 类型，而处理者在 `Sample` 里虽然可以引用 UI，但把"点击 → 事件"和"事件 → 面板"分开之后，两个模式对**同一个 Plot 点击**给出不同 UI 这件事就只是"谁订阅了这个事件"的差别，不需要在两个处理者里各写一遍面板逻辑。面板在 `OnEnable` 订阅、`OnDisable` 退订（与分派器的注册规则同形）。
 
 **`PlotId == -1` 表示点空**，事件仍然抛出——这正是"点空白关闭面板"的入口。
+
+### 7.1 场景接线清单
+
+跑通"按地图按钮 → 俯视 → 点格子出面板 → 再按一次退出"这条链路，场景里需要：
+
+1. **两个 base 相机**：玩法相机（透视，保留 `MainCamera` tag 与 `AudioListener`）+ 俯视相机（正交，不带 tag）。
+2. **UI 相机**：URP `Camera Type = Overlay`、culling mask 只留 UI 层、`depth` 大于两个 base 相机。`Screen Space - Camera` 的 Canvas 必须把 `worldCamera` 指到它；它现在这份栈由 `MapViewModeSwitcher` 迁移（render type 也由它设）。
+3. **正交 rig 必须驱动俯视相机**：`OrthographicMapCamera.m_Camera` 要指向俯视相机。**这是最容易错的一处**——若它指向玩法相机，聚焦/缩放/拖拽全作用在一个被禁用的相机上，表现为"切过去了但地图不动、缩放没反应"。
+4. **`MapViewModeSwitcher`**：`m_GameplayCamera` / `m_TopDownCamera` / `m_UiCamera` / `m_MapCamera` / `m_Dispatcher` / 两个 UI root（+ 可选 `m_FocusTarget`、`m_MapDragInput`、`m_MapZoomInput`）。
+5. **两个 UI root 互不包含**，且**地图按钮必须放在切换器不碰的常驻 root 里**：放进玩法 root 的话，进俯视时它会被 `SetActive(false)`，就再也点不到、出不来了。
+6. **`MapClickTapInput`** 挂到场景里并接上 `m_Dispatcher`（这是点击链路的入口）。
+7. **两个 `MapClickPanel`**：各自接自己模式的处理者（`m_Source`），并放在各自的 UI root 下。
+8. **plot 数据要先初始化**（例如 `Facade`），否则每次点击都是 `MapNotInitialized`/`NoSelectablePlot`，面板永远打不开。
+9. `EventSystem` 必须存在（`Button` 与 `IsPointerOverGameObject` 都依赖它）。
 
 ## 8. 测试
 
@@ -235,6 +254,7 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 - `m_IsTopDown` 被序列化成 `true` 的场景（`ApplySerializedMode`）能正确进入俯视；且这种"开局就在俯视"的场景退出时**没有快照可还原**，相机保持原位；
 - 有焦点目标 ⇒ `FocusOnWorld` + `SetZoomImmediate`；无焦点目标 ⇒ 保持玩家离开时的档位；
 - **焦点失败（如地图相机尚未 refresh）只 `LogWarning`，模式切换照常完成**；
-- 全字段为 null 时 `Toggle` 不抛异常；UI 相机与 base 相机接成同一个时 `LogError` 一次且不去动栈。
+- 全字段为 null 时 `Toggle` 不抛异常；UI 相机与 base 相机接成同一个时 `LogError` 一次且不去动栈；
+- **平移与缩放手势只在俯视模式下为 `IsEnabled`**（否则玩法模式的一次拖拽会悄悄移走玩家退出后看到的视图）。
 
-两个处理者（`GameplayMapClickHandler` / `TopDownMapClickHandler`）**仍没有自动化测试**，它们的验收靠手动：按地图按钮、点几个格子、再按一次退出，确认 UI 不消失、面板切换正确、退出后相机回到原位。设计讨论与决策全文见 `.scratch/orthographic-map-camera/spec.md`。
+`MapClickTapInput` 与 `MapClickPanel` **没有自动化测试**：前者依赖 `Input` 与 `EventSystem.current`，后者依赖 UI 对象与 `TMP_Text`，两者都要玩家真的按一下、点一下才有意义。它们的验收靠手动：按地图按钮、点几个格子、再按一次退出，确认 UI 不消失、面板切换正确、点空关闭、退出后相机回到原位。设计讨论与决策全文见 `.scratch/orthographic-map-camera/spec.md`。

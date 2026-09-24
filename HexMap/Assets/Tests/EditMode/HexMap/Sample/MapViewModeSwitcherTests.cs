@@ -410,6 +410,33 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
+        public void TheMapGesturesAreOnlyLiveInTopDownMode()
+        {
+            CreateRig();
+            var drag = CreateObject("Map Drag Input").AddComponent<OrthographicMapDragInput>();
+            var zoom = CreateObject("Map Zoom Input").AddComponent<OrthographicMapZoomInput>();
+            m_Switcher.MapDragInput = drag;
+            m_Switcher.MapZoomInput = zoom;
+
+            m_Switcher.ApplySerializedMode();
+
+            // The gestures drive the map camera, which gameplay has just disabled: left live, a gameplay
+            // drag would move the view the player is given back on the way out.
+            Assert.That(drag.IsEnabled, Is.False);
+            Assert.That(zoom.IsEnabled, Is.False);
+
+            m_Switcher.EnterTopDown();
+
+            Assert.That(drag.IsEnabled, Is.True);
+            Assert.That(zoom.IsEnabled, Is.True);
+
+            m_Switcher.ExitTopDown();
+
+            Assert.That(drag.IsEnabled, Is.False);
+            Assert.That(zoom.IsEnabled, Is.False);
+        }
+
+        [Test]
         public void AHalfWiredSwitcherDoesNotThrow()
         {
             m_Switcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();

@@ -12,7 +12,7 @@ namespace HexMap.Sample
     /// gameplay selection, because previewing the map is not playing it.
     /// </para>
     /// </summary>
-    public sealed class TopDownMapClickHandler : MonoBehaviour, IMapClickHandler
+    public sealed class TopDownMapClickHandler : MonoBehaviour, IMapClickHandler, IMapPlotClickSource
     {
         [SerializeField]
         private MapClickDispatcher m_Dispatcher;

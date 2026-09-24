@@ -13,7 +13,7 @@ namespace HexMap.Sample
     /// the other mode answer the same click with entirely different UI.
     /// </para>
     /// </summary>
-    public sealed class GameplayMapClickHandler : MonoBehaviour, IMapClickHandler
+    public sealed class GameplayMapClickHandler : MonoBehaviour, IMapClickHandler, IMapPlotClickSource
     {
         [SerializeField]
         private MapClickDispatcher m_Dispatcher;

@@ -41,6 +41,14 @@ namespace HexMap.Sample
         private MapClickDispatcher m_Dispatcher;
 
         [SerializeField]
+        [Tooltip("Optional. Map panning is only live while the map view is up.")]
+        private OrthographicMapDragInput m_MapDragInput;
+
+        [SerializeField]
+        [Tooltip("Optional. Map zooming is only live while the map view is up.")]
+        private OrthographicMapZoomInput m_MapZoomInput;
+
+        [SerializeField]
         [Tooltip("Shown during normal gameplay. Goes inactive while the map view is up.")]
         private GameObject m_GameplayUiRoot;
 
@@ -99,6 +107,18 @@ namespace HexMap.Sample
         {
             get { return m_Dispatcher; }
             set { m_Dispatcher = value; }
+        }
+
+        public OrthographicMapDragInput MapDragInput
+        {
+            get { return m_MapDragInput; }
+            set { m_MapDragInput = value; }
+        }
+
+        public OrthographicMapZoomInput MapZoomInput
+        {
+            get { return m_MapZoomInput; }
+            set { m_MapZoomInput = value; }
         }
 
         public GameObject GameplayUiRoot
@@ -200,6 +220,8 @@ namespace HexMap.Sample
                 m_TopDownCamera.enabled = true;
             }
 
+            SetMapInputEnabled(true);
+
             // Both pushes happen in the same step as the camera swap so no frame can resolve a click with
             // the previous mode's camera.
             if (m_Dispatcher != null)
@@ -228,6 +250,10 @@ namespace HexMap.Sample
                 m_GameplayCamera.enabled = true;
             }
 
+            // The gestures act on the map camera, which is disabled now. Leaving them live would let a
+            // gameplay drag silently move the view the player gets back.
+            SetMapInputEnabled(false);
+
             RestoreGameplayCamera();
 
             if (m_Dispatcher != null)
@@ -238,6 +264,23 @@ namespace HexMap.Sample
 
             SetUiRootActive(m_GameplayUiRoot, true);
             SetUiRootActive(m_TopDownUiRoot, false);
+        }
+
+        /// <summary>
+        /// Turns the map's pan and zoom gestures on or off with the mode. Both are optional, so a scene
+        /// that drives the map camera from somewhere else simply leaves the slots empty.
+        /// </summary>
+        private void SetMapInputEnabled(bool isEnabled)
+        {
+            if (m_MapDragInput != null)
+            {
+                m_MapDragInput.IsEnabled = isEnabled;
+            }
+
+            if (m_MapZoomInput != null)
+            {
+                m_MapZoomInput.IsEnabled = isEnabled;
+            }
         }
 
         private void FocusIfRequested()
