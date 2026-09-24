@@ -143,16 +143,20 @@ if (baseCameraAdditionalData.renderType == CameraRenderType.Overlay) return;
 // 先摘再挂：一个 Overlay 只能属于一个栈，重复添加会被 URP 判定为不合法的栈成员
 if (m_GameplayCamera != null && m_GameplayCamera != baseCamera) RemoveUiCameraFrom(m_GameplayCamera);
 if (m_TopDownCamera  != null && m_TopDownCamera  != baseCamera) RemoveUiCameraFrom(m_TopDownCamera);
+// 挂进栈之前必须是 Overlay，否则 URP 跳过它：见下面第 3 点
+m_UiCamera.GetUniversalAdditionalCameraData().renderType = CameraRenderType.Overlay;
 var baseData = baseCamera.GetUniversalAdditionalCameraData();
 if (!baseData.cameraStack.Contains(m_UiCamera)) baseData.cameraStack.Add(m_UiCamera);
 ```
 
-三个要点：
+四个要点：
 
 1. **UI 相机全程 `enabled = true`**，只是在两个栈之间搬。想隐藏某块 UI 就切 Canvas 根节点，不要用"移出栈"——移出栈后它是个"无主的 Overlay"，不渲染，而这种状态在 Inspector 里看不出来。
 2. **用 `GetUniversalAdditionalCameraData()`**（`UnityEngine.Rendering.Universal` 的 `Camera` 扩展方法），不要自己 `GetComponent`——它还会补挂缺失的组件。
-3. `renderType` 才是渲染时的真相来源，`enabled` 只是开关。排查时要看 Camera Type，不能只看勾选框。
+3. `renderType` 才是渲染时的真相来源，`enabled` 只是开关。排查时要看 Camera Type，不能只看勾选框。**而且新挂上的 `UniversalAdditionalCameraData` 默认是 `Base`**，所以"加进 `cameraStack` 列表"本身不够：URP 遍历栈时对 `renderType != CameraRenderType.Overlay` 的成员只留一行告警然后 `continue`（`UniversalRenderPipeline.cs`），表现为"栈里明明有它、UI 却完全不渲染"。因此 `MoveUiCameraIntoStack` 在挂之前顺手把它置为 `Overlay`——栈归属与 render type 归同一个 owner 管。
 4. **`UI 相机.depth (0) > Base 相机.depth`**。栈**内部**顺序由 `cameraStack` 列表决定、不由 depth 决定，但 depth 决定 URP 遍历 Base 相机的顺序。
+
+**同一个相机被同时接成 UI 相机与 base 相机**时，`MoveUiCameraIntoStack` 会 `Debug.LogError` 并跳过栈操作：它既当 base 又当自己的 overlay 会让自己的 `cameraStack` 失效，而 `NullReferenceException` 不是排查的起点。这条只报一次（`m_HasReportedSharedCameraWiring`），因为错误在场景接线里、不在每次切换上。
 
 ## 5.2 切换的时序
 
@@ -175,7 +179,7 @@ if (!baseData.cameraStack.Contains(m_UiCamera)) baseData.cameraStack.Add(m_UiCam
 
 **为什么要快照而不是重算**：退出时重算常规相机的位置需要复制玩法相机的跟随逻辑，两份实现必然漂移。快照是"完全复原"的唯一可靠方式。`SetZoomImmediate` 而不是写 `TargetZoom`——后者会让镜头从 1 平滑追到目标档位，而复原应该是无缝的。
 
-`Start()` 里按序列化的 `m_IsTopDown` 应用一次初始状态（只推状态、不触发切换），这样**第一次点击就能找到正确的相机与通道**，即使模式被留在 Inspector 里勾着的状态。
+`Start()` 里按序列化的 `m_IsTopDown` 应用一次初始状态（只推状态、不触发切换），这样**第一次点击就能找到正确的相机与通道**，即使模式被留在 Inspector 里勾着的状态。这段逻辑在 `ApplySerializedMode()` 里，`Start()` 只是调它：EditMode 测试没有 start 回调，留一个可调用的入口才能验证它。
 
 ## 6. 依赖方向（Review 时的关键检查点）
 
@@ -200,7 +204,7 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 | `SampleMapClickChannels` | 应用层的通道常量：`Gameplay = 1`、`TopDown = 2`。**运行时库里没有这些名字** |
 | `GameplayMapClickHandler` | `OnEnable` 注册 `Gameplay`、`OnDisable` 注销；点中则调 `GvgMapRuntimeController.Select`，然后抛 `PlotClicked(int)` 事件 |
 | `TopDownMapClickHandler` | 同样注册 `TopDown`；**不碰玩法选中**（预览不是玩），只抛 `PlotClicked(int)` |
-| `MapViewModeSwitcher` | 模式值的唯一主人：栈迁移、相机快照与还原、两个 Canvas 根节点的切换、向分派器推相机与通道 |
+| `MapViewModeSwitcher` | 模式值的唯一主人：栈迁移与 UI 相机的 render type、相机快照与还原、两个 Canvas 根节点的切换、向分派器推相机与通道 |
 
 **处理者为什么只抛事件、不直接操作面板**：面板是 UI 类型，而处理者在 `Sample` 里虽然可以引用 UI，但把"点击 → 事件"和"事件 → 面板"分开之后，两个模式对**同一个 Plot 点击**给出不同 UI 这件事就只是"谁订阅了这个事件"的差别，不需要在两个处理者里各写一遍面板逻辑。面板在 `OnEnable` 订阅、`OnDisable` 退订（与分派器的注册规则同形）。
 
@@ -220,4 +224,17 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 - `TryGetLastContext` 的三种情况（没点过 / 拾取前被丢弃不留过期结果 / 正常）；
 - 地图未 `TryInitialize` ⇒ `PickStatus == MapNotInitialized` 且点击仍派发。
 
-切换器与两个处理者**没有自动化测试**（`HexMap.Sample` 只被 PlayMode 测试程序集引用，EditMode 测不到）。它们的验收靠手动：按地图按钮、点几个格子、再按一次退出，确认 UI 不消失、面板切换正确、退出后相机回到原位。设计讨论与决策全文见 `.scratch/orthographic-map-camera/spec.md`。
+`Assets/Tests/EditMode/HexMap/Sample/MapViewModeSwitcherTests.cs`（`HexMap.Sample.Tests.EditMode`）覆盖切换器：
+
+- 进/退俯视各自一次性换掉相机 `enabled`、分派器的相机与通道、两个 UI 根节点；
+- **UI 相机既是 `Overlay`、又只在"正在渲染的那个栈"里**（只断言"在列表里"是不够的，见 5.1 第 3 点）；
+- UI 相机全程不被移动、不被禁用、不被改父节点；
+- 退出时常规相机的 position / rotation / fieldOfView / orthographicSize **完全还原**，包括俯视期间被别处移动过的情况；
+- 重复按地图按钮不会重新快照（否则会把"被移动过的相机"当成原状态存下来）；
+- `Toggle` 两个方向都正确；**连按 5 个来回无漂移**；
+- `m_IsTopDown` 被序列化成 `true` 的场景（`ApplySerializedMode`）能正确进入俯视；且这种"开局就在俯视"的场景退出时**没有快照可还原**，相机保持原位；
+- 有焦点目标 ⇒ `FocusOnWorld` + `SetZoomImmediate`；无焦点目标 ⇒ 保持玩家离开时的档位；
+- **焦点失败（如地图相机尚未 refresh）只 `LogWarning`，模式切换照常完成**；
+- 全字段为 null 时 `Toggle` 不抛异常；UI 相机与 base 相机接成同一个时 `LogError` 一次且不去动栈。
+
+两个处理者（`GameplayMapClickHandler` / `TopDownMapClickHandler`）**仍没有自动化测试**，它们的验收靠手动：按地图按钮、点几个格子、再按一次退出，确认 UI 不消失、面板切换正确、退出后相机回到原位。设计讨论与决策全文见 `.scratch/orthographic-map-camera/spec.md`。

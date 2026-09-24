@@ -15,7 +15,8 @@ namespace HexMap.Sample
     /// <para>
     /// Both cameras stay in the scene and enabled states are swapped. The UI camera is never rebuilt and
     /// never moved; only the stack it belongs to changes, because a URP overlay camera is only rendered
-    /// while its base camera is rendered.
+    /// while its base camera is rendered. Moving it also means owning its render type: URP skips a stack
+    /// member that is still a base camera, so moving the UI camera into a stack also marks it an overlay.
     /// </para>
     /// </summary>
     [DisallowMultipleComponent]
@@ -60,6 +61,7 @@ namespace HexMap.Sample
 
         private CameraState m_GameplayCameraState;
         private bool m_HasGameplayCameraState;
+        private bool m_HasReportedSharedCameraWiring;
 
         /// <summary>
         /// True while the whole map view is up.
@@ -119,8 +121,17 @@ namespace HexMap.Sample
 
         private void Start()
         {
-            // Put the scene into a known state without switching anything: the first click must already
-            // find the right camera and channel, even if the mode was left toggled on in the inspector.
+            ApplySerializedMode();
+        }
+
+        /// <summary>
+        /// Puts the scene into the state the serialized mode says it is in, without switching anything:
+        /// the first click must already find the right camera and channel, even if the mode was left
+        /// toggled on in the inspector. This is what <c>Start</c> runs; it is reachable so a test can drive
+        /// it, because start callbacks do not run in edit mode.
+        /// </summary>
+        public void ApplySerializedMode()
+        {
             if (m_IsTopDown)
             {
                 ApplyTopDown();
@@ -289,6 +300,20 @@ namespace HexMap.Sample
                 return;
             }
 
+            if (m_UiCamera == m_GameplayCamera || m_UiCamera == m_TopDownCamera)
+            {
+                // The same camera cannot be a base camera and the overlay it renders through. Marking it
+                // an overlay would also make its own cameraStack invalid, so a stack is left alone here.
+                ReportSharedCameraWiring();
+                return;
+            }
+
+            // The UI camera has to be an overlay before it joins a stack: URP skips a stack member that
+            // is still a base camera, warning every frame while the UI quietly renders nothing, and a
+            // fresh UniversalAdditionalCameraData is a base camera. This is the only owner of stack
+            // membership, so it owns the render type too.
+            m_UiCamera.GetUniversalAdditionalCameraData().renderType = CameraRenderType.Overlay;
+
             // Remove it from wherever it currently is first: an overlay may belong to one stack only, and
             // adding it twice makes URP reject the stack.
             if (m_GameplayCamera != null && m_GameplayCamera != baseCamera)
@@ -306,6 +331,24 @@ namespace HexMap.Sample
             {
                 baseData.cameraStack.Add(m_UiCamera);
             }
+        }
+
+        /// <summary>
+        /// Reports a camera wired into two roles. It repeats on every switch, so it is reported once per
+        /// switcher: this is a scene wiring mistake, not a per-frame condition.
+        /// </summary>
+        private void ReportSharedCameraWiring()
+        {
+            if (m_HasReportedSharedCameraWiring)
+            {
+                return;
+            }
+
+            m_HasReportedSharedCameraWiring = true;
+            Debug.LogError(
+                "MapViewModeSwitcher has the same camera wired as the UI camera and as a base camera; "
+                    + "the camera stack was left alone. Wire a separate overlay camera for the UI.",
+                this);
         }
 
         private void RemoveUiCameraFrom(Camera baseCamera)

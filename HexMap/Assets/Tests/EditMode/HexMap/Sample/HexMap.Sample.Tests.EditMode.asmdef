@@ -1,0 +1,27 @@
+{
+  "name": "HexMap.Sample.Tests.EditMode",
+  "rootNamespace": "HexMap.Sample.Tests",
+  "references": [
+    "HexMap.Core",
+    "HexMap.UnityRuntime",
+    "HexMap.Sample",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "testAssemblies": true
+}
