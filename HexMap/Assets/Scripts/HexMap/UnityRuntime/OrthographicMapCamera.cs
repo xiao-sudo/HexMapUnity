@@ -669,6 +669,11 @@ namespace HexMap.UnityRuntime
             }
             else
             {
+                // The frame for the new zoom has to exist before the aim is clamped. Clamping first
+                // measures the aim against the range of the zoom being left, which is the exact mistake
+                // this method exists to prevent: at the widest level the vertical range is zero, so an
+                // edge aim collapses onto the horizontal axis.
+                m_Framing = m_BaseFraming.WithZoom(m_Zoom);
                 m_DesiredCenter = ClampToRange(ToPlaneCoordinates(worldPoint));
                 m_HasCenter = true;
             }
