@@ -70,3 +70,4 @@
 - **实现时抓到一个真 bug，而且是我方案里漏掉的优先级**：`TryZoomTo` 按锚点算出了正确的新中心 `11.624`，但随后的 `ApplyZoom` 因为"`m_HasFocus` 为真就重新对准焦点"把它覆盖成焦点 `(0,0)`——锚点缩放与"zoom 变化重对准焦点"直接打架。修法是让 `TryZoomTo` 在应用 zoom 期间把 `m_IsGestureActive` 置真（锚点缩放本身就算一次手势），应用完再恢复。spec 6.4 已补上这条。
 - 另一个修掉的状态坑：新组件的 `m_DesiredCenter` 默认是 `(0,0)`，与"用户拖到正中"不可区分，会让 `TryRefresh` 把用户拖回的位置重置掉。加了 `m_HasCenter` 单独记录。
 - `Zoom` / `TargetZoom` 的 setter 在**没有 framing 时不做上限夹取**（上限依赖 aspect，此时还不知道），否则编辑器里预设的 zoom 会被静默夹成 1。
+- **后续修正：上限从"最小可视宽比例"改成了绝对档位 `MaxZoom`（默认 `12`）**，上面这条特例随之删除（上限不再依赖 framing，setter 一律夹取）。原因：`1 / (ratio × aspect)` 与它的名字不符——aspect 以除法进入，展开后可视宽里 aspect 出现两次，竖屏下实际最小可视宽是地图宽的 4.1% 而不是名字所称的 15%（按名字反推应得 `MaxZoom = 3.26`，实现给了 `11.85`）。而 zoom 本身就是"基础档位 / zoom"，绝对档位已经与地图尺寸、半径、屏幕无关，比例参数买不到额外的东西。推导与数值见 `docs/implementation/orthographic-map-camera-internals.md` §4.6；spec 6.1 的表格按历史记录保留，不再改写。

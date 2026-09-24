@@ -16,7 +16,7 @@
 | `map.unity` 的同一组件是 `OuterRadius 2`、`SecondaryScale 0.8`、`RenderStrategy 1 = DrawMeshInstanced` ⇒ **两个场景的地图尺寸不同，本文件的数值一律按 `sw.unity` 算** | `Assets/Scenes/map.unity:255-263` |
 | 取景基值**只由深度决定**：`baseOrthographicSize = mapHalfDepth × viewMargin`（**不是** `max(深度, 宽度/aspect)`） | `OrthographicMapFraming.cs:360` |
 | ⇒ **可视高度与 aspect 无关**：`可视高(zoom) = 2 × mapHalfDepth × margin / zoom` | 由上一行推出 |
-| `zoom` 上限 `= 1 / (m_MinVisibleWidthRatio × aspect)`，`m_MinVisibleWidthRatio` 默认 `0.15`；zoom 下限恒为 `1` | `OrthographicMapCamera.cs:267`、`.scratch/orthographic-map-camera/spec.md:230-231` |
+| `zoom` 上限是**绝对档位** `MaxZoom`（序列化，默认 `12`），与 aspect 无关；zoom 下限恒为 `1` | `OrthographicMapCamera.cs`、`docs/implementation/orthographic-map-camera-internals.md` §4.6 |
 | `FocusOn(HexCoord)` 的原注释：**"The center ends up clamped, so an edge cell sits beside the viewport center rather than outside the map."** | `OrthographicMapCamera.cs:664-686` |
 | `FocusOn` 要求先有 framing，否则返回 `false` + `"Refresh the camera before focusing."` | `OrthographicMapCamera.cs:670-674` |
 | 垂直可拖范围 = `地图半深 − 可视半高`；水平用 `framing.MovableHalfRange` | `.scratch/orthographic-map-camera/issues/05-camera-zoom-and-focus.md:14` |
@@ -61,7 +61,7 @@ baseSize      = mapHalfDepth × margin = 17.5 × 1.1 = 19.2500
 | 2 | 19.250 | 12.8 × 11.1 | |
 | **3.667** | **10.500** | **7.0 × 6.1** | ⭐ 目标：≈5 列 × 7 行 |
 | 4.444 | 8.663 | 5.8 × 5.0 | |
-| 6.667 | 5.775 | 3.9 × 3.3 | **aspect = 1 时的上限** |
+| 12（默认上限） | 3.208 | 2.1 × 1.9 | **绝对上限**，与 aspect 无关 |
 
 **「5 列 × 7 行」的精确解**：`zoom = 25.667 / 7 = 3.667`；控件 aspect `= 5 / (7 × 0.866) = 0.825`（略竖长）。方形控件在同一 zoom 下得到 **6.1 列 × 7.0 行**，差别很小，**先用方形**。
 

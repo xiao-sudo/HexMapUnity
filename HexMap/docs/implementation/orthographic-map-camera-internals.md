@@ -270,23 +270,28 @@ public void Tick(float deltaTime)     // Update() 调用它，测试也直接调
 ### 4.6 zoom 上下限
 
 ```csharp
-public float MaxZoom => 1f / (m_MinVisibleWidthRatio * m_BaseFraming.Aspect);
+public float MaxZoom { get { return m_MaxZoom; } set { m_MaxZoom = value; } }   // 序列化，默认 12
 ```
 
-推导：可视宽 / 地图宽 = `VisibleWidth / MapWidth`。当 `MapWidth` 按 aspect 反推时需要的最小可视宽就是 `地图宽 × ratio`：
+**上限是一个绝对档位，不是从地图或视口反推的。**
+
+zoom 的定义本身就是相对的：`size(zoom) = BaseOrthographicSize / zoom`，而 `BaseOrthographicSize = 地图半深 × ViewMargin` 随地图缩放。所以「`MaxZoom = 12`」在任何地图、任何半径、任何屏幕上含义都一样：**最大档位下竖向看到地图深的 1/12**。这正是"比例参数"想买到的地图/设备无关性——而它本来就已经有了。
+
+**为什么去掉了原来的 `m_MinVisibleWidthRatio`**（历史，别走回头路）：旧实现是 `MaxZoom = 1 / (ratio × aspect)`，名字声称"最小可视宽占地图宽的比例"，但 aspect 以**除法**进入，展开后
 
 ```
-VisibleWidth(zoom) = 2 · BaseSize/zoom · aspect = 地图深 · margin · aspect / zoom
-要求  VisibleWidth ≥ 地图宽 · ratio
-⇒ zoom ≤ 地图深 · margin · aspect / (地图宽 · ratio)
+可视宽(MaxZoom) = 地图深 · margin · ratio · aspect²        ← aspect 出现两次
 ```
 
-它**不是** `1/(ratio·aspect)` 的简化形式——`1/(ratio·aspect)` 只在 `地图深·margin ≈ 地图宽` 时成立。实现里直接按 `MaxZoom = 1 / (m_MinVisibleWidthRatio * Aspect)` 写，**这是一个近似**：它只在 `MapHalfDepth·ViewMargin == MapHalfWidth` 时精确。Review 时请判断这个近似是否可接受：`map.unity` 下 `MapHalfWidth = 19.919`、`MapHalfDepth·margin = 17.325`，差 13%，所以实际最小可视宽是 `0.15 × 19.919/17.325 ≈ 17.2%` 而不是 15%。**如果你要求"最小可视宽严格等于地图宽的 15%"，这一行需要改成用 `MapWidth` 反推。**
+`ratio = 0.15`、竖屏 9:16 下实际最小可视宽是地图宽的 **4.13%**，不是 15%；按名字反推应得 `MaxZoom = 3.26`，实现却给了 `11.85`（**大 3.63 倍**）。它只在 `aspect = 1` 时与名字一致（精确条件是 `地图宽 == 2·BaseSize·aspect²`；旧版这里写的 `MapHalfDepth·ViewMargin == MapHalfWidth` 同样漏掉了 aspect²）。同一个耦合在横屏 16:9 下把上限压到 `3.75`，与竖屏差 3 倍多，却换不来任何能一句话说清的保证。
 
-上限也**依赖 aspect**，所以：
+**结论**：上限就用绝对档位。如果哪天真要"内容保证"，用**高度型** `MaxZoom = margin / ratio`（与 aspect 无关），不要再把 aspect 乘进除法里。
 
-- `MaxZoom` 在 `m_HasFraming == false` 时返回 `MinZoom`；
-- `Zoom` / `TargetZoom` 的 setter 因此在**没有 framing 时不做上限夹取**（`NormalizeZoom` 只挡非有限值与下限），否则编辑器里预设的 zoom 会被静默夹成 1。上限等第一次 `TryRefresh` 生效。
+三个端点与特例：
+
+- 下限固定 `MinZoom = 1`（唯一"所有行可见"的档位）。
+- `MaxZoom == 1` **合法**：那是一台"只平移、从不缩放"的相机。`MaxZoom < 1` 或非有限值 ⇒ `TryRefresh` 拒绝取景并报 `"Max zoom must be finite and at least 1."`（否则 `size` 会变成 0 而不是报错）；`ClampZoom` 另有兜底，坏上限退化成下限，不会变成 0。
+- 上限**不再依赖 framing**，所以 `Zoom` / `TargetZoom` / `SetZoomImmediate` 的 setter **一律**走 `ClampZoom`。以前"没有 framing 时不做上限夹取、要等第一次 `TryRefresh` 才补夹"的那个特例（以及 `NormalizeZoom`）已经删除。
 
 ---
 

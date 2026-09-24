@@ -153,7 +153,7 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void MaxZoomComesFromTheVisibleWidthRatio()
+        public void MaxZoomIsTheClosestLevelTheComponentAllows()
         {
             var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
             var camera = CreateCamera(PortraitAspect);
@@ -162,19 +162,59 @@ namespace HexMap.UnityRuntime.Tests
             string error;
             Assert.That(controller.TryRefresh(out error), Is.True, error);
 
-            // visible width / map width == 1 / (zoom * aspect), so the ratio inverts to the zoom limit.
-            Assert.That(controller.MaxZoom, Is.EqualTo(1f / (0.15f * PortraitAspect)).Within(0.001f));
-            Assert.That(controller.MaxZoom, Is.EqualTo(11.85185f).Within(0.001f));
+            // A zoom level divides the frame that fits the whole map depth, so the ceiling is a plain
+            // number: it means the same on another map, another radius or another screen shape. Deriving
+            // it from the viewport aspect made the limit depend on the screen in a way no sentence could
+            // describe, and the aspect entered twice once the visible width was the quantity limited.
+            Assert.That(controller.MaxZoom, Is.EqualTo(12f).Within(0.00001f));
 
             controller.TargetZoom = 1000f;
             Assert.That(controller.TargetZoom, Is.EqualTo(controller.MaxZoom).Within(0.00001f));
 
-            controller.MinVisibleWidthRatio = 0.3f;
-            Assert.That(controller.MaxZoom, Is.EqualTo(1f / (0.3f * PortraitAspect)).Within(0.001f));
-            Assert.That(controller.MaxZoom, Is.LessThan(11.85185f));
+            controller.MaxZoom = 5f;
+            controller.TargetZoom = 1000f;
+            Assert.That(controller.TargetZoom, Is.EqualTo(5f).Within(0.00001f));
 
-            controller.MinVisibleWidthRatio = 0.15f;
+            controller.MaxZoom = 1f;
+            controller.TargetZoom = 1000f;
+            Assert.That(
+                controller.TargetZoom,
+                Is.EqualTo(1f).Within(0.00001f),
+                "a ceiling of 1 is a camera that pans but never zooms");
+
             controller.TargetZoom = 0.5f;
+            Assert.That(controller.TargetZoom, Is.EqualTo(1f).Within(0.00001f));
+        }
+
+        [Test]
+        public void ZoomIsClampedBeforeTheFirstRefresh()
+        {
+            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+
+            // The ceiling no longer waits for a framing to exist, so a zoom written from Awake or from
+            // the inspector cannot sit above the allowed range until the next refresh.
+            controller.Zoom = 1000f;
+
+            Assert.That(controller.Zoom, Is.EqualTo(controller.MaxZoom).Within(0.00001f));
+            Assert.That(controller.TargetZoom, Is.EqualTo(controller.MaxZoom).Within(0.00001f));
+        }
+
+        [Test]
+        public void AnImpossibleMaxZoomIsRefusedInsteadOfBecomingAZeroSize()
+        {
+            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+            controller.MaxZoom = 0f;
+
+            string error;
+            Assert.That(controller.TryRefresh(out error), Is.False);
+            Assert.That(error, Does.Contain("Max zoom"));
+
+            // A zoom written while the ceiling is nonsense stops at the floor rather than at zero.
+            controller.TargetZoom = 1000f;
             Assert.That(controller.TargetZoom, Is.EqualTo(1f).Within(0.00001f));
         }
 

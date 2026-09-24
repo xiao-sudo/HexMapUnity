@@ -28,7 +28,7 @@ namespace HexMap.UnityRuntime
     /// <summary>
     /// Drives a scene <see cref="Camera"/> into a straight-down orthographic view of a
     /// <see cref="HexMapView"/> map, pans it over the plane, and zooms it between a widest level that
-    /// shows every row and a closest level limited by <see cref="MinVisibleWidthRatio"/>.
+    /// shows every row and a closest level of <see cref="MaxZoom"/>.
     /// <para>
     /// The framing comes from <see cref="OrthographicMapFraming"/>. Zoom 1 is the only level that keeps
     /// the whole map depth inside the frame; zooming in is allowed to drop rows, which is what opens up
@@ -64,10 +64,15 @@ namespace HexMap.UnityRuntime
         private static readonly HexCoord HexCoordOrigin = new HexCoord(0, 0);
 
         /// <summary>
-        /// The smallest visible fraction of the map width the zoom clamps to, which sets the closest
-        /// zoom level. Expressed as a fraction so a different map does not need a different number.
+        /// The closest zoom level a component starts with. A zoom level divides the frame that fits the
+        /// whole map depth, so this number means the same thing whatever the map's radius, its cell size
+        /// or the screen: at this level the visible height is <c>mapDepth * ViewMargin / MaxZoom</c>.
+        /// <para>
+        /// About 12 keeps a twelfth of the map depth in frame, which is what the aspect-derived limit it
+        /// replaced gave on the portrait screen this game targets.
+        /// </para>
         /// </summary>
-        public const float DefaultMinVisibleWidthRatio = 0.15f;
+        public const float DefaultMaxZoom = 12f;
 
         [SerializeField]
         private HexMapView m_HexMapView;
@@ -103,8 +108,8 @@ namespace HexMap.UnityRuntime
         private MapPlaneMode m_PlaneMode = MapPlaneMode.FollowMapView;
 
         [SerializeField]
-        [Tooltip("Smallest visible fraction of the map width. Smaller means a closer maximum zoom.")]
-        private float m_MinVisibleWidthRatio = DefaultMinVisibleWidthRatio;
+        [Tooltip("Closest zoom level allowed. Larger means the player can zoom in further.")]
+        private float m_MaxZoom = DefaultMaxZoom;
 
         [SerializeField]
         [Tooltip("Zoom levels per second while easing towards the target zoom.")]
@@ -194,10 +199,16 @@ namespace HexMap.UnityRuntime
             set { m_Height = value; }
         }
 
-        public float MinVisibleWidthRatio
+        /// <summary>
+        /// The closest zoom level allowed. Kept as a plain number rather than derived from the framing:
+        /// a zoom level is relative to the frame that fits the whole map, so it already means the same
+        /// thing on a different map, radius or screen shape, and deriving it only made the limit depend
+        /// on the viewport aspect in a way no single sentence could describe.
+        /// </summary>
+        public float MaxZoom
         {
-            get { return m_MinVisibleWidthRatio; }
-            set { m_MinVisibleWidthRatio = value; }
+            get { return m_MaxZoom; }
+            set { m_MaxZoom = value; }
         }
 
         public float ZoomSpeed
@@ -219,7 +230,8 @@ namespace HexMap.UnityRuntime
             get { return m_Zoom; }
             set
             {
-                m_Zoom = m_HasFraming ? ClampZoom(value) : NormalizeZoom(value);
+                // The ceiling is a plain number now, so it applies before the first refresh too.
+                m_Zoom = ClampZoom(value);
                 m_TargetZoom = m_Zoom;
                 if (m_HasFraming)
                 {
@@ -234,7 +246,7 @@ namespace HexMap.UnityRuntime
         public float TargetZoom
         {
             get { return m_TargetZoom; }
-            set { m_TargetZoom = m_HasFraming ? ClampZoom(value) : NormalizeZoom(value); }
+            set { m_TargetZoom = ClampZoom(value); }
         }
 
         /// <summary>
@@ -243,29 +255,12 @@ namespace HexMap.UnityRuntime
         /// </summary>
         public void SetZoomImmediate(float zoom)
         {
-            m_Zoom = m_HasFraming ? ClampZoom(zoom) : NormalizeZoom(zoom);
+            m_Zoom = ClampZoom(zoom);
             m_TargetZoom = m_Zoom;
 
             if (m_HasFraming)
             {
                 ApplyZoom();
-            }
-        }
-
-        /// <summary>
-        /// The highest zoom level allowed, derived from <see cref="MinVisibleWidthRatio"/>.
-        /// </summary>
-        public float MaxZoom
-        {
-            get
-            {
-                if (!m_HasFraming || m_MinVisibleWidthRatio <= 0f)
-                {
-                    return MinZoom;
-                }
-
-                var limit = 1f / (m_MinVisibleWidthRatio * m_BaseFraming.Aspect);
-                return limit > MinZoom ? limit : MinZoom;
             }
         }
 
@@ -458,6 +453,15 @@ namespace HexMap.UnityRuntime
             if (!IsFinite(m_Height))
             {
                 error = "Camera height must be finite.";
+                return false;
+            }
+
+            // MaxZoom == MinZoom is allowed: that is a camera which pans but never zooms, which is a
+            // sane scene. Anything below the floor is not, and it would otherwise turn into a size of
+            // zero rather than a complaint.
+            if (!IsFinitePositive(m_MaxZoom) || m_MaxZoom < MinZoom)
+            {
+                error = "Max zoom must be finite and at least " + MinZoom + ".";
                 return false;
             }
 
@@ -912,17 +916,11 @@ namespace HexMap.UnityRuntime
                 return MinZoom;
             }
 
-            var max = MaxZoom;
+            // A ceiling that cannot be a zoom level must not become the ceiling: the floor is the safest
+            // answer here, and TryRefresh refuses to frame the camera when the serialized value is bad,
+            // so the mistake is reported rather than quietly turning into a zero size.
+            var max = MaxZoom > MinZoom ? MaxZoom : MinZoom;
             return zoom < MinZoom ? MinZoom : (zoom > max ? max : zoom);
-        }
-
-        /// <summary>
-        /// Guards a zoom written before the framing exists. The upper limit is unknown until then, so
-        /// only the floor and non-finite values are handled here and the ceiling waits for the refresh.
-        /// </summary>
-        private static float NormalizeZoom(float zoom)
-        {
-            return IsFinitePositive(zoom) ? zoom : MinZoom;
         }
 
         private Vector2 ToPlaneCoordinates(Vector3 worldPoint)
