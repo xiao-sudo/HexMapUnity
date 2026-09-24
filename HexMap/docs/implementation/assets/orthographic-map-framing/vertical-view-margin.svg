@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="650" viewBox="0 0 1000 650" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+<rect width="1000" height="650" fill="#ffffff"/>
+<text x="30" y="42" font-size="22" font-weight="bold" fill="#111">OrthographicMapFraming：纵向 ViewMargin 的量化关系</text>
+<text x="30" y="72" font-size="14" fill="#555">纵向 = 平面轴（HexPlane.XZ 时为 +Z）= 屏幕竖直方向。红框 = 取景框（VisibleHeight），蓝框 = 地图沿平面轴的深度（MapDepth）。</text>
+<text x="30" y="96" font-size="14" fill="#555">本例用生产数值：MapDepth = 22，ViewMargin = 1.5 ⇒ 上下各有 (ViewMargin − 1) × MapDepth / 2 = 5.5 个单位的空白。</text>
+<rect x="170" y="130" width="300" height="165" fill="none" stroke="#c83c1e" stroke-width="2" stroke-dasharray="7 4"/>
+<text x="30" y="154" font-size="15" fill="#c83c1e" font-weight="bold">取景框</text>
+<rect x="170" y="130" width="300" height="27.5" fill="#f2f2f2"/>
+<rect x="170" y="267.5" width="300" height="27.5" fill="#f2f2f2"/>
+<rect x="170" y="157.5" width="300" height="110" fill="#eef4fc" stroke="#2860a0" stroke-width="2"/>
+<text x="30" y="217.5" font-size="15" fill="#2860a0" font-weight="bold">地图</text>
+<line x1="505" y1="157.5" x2="505" y2="267.5" stroke="#2860a0" stroke-width="2"/>
+<line x1="470" y1="157.5" x2="505" y2="157.5" stroke="#2860a0" stroke-width="1"/>
+<line x1="470" y1="267.5" x2="505" y2="267.5" stroke="#2860a0" stroke-width="1"/>
+<text x="513" y="175.5" font-size="14" fill="#2860a0">MapDepth = 22</text>
+<line x1="470" y1="143.75" x2="524" y2="143.75" stroke="#666" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="530" y="147.75" font-size="13" fill="#444">空白 = 5.5</text>
+<line x1="470" y1="281.25" x2="524" y2="281.25" stroke="#666" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="530" y="285.25" font-size="13" fill="#444">空白 = 5.5</text>
+<text x="530" y="321" font-size="13" fill="#666">（上下对称，各 = (ViewMargin − 1) × MapDepth / 2）</text>
+<line x1="770" y1="130" x2="770" y2="295" stroke="#c83c1e" stroke-width="2"/>
+<line x1="470" y1="130" x2="770" y2="130" stroke="#c83c1e" stroke-width="1"/>
+<line x1="470" y1="295" x2="770" y2="295" stroke="#c83c1e" stroke-width="1"/>
+<text x="792" y="160" font-size="14" fill="#c83c1e">VisibleHeight = 33</text>
+<text x="792" y="182" font-size="13" fill="#c83c1e">= MapDepth × ViewMargin</text>
+<text x="30" y="510" font-size="14" fill="#333">留白总量 = 5.5 + 5.5 = 11 = MapDepth × (ViewMargin − 1)，占地图深度的 (ViewMargin − 1) = 50%。</text>
+<text x="30" y="538" font-size="14" fill="#333">BaseOrthographicSize = MapHalfDepth × ViewMargin = 11 × 1.5 = 16.5（Zoom = 1 时的半高）</text>
+<text x="30" y="566" font-size="14" fill="#333">OrthographicSize = BaseOrthographicSize / Zoom　⇒　Zoom = 1 时 VisibleHeight = 2 × 16.5 = 33</text>
+<text x="30" y="594" font-size="14" fill="#333">VisibleHeight − MapDepth = MapDepth × (ViewMargin − 1) = 11 ≥ 0　⇒　纵向永远装得下整段深度，不存在被裁掉的行</text>
+<text x="30" y="622" font-size="13" fill="#777">另外：Zoom &gt; ViewMargin 之后才开始出现上下丢行；ViewMargin = 1 时上下无留白，Zoom = 1 恰好不丢行。</text>
+</svg>

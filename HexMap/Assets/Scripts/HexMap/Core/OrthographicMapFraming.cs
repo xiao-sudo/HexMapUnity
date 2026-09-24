@@ -4,98 +4,133 @@ using UnityEngine;
 namespace HexMap.Core
 {
     /// <summary>
-    /// Immutable framing snapshot for an orthographic camera that looks straight down
-    /// at a hex map's center line.
+    /// 正交相机的取景快照（不可变）。该相机正对六边形地图的中心线向下俯视。
     /// <para>
-    /// The camera can only pan along the map's local +X axis, so "up" on screen is the
-    /// map's local +Z axis. Both the plane (<see cref="HexPlane"/>) and the orientation
-    /// (<see cref="HexOrientation"/>) are inputs. The plane only decides which world axis
-    /// the depth lies on; the orientation decides which of the two hexagon extents is the
-    /// depth. This type performs no plane or orientation branching beyond that swap.
+    /// 相机只能沿地图的局部 +X 轴平移，因此屏幕上的“上方”对应地图的局部 +Z 轴。
+    /// 平面（<see cref="HexPlane"/>）与朝向（<see cref="HexOrientation"/>）都是输入参数：
+    /// 平面只决定深度落在哪个世界轴上；朝向则决定六边形两个尺寸中的哪一个作为深度。
+    /// 除了这处互换之外，本类型不再对平面或朝向做任何分支判断。
     /// </para>
     /// <para>
-    /// The envelope is the map's outer hexagon <em>including the outermost cells' vertices</em>:
-    /// the center lattice spread plus one cell half profile. Deriving it from the center lattice
-    /// alone would clip the outermost cells' tips.
+    /// 包络是地图的外接六边形，<em>包含最外层格子的顶点</em>：即中心点阵的跨度加上
+    /// 一个格子的半轮廓。若仅由中心点阵推导，最外层格子的尖端会被裁掉。
     /// </para>
     /// <para>
-    /// The visible height is always at least the whole map depth, so every row is always
-    /// inside the frame. The visible width is derived from the viewport aspect ratio and
-    /// is not independently configurable, so some columns may fall outside the frame and
-    /// that is what makes panning meaningful.
+    /// 可见高度始终不小于整张地图的深度，因此每一行都始终位于取景框内。可见宽度由视口
+    /// 宽高比推导而来，无法单独配置，因此部分列可能落在取景框之外——这正是平移存在的意义。
     /// </para>
+    /// <para>
+    /// 变量关系分横纵两个方向看。先看<em>横向</em>（相机能左右平移的那个方向：向右 = 地图局部 +X = 屏幕向右）：
+    /// <c>MapHalfWidth</c> / <c>MapHalfDepth</c> 是地图外包络的半宽与半深，只由布局与地图半径决定，
+    /// 与缩放、宽高比无关。相机可移动的范围由地图与取景框的宽度差决定：
+    /// <c>MovableHalfRange = max(0, MapHalfWidth - VisibleWidth / 2)</c>，
+    /// 于是 <c>MinOffset = -MovableHalfRange</c>、<c>MaxOffset = +MovableHalfRange</c>；
+    /// 偏移 0 表示相机正对地图中心 <c>Origin</c>。
+    /// </para>
+    /// <para>
+    /// 取景框是“屏幕能看到的范围”（宽 = <c>VisibleWidth</c>），只有横向会裁掉地图：
+    /// 偏移为 <c>MaxOffset</c> 时取景框左边缘正好贴住地图左边缘，为 <c>MinOffset</c> 时右边缘贴住地图右边缘，
+    /// 再往外推就会露出一段没有地图的空白，因此被 <see cref="ClampOffset"/> 夹回范围内。
+    /// 如果 <c>VisibleWidth</c> ≥ <c>MapWidth</c>（例如 Zoom = 1 时），可移动范围为零，相机被锁在地图中心。
+    /// </para>
+    /// <para>
+    /// 再看<em>纵向</em>（平面轴方向，<c>HexPlane.XZ</c> 时为地图局部 +Z，<c>HexPlane.XY</c> 时为 +Y）：
+    /// <c>VisibleHeight = 2 × BaseOrthographicSize / Zoom</c>，而 <c>BaseOrthographicSize = MapHalfDepth × ViewMargin</c>，
+    /// 所以在 Zoom = 1 时可见高度恰好是地图深度乘以 <c>ViewMargin</c>，地图上下边缘与取景框上下边缘之间的
+    /// 空隙就是 <c>ViewMargin</c> 带来的留白。也正因为可见高度永远不小于地图深度，纵向不存在被裁掉的行，
+    /// 不需要上下平移——只有横向的 <c>MinOffset</c> / <c>MaxOffset</c> 有意义。
+    /// </para>
+    /// <para>
+    /// 各量的依赖关系可以按下面的顺序读：
+    /// <c>MapWidth = 2 × MapHalfWidth</c>、<c>MapDepth = 2 × MapHalfDepth</c> 只取决于地图；
+    /// <c>VisibleHeight = 2 × OrthographicSize</c>、<c>VisibleWidth = VisibleHeight × Aspect</c> 由视图尺寸推导；
+    /// <c>OrthographicSize = BaseOrthographicSize / Zoom</c> 由缩放档位决定（<c>Zoom</c> 是绝对档位而非倍率，
+    /// 因此重复应用不会累积）。也就是说：缩放变 → 可见尺寸变 → 可移动范围变，而地图外包络始终不变。
+    /// </para>
+    /// <para>
+    /// 对照图见 <c>docs/implementation/orthographic-map-framing-diagram.md</c>（含横向平移与纵向 ViewMargin 两张示意图）。
+    /// </para>
+    /// <para>
+    /// 由此得到几条可以直接背下来的推论：
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description><c>MapHalfWidth</c> / <c>MapHalfDepth</c> 只来自地图外包络，与 <c>Zoom</c>、<c>Aspect</c> 无关，是“地图本身有多大”。</description></item>
+    /// <item><description><c>VisibleWidth</c> = <c>VisibleHeight</c> × <c>Aspect</c>，不是独立参数；屏幕越宽，取景框越宽，越可能不需要平移。</description></item>
+    /// <item><description><c>ViewMargin</c> 只作用在深度方向，使取景框纵向始终包住地图，因此永远不需要上下平移，只需左右平移。</description></item>
+    /// <item><description><c>Zoom</c> 越大：取景框在世界上越小、屏幕上的格子越大、<c>VisibleWidth</c> 越窄，可移动范围越大；<c>Zoom</c> 是绝对档位而非倍率，1 表示“看全深度”（见 <see cref="DefaultZoom"/>）。</description></item>
+    /// <item><description><c>MinOffset</c> / <c>MaxOffset</c> 是<em>相机中心</em>允许的偏移范围（基准是地图中心，偏移 0 即相机停在 <c>Origin</c>），不是地图上的坐标；两者关于 0 对称，端点对应“取景框边缘正好贴住地图边缘”。</description></item>
+    /// <item><description>当 <c>VisibleWidth</c> ≥ <c>MapWidth</c> 时 <c>MovableHalfRange</c> = 0（见 <see cref="IsLockedToCenter"/>），相机被锁在地图中心，拖拽无效。</description></item>
+    /// </list>
     /// </summary>
     public readonly struct OrthographicMapFraming
     {
         /// <summary>
-        /// The smallest view margin that still keeps every row inside the frame.
+        /// 仍能让每一行都留在取景框内的最小视图边距。
         /// </summary>
         public const float MinimumViewMargin = 1f;
 
         /// <summary>
-        /// The zoom level at which the framing is created: the map's whole depth fits the frame.
+        /// 创建取景时使用的缩放级别：地图的整个深度刚好放入取景框。
         /// </summary>
         public const float DefaultZoom = 1f;
 
         /// <summary>
-        /// The map's outer envelope half extent along the local X axis: the axis the camera pans on.
+        /// 地图外包络沿局部 X 轴的半宽：即相机平移所沿的轴。
         /// </summary>
         public float MapHalfWidth { get; }
 
         /// <summary>
-        /// The map's outer envelope half extent along the screen's vertical axis.
+        /// 地图外包络沿屏幕竖直方向的半深度。
         /// </summary>
         public float MapHalfDepth { get; }
 
         /// <summary>
-        /// How much of the map the frame shows. 1 is the whole depth leaving the view margin free,
-        /// and larger values zoom in. Zoom is the only input besides the aspect ratio that changes
-        /// the visible size; the map envelope never depends on it.
+        /// 取景框显示地图的比例。1 表示显示整个深度并留出视图边距，值越大则越放大。
+        /// 除宽高比之外，缩放是唯一会改变可见尺寸的输入；地图包络从不依赖它。
         /// </summary>
         public float Zoom { get; }
 
         /// <summary>
-        /// The empty space this framing leaves around the map's depth. Kept so a zoom change can
-        /// recompute the size without the caller repeating its inputs.
+        /// 本次取景在地图深度四周留出的空白。保留它是为了让缩放变化能在不要求调用方
+        /// 重复提供输入的情况下重新计算尺寸。
         /// </summary>
         public float ViewMargin { get; }
 
         /// <summary>
-        /// The viewport aspect ratio this framing was built for. Kept so a zoom change can recompute
-        /// the visible width. The aspect ratio is never configurable through this type.
+        /// 构建本次取景所针对的视口宽高比。保留它是为了让缩放变化能重新计算可见宽度。
+        /// 宽高比永远不能通过本类型配置。
         /// </summary>
         public float Aspect { get; }
 
         /// <summary>
-        /// The visible half height at zoom 1, which is the map half depth times the view margin.
-        /// Every zoom is measured against this value rather than against the current one, so
-        /// applying a zoom repeatedly cannot accumulate.
+        /// 缩放为 1 时的可见半高，等于地图半深度乘以视图边距。
+        /// 所有缩放都以该值为基准而非以当前值换算，因此重复应用缩放不会产生累积误差。
         /// </summary>
         public float BaseOrthographicSize { get; }
 
         /// <summary>
-        /// The map's outer envelope center in layout local space (the center lattice is centered
-        /// on the layout origin). This is where the camera sits when the offset is zero.
+        /// 地图外包络中心在布局局部空间中的位置（中心点阵以布局原点为中心）。
+        /// 偏移为零时相机就停在这里。
         /// </summary>
         public Vector3 Origin { get; }
 
         /// <summary>
-        /// The <c>Camera.orthographicSize</c> that keeps every row inside the frame.
+        /// 能让每一行都留在取景框内的 <c>Camera.orthographicSize</c>。
         /// </summary>
         public float OrthographicSize { get; }
 
         /// <summary>
-        /// The world height covered by the frame. Always at least <c>2 * MapHalfDepth</c>.
+        /// 取景框覆盖的世界坐标高度。始终不小于 <c>2 * MapHalfDepth</c>。
         /// </summary>
         public float VisibleHeight { get; }
 
         /// <summary>
-        /// The world width covered by the frame. Not independently configurable.
+        /// 取景框覆盖的世界坐标宽度。不可单独配置。
         /// </summary>
         public float VisibleWidth { get; }
 
         /// <summary>
-        /// The map's full width along the pan axis.
+        /// 地图沿平移轴方向的完整宽度。
         /// </summary>
         public float MapWidth
         {
@@ -103,7 +138,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// The map's full depth along the screen's vertical axis.
+        /// 地图沿屏幕竖直方向的完整深度。
         /// </summary>
         public float MapDepth
         {
@@ -111,8 +146,8 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// How far the offset may travel from the center in either direction.
-        /// Zero when the frame is at least as wide as the map, in which case the camera is locked to the center.
+        /// 偏移量在任一方向上离中心可移动的最大距离。
+        /// 当取景框宽度不小于地图宽度时为零，此时相机被锁定在中心。
         /// </summary>
         public float MovableHalfRange
         {
@@ -124,7 +159,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// The smallest allowed offset along the map's local +X axis.
+        /// 沿地图局部 +X 轴允许的最小偏移。
         /// </summary>
         public float MinOffset
         {
@@ -132,7 +167,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// The largest allowed offset along the map's local +X axis.
+        /// 沿地图局部 +X 轴允许的最大偏移。
         /// </summary>
         public float MaxOffset
         {
@@ -140,7 +175,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// True when the frame is at least as wide as the map, so no panning is possible.
+        /// 取景框宽度不小于地图宽度、因而无法平移时为 true。
         /// </summary>
         public bool IsLockedToCenter
         {
@@ -148,8 +183,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// True when the frame covers every column of the map. A wide viewport makes this happen;
-        /// it is geometry, not a defect.
+        /// 取景框覆盖地图所有列时为 true。视口较宽时就会如此；这是几何结果，不是缺陷。
         /// </summary>
         public bool ShowsEveryColumn
         {
@@ -178,10 +212,9 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Returns the same map seen at another zoom level. The envelope, origin, view margin and
-        /// aspect ratio are untouched; only the visible size and everything derived from it change.
-        /// Zoom 1 reproduces this framing exactly, and zoom is absolute rather than a factor, so
-        /// applying it twice cannot accumulate.
+        /// 返回同一张地图在另一缩放级别下的取景结果。包络、原点、视图边距与宽高比保持不变，
+        /// 只有可见尺寸及其派生值发生变化。缩放为 1 时精确复现当前取景；缩放是绝对级别而非
+        /// 倍率，因此重复应用不会产生累积误差。
         /// </summary>
         public OrthographicMapFraming WithZoom(float zoom)
         {
@@ -201,7 +234,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Returns the same map seen at another zoom level, reporting an invalid zoom instead of throwing.
+        /// 返回同一张地图在另一缩放级别下的取景结果；缩放非法时通过返回值报告，而不是抛出异常。
         /// </summary>
         public bool TryWithZoom(float zoom, out OrthographicMapFraming framing, out string error)
         {
@@ -219,7 +252,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Creates a framing snapshot, throwing when the inputs cannot describe a frame.
+        /// 创建取景快照；当输入无法描述一个取景框时抛出异常。
         /// </summary>
         public static OrthographicMapFraming Create(
             HexLayout layout,
@@ -228,8 +261,8 @@ namespace HexMap.Core
             float aspect,
             float zoom = DefaultZoom)
         {
-            // Validate the zoom here rather than letting TryCreate fold it into a layout error, so a
-            // bad zoom reports the same exception type and parameter name as WithZoom does.
+            // 在这里校验 zoom，而不是让 TryCreate 把它归入布局错误，这样非法缩放上报的
+            // 异常类型和参数名与 WithZoom 保持一致。
             if (!IsFinitePositive(zoom))
             {
                 throw new ArgumentOutOfRangeException(nameof(zoom), zoom, "Zoom must be positive and finite.");
@@ -246,7 +279,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Creates a framing snapshot at zoom 1, which is the level where the whole map depth fits.
+        /// 以缩放 1 创建取景快照，该级别下整张地图的深度刚好放入取景框。
         /// </summary>
         public static bool TryCreate(
             HexLayout layout,
@@ -260,7 +293,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Creates a framing snapshot at a zoom level, reporting invalid inputs instead of throwing.
+        /// 在指定缩放级别下创建取景快照；输入非法时通过返回值报告，而不是抛出异常。
         /// </summary>
         public static bool TryCreate(
             HexLayout layout,
@@ -320,24 +353,24 @@ namespace HexMap.Core
             var secondaryScale = layout.SecondaryScale;
             var radius = mapRadius;
 
-            // Cell profile: the half extents of one hexagon's convex hull. The mesh applies the
-            // secondary scale to the in-plane component, so the two extents are not equal.
+            // 格子轮廓：单个六边形凸包的半尺寸。网格会对平面内分量应用次级缩放，
+            // 因此两个方向的尺寸并不相等。
             float cellAxisExtent;
             float cellSecondaryExtent;
             if (layout.Orientation == HexOrientation.Pointy)
             {
-                // Vertices sit at 30 + 60k degrees: flat sides face +-X, points face +-plane.
+                // 顶点位于 30 + 60k 度：平边朝向 ±X，尖角朝向 ±平面方向。
                 cellAxisExtent = outerRadius * Mathf.Sqrt(3f) * 0.5f;
                 cellSecondaryExtent = outerRadius * secondaryScale;
             }
             else
             {
-                // Vertices sit at 60k degrees: points face +-X, flat sides face +-plane.
+                // 顶点位于 60k 度：尖角朝向 ±X，平边朝向 ±平面方向。
                 cellAxisExtent = outerRadius;
                 cellSecondaryExtent = outerRadius * Mathf.Sqrt(3f) * 0.5f * secondaryScale;
             }
 
-            // Center lattice spread: from the origin hex to the outermost ring's extreme hex.
+            // 中心点阵跨度：从原点格到最外层环上最远的格子。
             float centerAxisExtent;
             float centerSecondaryExtent;
             if (layout.Orientation == HexOrientation.Pointy)
@@ -354,9 +387,9 @@ namespace HexMap.Core
             var mapHalfWidth = centerAxisExtent + cellAxisExtent;
             var mapHalfDepth = centerSecondaryExtent + cellSecondaryExtent;
 
-            // Camera.orthographicSize is the half height, so "every row inside the frame" means
-            // size >= mapHalfDepth at zoom 1. The size is derived from this base and the zoom in the
-            // constructor, so a zoom change never has to know about the margin again.
+            // Camera.orthographicSize 表示半高，因此“每一行都在取景框内”意味着在缩放 1 时
+            // size >= mapHalfDepth。构造函数由该基准值与缩放推导出实际大小，
+            // 所以缩放变化无需再关心视图边距。
             var baseOrthographicSize = mapHalfDepth * viewMargin;
 
             framing = new OrthographicMapFraming(
@@ -372,8 +405,8 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Clamps an offset into <see cref="MinOffset"/>..<see cref="MaxOffset"/>.
-        /// A non-finite offset maps to zero.
+        /// 将偏移量限制在 <see cref="MinOffset"/>..<see cref="MaxOffset"/> 范围内。
+        /// 非有限值映射为 0。
         /// </summary>
         public float ClampOffset(float offset)
         {
@@ -396,7 +429,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Clamps an offset, reporting a non-finite input instead of silently replacing it.
+        /// 限制偏移量；当输入为非有限值时通过返回值报告，而不是静默替换。
         /// </summary>
         public bool TrySetOffset(float offset, out float clampedOffset, out string error)
         {
@@ -413,7 +446,7 @@ namespace HexMap.Core
         }
 
         /// <summary>
-        /// Maps an offset to 0..1 across the movable range. Returns 0.5 when the camera is locked to the center.
+        /// 将偏移量映射到可移动范围内的 0..1。相机锁定在中心时返回 0.5。
         /// </summary>
         public float NormalizeOffset(float offset)
         {

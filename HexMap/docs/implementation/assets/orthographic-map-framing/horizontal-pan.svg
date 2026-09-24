@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1000" viewBox="0 0 1200 1000" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+<rect width="1200" height="1000" fill="#ffffff"/>
+<text x="30" y="42" font-size="22" font-weight="bold" fill="#111">OrthographicMapFraming：横向平移关系（世界空间俯视图）</text>
+<text x="30" y="70" font-size="14" fill="#555">向右 = 地图局部 +X = 屏幕向右。蓝框 = 地图外包络，红框 = 取景框（= 屏幕可见范围），绿条 = 屏幕上真正能看到的地图。</text>
+<line x1="140" y1="118" x2="940" y2="118" stroke="#888" stroke-width="1" stroke-dasharray="4 3"/>
+<line x1="140" y1="112" x2="140" y2="124" stroke="#888" stroke-width="1"/>
+<text x="140" y="104" font-size="14" fill="#666" text-anchor="middle">0</text>
+<line x1="240" y1="112" x2="240" y2="124" stroke="#888" stroke-width="1"/>
+<text x="240" y="104" font-size="14" fill="#666" text-anchor="middle">5</text>
+<line x1="340" y1="112" x2="340" y2="124" stroke="#888" stroke-width="1"/>
+<text x="340" y="104" font-size="14" fill="#666" text-anchor="middle">10</text>
+<line x1="440" y1="112" x2="440" y2="124" stroke="#888" stroke-width="1"/>
+<text x="440" y="104" font-size="14" fill="#666" text-anchor="middle">15</text>
+<line x1="540" y1="112" x2="540" y2="124" stroke="#888" stroke-width="1"/>
+<text x="540" y="104" font-size="14" fill="#666" text-anchor="middle">20</text>
+<line x1="640" y1="112" x2="640" y2="124" stroke="#888" stroke-width="1"/>
+<text x="640" y="104" font-size="14" fill="#666" text-anchor="middle">25</text>
+<line x1="740" y1="112" x2="740" y2="124" stroke="#888" stroke-width="1"/>
+<text x="740" y="104" font-size="14" fill="#666" text-anchor="middle">30</text>
+<line x1="840" y1="112" x2="840" y2="124" stroke="#888" stroke-width="1"/>
+<text x="840" y="104" font-size="14" fill="#666" text-anchor="middle">35</text>
+<line x1="940" y1="112" x2="940" y2="124" stroke="#888" stroke-width="1"/>
+<text x="940" y="104" font-size="14" fill="#666" text-anchor="middle">40</text>
+<text x="956" y="123" font-size="13" fill="#888">世界坐标（单位）</text>
+<text x="30" y="160" font-size="17" font-weight="bold" fill="#111">① offset = MinOffset = -8（相机移到允许的最左端）</text>
+<rect x="140" y="180" width="800" height="44" fill="#eef4fc" stroke="#2860a0" stroke-width="2"/>
+<text x="954" y="208" font-size="14" fill="#2860a0">地图外包络　MapWidth = 40</text>
+<rect x="140" y="254" width="480" height="44" fill="none" stroke="#c83c1e" stroke-width="2" stroke-dasharray="7 4"/>
+<text x="140" y="246" font-size="14" fill="#c83c1e">取景框　VisibleWidth = 24</text>
+<rect x="140" y="310" width="480" height="12" fill="#1e8c46"/>
+<text x="380" y="342" font-size="13" fill="#1e8c46" text-anchor="middle">屏幕上可见</text>
+<text x="934" y="342" font-size="13" fill="#777" text-anchor="end">看不到</text>
+<text x="30" y="376" font-size="13" fill="#555">取景框右边缘贴住地图右边缘：再往左推，取景框右边缘就会越过地图右边缘并露白，所以被夹住。</text>
+<text x="30" y="400" font-size="17" font-weight="bold" fill="#111">② offset = 0（居中）</text>
+<rect x="140" y="420" width="800" height="44" fill="#eef4fc" stroke="#2860a0" stroke-width="2"/>
+<text x="954" y="448" font-size="14" fill="#2860a0">地图外包络　MapWidth = 40</text>
+<rect x="300" y="494" width="480" height="44" fill="none" stroke="#c83c1e" stroke-width="2" stroke-dasharray="7 4"/>
+<text x="300" y="486" font-size="14" fill="#c83c1e">取景框　VisibleWidth = 24</text>
+<rect x="300" y="550" width="480" height="12" fill="#1e8c46"/>
+<text x="540" y="582" font-size="13" fill="#1e8c46" text-anchor="middle">屏幕上可见</text>
+<text x="146" y="582" font-size="13" fill="#777">看不到</text>
+<text x="934" y="582" font-size="13" fill="#777" text-anchor="end">看不到</text>
+<text x="30" y="616" font-size="13" fill="#555">地图左右两端各有 8 个单位落在取景框之外，屏幕上只能看到中间 24 个单位。</text>
+<text x="30" y="640" font-size="17" font-weight="bold" fill="#111">③ offset = MaxOffset = +8（相机移到允许的最右端）</text>
+<rect x="140" y="660" width="800" height="44" fill="#eef4fc" stroke="#2860a0" stroke-width="2"/>
+<text x="954" y="688" font-size="14" fill="#2860a0">地图外包络　MapWidth = 40</text>
+<rect x="460" y="734" width="480" height="44" fill="none" stroke="#c83c1e" stroke-width="2" stroke-dasharray="7 4"/>
+<text x="460" y="726" font-size="14" fill="#c83c1e">取景框　VisibleWidth = 24</text>
+<rect x="460" y="790" width="480" height="12" fill="#1e8c46"/>
+<text x="700" y="822" font-size="13" fill="#1e8c46" text-anchor="middle">屏幕上可见</text>
+<text x="146" y="822" font-size="13" fill="#777">看不到</text>
+<text x="30" y="856" font-size="13" fill="#555">取景框左边缘贴住地图左边缘（与①左右对称）。</text>
+<text x="30" y="938" font-size="14" fill="#333">MovableHalfRange = max(0, MapHalfWidth − VisibleWidth / 2) = max(0, 20 − 12) = 8　⇒　MinOffset = −8，MaxOffset = +8</text>
+<text x="30" y="966" font-size="13" fill="#777">注：Zoom = 1 时取景框比地图宽（VisibleWidth ≥ MapWidth），可移动范围为 0，相机被锁在地图中心，此时拖拽无效。</text>
+</svg>
