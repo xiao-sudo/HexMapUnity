@@ -210,6 +210,8 @@ public sealed class HexMapRenderConfig
 
 SRP Batcher 是架构约束，但当前项目尚未完成最终 Shader 和 SRP Pipeline 的选择。当前实现只能保证不主动破坏未来的批处理路径，不能在 Shader 未确定时宣称最终进入 SRP Batcher。
 
+Unity 的透明物体排序键、renderQueue / sorting layer / sorting order 的实际应用顺序，以及 SRP Batcher、GPU Instancing、静态批处理三者的兼容性与优先级，已在 [`docs/reference/unity-render-order-rules.md`](../reference/unity-render-order-rules.md) 中单独记录并附原始文档链接。涉及"某组几何要渲染在另一组之上且不破坏合批"的决策时以该文为准。
+
 Renderer 必须遵守这些前置条件：
 
 - 不为每个 Hex 创建独立 Material；
