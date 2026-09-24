@@ -767,14 +767,16 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// Rebuilds the framing for the current zoom, keeps the center by re-clamping it, and writes the
-        /// camera. This is the single place a zoom change flows through.
-        /// </summary>
-        /// <summary>
         /// True when nothing the base framing depends on has changed since the last refresh, so the base
         /// framing can be reused. Deliberately lenient: a false positive only costs one extra rebuild, but a
         /// false negative silently ignores a configuration change, so every input that feeds the base
         /// framing is compared here.
+        /// <para>
+        /// The layout is compared as a snapshot (<see cref="HexLayout.Equals(HexLayout)"/> identifies the
+        /// build it came from), so a rebuilt map is detected without comparing its float fields. The scalars
+        /// use <see cref="Mathf.Approximately"/> so that a difference in the last bits alone counts as
+        /// unchanged; genuine edits are far larger than that tolerance.
+        /// </para>
         /// </summary>
         private bool IsCameraConfigurationUnchanged()
         {
@@ -795,19 +797,12 @@ namespace HexMap.UnityRuntime
 
             // Scalars matter as much as the layout: the view margin and the aspect ratio both change the
             // base framing, and skipping them let a bad margin through on a repeat refresh.
-            return m_AppliedRadius == m_HexMapView.Radius
-                && m_AppliedViewMargin == m_ViewMargin
-                && m_AppliedAspect == ResolveAspect()
-                && LayoutEquals(m_AppliedLayout, m_HexMapView.Layout);
-        }
-
-        private static bool LayoutEquals(HexLayout left, HexLayout right)
-        {
-            return left.Orientation == right.Orientation
-                && left.Plane == right.Plane
-                && left.OuterRadius == right.OuterRadius
-                && left.SecondaryScale == right.SecondaryScale
-                && left.Origin == right.Origin;
+            // Approximately rather than == so that a value which only differs in its last bits counts as
+            // unchanged, which is the cheaper and visually identical choice for a rebuild this small.
+            return Mathf.Approximately(m_AppliedRadius, m_HexMapView.Radius)
+                && Mathf.Approximately(m_AppliedViewMargin, m_ViewMargin)
+                && Mathf.Approximately(m_AppliedAspect, m_Camera.aspect)
+                && m_AppliedLayout.Equals(m_HexMapView.Layout);
         }
 
         /// <summary>

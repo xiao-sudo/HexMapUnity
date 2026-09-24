@@ -199,5 +199,29 @@ namespace HexMap.Core.Tests
             Assert.Throws<InvalidOperationException>(
                 () => layout.WorldToHex(Vector3.zero));
         }
+
+        [Test]
+        public void EqualityIdentifiesTheSnapshotRatherThanTheValues()
+        {
+            var layout = new HexLayout(HexOrientation.Pointy, HexPlane.XZ, 1f, Vector3.zero, 0.9f);
+            var copy = layout;
+
+            // A copy of the same snapshot stays equal.
+            Assert.That(copy.Equals(layout), Is.True);
+            Assert.That(copy == layout, Is.True);
+            Assert.That(copy != layout, Is.False);
+            Assert.That(copy.GetHashCode(), Is.EqualTo(layout.GetHashCode()));
+
+            // The same numbers built separately are a different snapshot, which is what lets a caller
+            // detect a rebuild without comparing float fields.
+            var rebuilt = new HexLayout(HexOrientation.Pointy, HexPlane.XZ, 1f, Vector3.zero, 0.9f);
+            Assert.That(rebuilt.Equals(layout), Is.False);
+            Assert.That(rebuilt == layout, Is.False);
+            Assert.That(rebuilt != layout, Is.True);
+
+            // default(HexLayout) never equals a constructed layout.
+            Assert.That(default(HexLayout).Equals(layout), Is.False);
+            Assert.That(layout.Equals(default(HexLayout)), Is.False);
+        }
     }
 }

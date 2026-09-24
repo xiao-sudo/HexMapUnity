@@ -15,8 +15,26 @@ namespace HexMap.Core
         XZ = 1
     }
 
-    public readonly struct HexLayout
+    /// <summary>
+    /// The coordinate maths for a hex map: how a <see cref="HexCoord"/> maps to map local space and back.
+    /// <para>
+    /// This is an immutable snapshot. <see cref="Equals(HexLayout)"/> identifies <em>the same snapshot</em>
+    /// rather than the same values: every construction takes the next value of a static counter, so a copy
+    /// of a layout equals its original, while a separately constructed layout with identical numbers does
+    /// not. Callers that need to detect "the layout changed" should therefore compare snapshots instead of
+    /// fields, which also avoids depending on float bit patterns.
+    /// </para>
+    /// </summary>
+    public readonly struct HexLayout : IEquatable<HexLayout>
     {
+        private static int s_NextVersion = 1;
+
+        /// <summary>
+        /// The snapshot identity, assigned on construction. Zero means the layout was never constructed,
+        /// which is what <c>default(HexLayout)</c> carries.
+        /// </summary>
+        private readonly int m_Version;
+
         public HexLayout(
             HexOrientation orientation,
             HexPlane plane,
@@ -54,6 +72,10 @@ namespace HexMap.Core
             OuterRadius = outerRadius;
             SecondaryScale = secondaryScale;
             Origin = origin;
+
+            // A plain increment: layouts are only built on the main thread, and the counter starts at one
+            // so that no constructed layout can be mistaken for default(HexLayout).
+            m_Version = s_NextVersion++;
         }
 
         public HexOrientation Orientation { get; }
@@ -61,6 +83,35 @@ namespace HexMap.Core
         public float OuterRadius { get; }
         public float SecondaryScale { get; }
         public Vector3 Origin { get; }
+
+        /// <summary>
+        /// True when both sides are the same snapshot, which is what a caller wants when it asks whether a
+        /// layout it retained is still the one the map is using.
+        /// </summary>
+        public bool Equals(HexLayout other)
+        {
+            return m_Version == other.m_Version;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is HexLayout other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return m_Version;
+        }
+
+        public static bool operator ==(HexLayout left, HexLayout right)
+        {
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(HexLayout left, HexLayout right)
+        {
+            return !left.Equals(right);
+        }
 
         public Vector3 HexToWorld(HexCoord coordinate)
         {
