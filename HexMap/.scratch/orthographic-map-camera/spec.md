@@ -300,6 +300,8 @@ zoom 上限       = 1 / (m_MinVisibleWidthRatio × aspect)
 
 ### 6.4 状态模型与优先级（本设计唯一容易出 bug 的地方）
 
+> **后续修正（实现之后）：本节的状态模型已被简化。** 相机不再保存 `m_Focus` / `m_HasFocus`，`m_IsGestureActive` 与 `BeginGesture` / `EndGesture` 也一并删除。原因：唯一需要"焦点"的地方是"改档位的同时对准某点"（`MapViewModeSwitcher.FocusIfRequested`），而把对准的目标**随调用传递**（新增 `TryZoomToPoint(zoom, worldPoint)`，内部先定框、再对准）之后，既不需要常驻状态，也不需要"锚点 vs 焦点"的仲裁。**下面的状态表与优先级规则保留为当时的决策记录**，现行契约见 `docs/implementation/orthographic-map-camera-internals.md` §4.1 / §4.4 / §5.1。
+
 ```
 m_DesiredCenter : Vector2   相机"想"对准的中心（局部 +X / +Z）
 m_HasCenter     : bool      是否已被用户/焦点设置过（零向量与"没设过"不可区分，必须单独记）

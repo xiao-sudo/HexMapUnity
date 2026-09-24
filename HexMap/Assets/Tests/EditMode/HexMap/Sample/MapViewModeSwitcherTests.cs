@@ -152,7 +152,7 @@ namespace HexMap.Sample.Tests
         /// </summary>
         private static string FocusFailureMessage()
         {
-            return "MapViewModeSwitcher could not focus the map view: Refresh the camera before focusing.";
+            return "MapViewModeSwitcher could not focus the map view: Refresh the camera before zooming to a point.";
         }
 
         private static string SharedCameraMessage()
@@ -368,8 +368,9 @@ namespace HexMap.Sample.Tests
 
             m_Switcher.EnterTopDown();
 
-            Assert.That(mapCamera.HasFocus, Is.True);
-            Assert.That(mapCamera.Focus, Is.EqualTo(new Vector2(2f, 1f)), "the XZ plane reads x and z");
+            // The aim is checked through the center rather than through any remembered request: the
+            // camera keeps no focus state, so where it looks is the whole answer.
+            Assert.That(mapCamera.Center, Is.EqualTo(new Vector2(2f, 1f)), "the XZ plane reads x and z");
             Assert.That(mapCamera.Zoom, Is.EqualTo(4f).Within(0.0001f));
         }
 
@@ -383,7 +384,7 @@ namespace HexMap.Sample.Tests
 
             m_Switcher.EnterTopDown();
 
-            Assert.That(mapCamera.HasFocus, Is.False);
+            Assert.That(mapCamera.Center, Is.EqualTo(Vector2.zero));
             Assert.That(mapCamera.Zoom, Is.EqualTo(2f).Within(0.0001f));
         }
 

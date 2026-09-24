@@ -71,3 +71,10 @@
 - 另一个修掉的状态坑：新组件的 `m_DesiredCenter` 默认是 `(0,0)`，与"用户拖到正中"不可区分，会让 `TryRefresh` 把用户拖回的位置重置掉。加了 `m_HasCenter` 单独记录。
 - `Zoom` / `TargetZoom` 的 setter 在**没有 framing 时不做上限夹取**（上限依赖 aspect，此时还不知道），否则编辑器里预设的 zoom 会被静默夹成 1。
 - **后续修正：上限从"最小可视宽比例"改成了绝对档位 `MaxZoom`（默认 `12`）**，上面这条特例随之删除（上限不再依赖 framing，setter 一律夹取）。原因：`1 / (ratio × aspect)` 与它的名字不符——aspect 以除法进入，展开后可视宽里 aspect 出现两次，竖屏下实际最小可视宽是地图宽的 4.1% 而不是名字所称的 15%（按名字反推应得 `MaxZoom = 3.26`，实现给了 `11.85`）。而 zoom 本身就是"基础档位 / zoom"，绝对档位已经与地图尺寸、半径、屏幕无关，比例参数买不到额外的东西。推导与数值见 `docs/implementation/orthographic-map-camera-internals.md` §4.6；spec 6.1 的表格按历史记录保留，不再改写。
+- **后续修正：焦点状态整块删除**。`m_Focus` / `m_HasFocus`、`AlignCenterToFocus`、`Focus` / `HasFocus` getter、`ClearFocus`，以及为仲裁"锚点 vs 焦点"而存在的 `m_IsGestureActive` / `IsGestureActive` / `BeginGesture` / `EndGesture` 与本票修掉的那个 save/restore hack（`:659-662`）全部删除。取而代之的是把对准目标**随调用传递**：
+  - `FocusOn` / `FocusOnWorld` 变成一次性请求：立即按**当前**范围夹取中心，**不记住**；
+  - 新增 `TryZoomToPoint(zoom, worldPoint)`：**先定档位与 framing，再按新范围夹取对准点**，即本票 6.4 表里"先 focus 再 zoom"的正确顺序被固化成一次调用；
+  - 缓动路径**不提供**"带瞄准"的变体：在还在变形的框里瞄准是移动靶，而每帧重瞄正是被删掉的那份状态；生产代码里缓动只被锚点手势使用（`TargetZoom` 全仓只有测试在写）。
+  - 为什么这不是"把状态推给上层"：那条规则跨帧、跨调用方（zoom 由输入组件改、refresh 由视口变化触发），搬上去只会散到每个调用点，而 refresh 没有回调可接。把它变成**参数**才是既无状态又不丢正确性的做法。触发这次改动的具体证据：`MapViewModeSwitcher` 是"先 `FocusOnWorld` 后 `SetZoomImmediate`"，而 `FocusOnWorld` 按旧档位夹取——`sw.unity` 下会把边缘目标夹到 `9.09` 而正确值是 zoom 3 的 `16.31`，目标整个出画面。
+  - 行为变化：`FocusOn` 过的地方不会再被之后的 zoom 变化"重新对准"；`zoom = 1` 居中后放大不再回到原处。测试 `ZoomOneIsAlwaysCenteredButRemembersTheFocus` / `AGestureZoomDoesNotPullTheCameraTowardsTheFocus` / `AnAnchoredZoomOutranksTheFocus` 已按新契约改写。
+  - `m_InitialFocus` / `m_HasInitialFocus` **保留**（它是序列化配置而不是运行时记忆），但"是否还要应用"的判据从 `m_HasFocus` 改成 `m_HasCenter` —— 这顺手修掉一个潜伏 bug：拖拽只设 `m_HasCenter`，旧判据会让一次 refresh 把玩家的拖拽推回初始焦点。

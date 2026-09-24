@@ -133,7 +133,6 @@ namespace HexMap.Sample
                 m_AnchorViewport = ScreenToViewportAnchor(midpoint, UnityEngine.Screen.width, UnityEngine.Screen.height);
                 m_PinchStartZoom = m_MapCamera.Zoom;
                 m_PinchStartDistance = distance;
-                m_MapCamera.BeginGesture();
                 return;
             }
 
@@ -175,8 +174,9 @@ namespace HexMap.Sample
                 return;
             }
 
+            // Only this component's gesture ends here. The camera has no gesture state to end: every
+            // zoom request carries the center policy it wants.
             m_IsGestureActive = false;
-            m_MapCamera.EndGesture();
         }
     }
 }

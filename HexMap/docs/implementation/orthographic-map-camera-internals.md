@@ -173,10 +173,10 @@ private Vector2 ClampToRange(Vector2 offset)      // 逐轴独立
 | `m_Framing` | 当前 zoom 的 framing = `m_BaseFraming.WithZoom(m_Zoom)` | 只在 `ApplyZoom` / `TryRefresh` 里更新 |
 | `m_Zoom` / `m_TargetZoom` | 当前 / 目标档位 | 都在 `[1, MaxZoom]`；`Tick` 让前者追后者 |
 | `m_DesiredCenter` | **想要**的中心（地图局部平面坐标） | 始终在 `[MinOffset, MaxOffset]` 内 |
-| `m_HasCenter` | 是否被显式设过 | 见 4.4 的坑 |
-| `m_Focus` / `m_HasFocus` | 焦点（地图局部平面坐标） | 独立于 `m_DesiredCenter` |
-| `m_IsGestureActive` | 手势是否拥有本次 zoom | 见 4.3 |
+| `m_HasCenter` | 是否被显式设过 | 见 4.4 的坑；也是"初始焦点是否还要应用"的判据 |
 | `m_AppliedLayout` / `m_AppliedTransform` / `m_AppliedScale` | 在 `TryRefresh` 里快照 | 让 `TrySetOffset` 等无需重新解析配置 |
+
+**没有焦点状态**。相机不记录"哪里被要求对准"：`FocusOn` 只改中心，之后任何 zoom 变化都保持这个中心。要"改档位 + 对准"就用 `TryZoomToPoint(zoom, worldPoint)`，对准与档位在同一次调用里、按正确顺序发生。**删除焦点状态的同时也删掉了它带来的仲裁机制**：旧实现需要 `m_IsGestureActive` + `BeginGesture`/`EndGesture` + `TryZoomTo` 里一段 save/restore，只为解决"锚点算出的中心会不会被重对准规则覆盖"。没有常驻焦点，就没有这个冲突。
 
 **为什么快照 layout/transform/scale？** 因为 `TrySetOffset`、`FocusOnWorld`、`ApplyToCamera` 都需要它们，而重新解析要走 `HexMapView.HasMap` 校验与 `TryResolvePlaneAndOrientation`。快照让"平移/对焦"变成纯数学，**不需要渲染器已经构建**，也让 EditMode 测试不必依赖 `HexMapView.Build()`。
 
@@ -190,7 +190,7 @@ private Vector2 ClampToRange(Vector2 offset)      // 逐轴独立
 4. `LayerSettings.TryValidate`（有接的话），取 `cullingMask`；
 5. `OrthographicMapFraming.TryCreate(...)` 得到 `m_BaseFraming`；
 6. 修正 `m_Zoom` / `m_TargetZoom`：**非有限或 ≤ 0 回落到 1**（Unity 新建组件的 `float` 是 0，若不管会导致"放大到无穷"）；
-7. `ApplyInitialFocus()`、按需清零中心、`WithZoom`、`AlignCenterToFocus`、`ClampCenter`、`ApplyToCamera`。
+7. `ApplyInitialFocus()`（仅在没人认领中心时）、按需清零中心、`WithZoom`、`ClampCenter`、`ApplyToCamera`。
 
 这个函数是**幂等**的：连续调两次结果相同（除了 `ResolveAspect` 会重新读 `Camera.aspect`）。
 
@@ -205,50 +205,38 @@ private void ApplyZoom()
     m_Framing = m_BaseFraming.WithZoom(m_Zoom);
 
     if (m_Zoom <= MinZoom) { m_DesiredCenter = Vector2.zero; m_HasCenter = false; }   // 规则 A
-    else if (m_HasFocus && !m_IsGestureActive) { m_DesiredCenter = ClampToRange(m_Focus); m_HasCenter = true; }  // 规则 B
 
     ClampCenter();
     ApplyToCamera();
 }
 ```
 
-三条入口都汇聚到这里：`Zoom` setter、`Tick`（插值）、`TryZoomTo`。**Review 时确认没有任何别的地方改 `m_Framing`**。
+四条入口都汇聚到这里：`Zoom` setter、`Tick`（插值）、`TryZoomTo`、`TryZoomToPoint`。**Review 时确认没有任何别的地方改 `m_Framing`**。
 
-- **规则 A**：`zoom = 1` 是"看全貌"状态 ⇒ 强制居中，忽略焦点。焦点本身仍保留，再放大时按规则 B 重新对准。
-- **规则 B**：非手势的 zoom 变化重新对准焦点。`m_IsGestureActive` 是这条规则的闸门。
+- **规则 A**：`zoom = 1` 是"看全貌"状态 ⇒ 强制居中，并把"中心有人认领"这件事清掉。
+- **其他情况**：保持当前中心，只由 `ClampCenter()` 在框变窄装不下时夹回来。**没有任何重对准**——相机不记得任何目标，所以也就没有"什么时候该重新对准它"这条规则。
 
 ### 4.4 三个必须写死的优先级（都踩过坑）
 
-**① 锚点缩放必须自己算一次手势。**
+**① `m_HasCenter` 的存在理由。**
 
-`TryZoomTo` 里：
+`m_DesiredCenter` 默认是 `(0,0)`，而"用户把地图拖到正中"也是 `(0,0)`。**两者不可区分**，若用 `m_DesiredCenter != Vector2.zero` 判断"用户是否设过"，那么用户拖回正中后 `TryRefresh` 会把它当成"没设过"而重置（还会让序列化的初始焦点重新生效）。所以需要一个独立的布尔。
 
-```csharp
-m_DesiredCenter = ClampToRange(m_DesiredCenter + anchorOffset * growth);
-...
-var wasGestureActive = m_IsGestureActive;
-m_IsGestureActive = true;      // ← 关键
-ApplyZoom();
-m_IsGestureActive = wasGestureActive;
-```
+**② 拖拽与 zoom 都不改任何"目标"。**
 
-少了这三行，规则 B 会立刻把锚点算出的中心**覆盖成焦点**：镜头弹回焦点，捏合完全失效。这就是"锚点缩放与 zoom 重对准焦点打架"。
-
-**② `m_HasCenter` 的存在理由。**
-
-`m_DesiredCenter` 默认是 `(0,0)`，而"用户把地图拖到正中"也是 `(0,0)`。**两者不可区分**，若用 `m_DesiredCenter != Vector2.zero` 判断"用户是否设过"，那么用户拖回正中后 `TryRefresh` 会把它当成"没设过"而重置。所以需要一个独立的布尔。
-
-**③ 拖拽不改焦点。**
-
-`TrySetOffset` 只改 `m_DesiredCenter` 并置 `m_HasCenter`，**不碰 `m_Focus`**。于是：
+`TrySetOffset` 只改 `m_DesiredCenter` 并置 `m_HasCenter`；`ApplyZoom` 只重新夹取它。于是：
 
 | 动作序列 | 结果 |
 | --- | --- |
-| `FocusOn` → 拖走 → **捏合/手势** zoom | 保持拖走后的位置（手势闸门） |
-| `FocusOn` → 拖走 → **代码**改 `Zoom` | 重新对准焦点（规则 B） |
+| `FocusOn` → 拖走 → zoom | 保持拖走后的位置 |
 | `FocusOn` → 拖走 → zoom 回 1 | 居中（规则 A） |
+| `FocusOn` → 拖走 → zoom 回 1 → 再放大 | 保持居中：**不会**回到 `FocusOn` 过的地方 |
 
-如果实现成"每帧从焦点重算目标中心"，用户会**拖不动**（每帧被拉回）。这条在 `AGestureZoomDoesNotPullTheCameraTowardsTheFocus` 里钉住。
+旧实现的后两行分别靠"重对准焦点（规则 B）"和"焦点被记住"实现，那两条行为随状态一起删掉了。历史原因与"锚点缩放和重对准打架"的 bug 记在 `.scratch/orthographic-map-camera/issues/05`。
+
+**③ 对准与档位要在同一次调用里发生。**
+
+`TryZoomToPoint(zoom, worldPoint)` 先定档位与 framing、再按新范围夹取对准点。**顺序反过来会静默出错**（旧范围更窄 ⇒ 边缘目标被夹在旧范围上且再也回不来），所以 API 不提供"先对准、后改档位"这条路。
 
 ### 4.5 插值
 
@@ -297,18 +285,18 @@ zoom 的定义本身就是相对的：`size(zoom) = BaseOrthographicSize / zoom`
 
 ## 5. 焦点与锚点
 
-### 5.1 焦点是"想去"，不是"就在"（I5）
+### 5.1 对准是"一次请求"，不是"记住的目标"（I5）
 
 ```csharp
 public bool FocusOnWorld(Vector3 worldPoint, out string error)
 {
-    m_Focus = ToPlaneCoordinates(worldPoint);
-    m_HasFocus = true;
-    m_DesiredCenter = ClampToRange(m_Focus);   // ← 夹取决定实际位置
+    m_DesiredCenter = ClampToRange(ToPlaneCoordinates(worldPoint));   // ← 夹取决定实际位置
     m_HasCenter = true;
     ApplyToCamera();
 }
 ```
+
+**要同时改档位并对准，用 `TryZoomToPoint(zoom, worldPoint)`**：它先把 `m_Zoom`/`m_TargetZoom`/framing 设成新档位，再把中心设成"该点在新范围下的夹取结果"。**顺序是硬要求**——先对准再改档位会拿旧范围夹取，边缘目标被永久夹在旧范围上（`map.unity` 下从 zoom 1 得到 `10.17` 而不是 zoom 3 的 `16.67`，目标整个出画面）。把两者放进同一次调用，调用方就不可能写反。
 
 `ToPlaneCoordinates` 把世界点经 `InverseTransformPoint` 转地图局部，再取两个平面分量：
 
@@ -394,10 +382,10 @@ public static Vector2 ScreenDeltaToOffsetDelta(
 - 锚点：`ScreenToViewportAnchor` 把屏幕像素映射到 `[-1,1]²`。
 - 捏合：`distance = |p0 − p1|`，`ratio = distance / startDistance`，`zoom = startZoom × ratio`。
 - 滚轮：`zoom × 1.15^scroll`（指数，保证多格滚动可加）。
-- 手势生命周期：进入两指时 `BeginGesture()` 并抓锚点；退出两指时 `EndGestureIfActive()`。**滚轮不开手势**（它每次只改一帧的目标，且不涉及"拖到别处后不该被拉回"这个场景）。
+- 手势生命周期：进入两指时抓锚点并置 `m_IsGestureActive`；退出两指时 `EndGestureIfActive()` 清掉它。**这个状态只属于输入适配器**（它决定"锚点抓一次、整个手势固定"），相机那边没有对应的东西需要声明。
 - `ApplyZoom` 统一调 `m_MapCamera.TryZoomTo(zoom, m_AnchorViewport)`；失败只记一条 warning，不抛。
 
-**一个已知的小不一致**：滚轮路径设置 `m_AnchorViewport` 后调 `ApplyZoom`，而 `ApplyZoom` 里还调了 `m_MapCamera.BeginGesture()` 与 `EndGesture()`（见 `OnDisable` / `EndGestureIfActive`）——滚轮不经过捏合的 `m_IsGestureActive` 状态，所以 `OrthographicMapZoomInput.IsGestureActive` 对角滚轮**恒为 false**。这不影响正确性（相机内部的 `m_IsGestureActive` 由 `TryZoomTo` 自己临时置真），但属性语义只对触摸成立。Review 时可考虑改名或补上滚轮的手势标记。
+**旧的"已知小不一致"随 API 一起消失了**：以前相机有 `BeginGesture`/`EndGesture`，而滚轮路径不经过捏合的手势状态，于是 `OrthographicMapZoomInput.IsGestureActive` 对滚轮恒为 false、语义只对触摸成立。现在相机没有手势状态，这个属性就只描述本组件的捏合生命周期。
 
 ---
 
@@ -434,8 +422,9 @@ public static Vector2 ScreenDeltaToOffsetDelta(
 - [ ] 包络 = 格心铺开 **+** 格子半尺寸（两步）
 - [ ] `WithZoom` 用 `BaseOrthographicSize / zoom`，不用当前 size 相乘
 - [ ] `ApplyZoom` 是唯一更新 `m_Framing` 的地方
-- [ ] `TryZoomTo` 里锚点公式先于 `ApplyZoom`，且期间 `m_IsGestureActive = true`
-- [ ] `TrySetOffset` 不改 `m_Focus`
+- [ ] `TryZoomTo` 里锚点公式先于 `ApplyZoom`
+- [ ] `TryZoomToPoint` 里档位/framing 先于夹取对准点
+- [ ] 相机里**没有**任何"记住目标"的状态（`FocusOn` 只改中心）
 - [ ] 夹取**逐轴独立**
 - [ ] 世界距离都乘了 `m_AppliedScale`
 - [ ] 所有失败走 `Try* + out string error`，`error` 非空

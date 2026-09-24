@@ -258,8 +258,6 @@ namespace HexMap.UnityRuntime.Tests
             controller.Zoom = 2f;
 
             Assert.That(controller.FocusOn(new HexCoord(0, 0), out error), Is.True, error);
-            Assert.That(controller.HasFocus, Is.True);
-            Assert.That(controller.Focus.x, Is.EqualTo(0f).Within(0.00001f));
             Assert.That(controller.Center, Is.EqualTo(Vector2.zero));
         }
 
@@ -276,10 +274,10 @@ namespace HexMap.UnityRuntime.Tests
 
             Assert.That(controller.FocusOn(new HexCoord(11, 0), out error), Is.True, error);
 
-            // The cell sits at the map's edge, so its world centre is beyond the panning range.
-            Assert.That(controller.Focus.x, Is.EqualTo(19.05256f).Within(0.001f));
+            // The cell sits at the map's edge (x = 19.05256), so its world centre is beyond the panning
+            // range and the camera stops at the range's edge instead of reaching it.
             Assert.That(controller.Center.x, Is.EqualTo(controller.MaxOffset.x).Within(0.00001f));
-            Assert.That(controller.Center.x, Is.LessThan(controller.Focus.x));
+            Assert.That(controller.Center.x, Is.LessThan(19.05256f));
 
             Assert.That(controller.FocusOn(new HexCoord(-11, 0), out error), Is.True, error);
             Assert.That(controller.Center.x, Is.EqualTo(controller.MinOffset.x).Within(0.00001f));
@@ -289,7 +287,7 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void ZoomOneIsAlwaysCenteredButRemembersTheFocus()
+        public void ReachingTheWidestLevelRecentersAndTheWayBackKeepsIt()
         {
             var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
             var camera = CreateCamera(PortraitAspect);
@@ -303,14 +301,15 @@ namespace HexMap.UnityRuntime.Tests
 
             controller.Zoom = 1f;
             Assert.That(controller.Center, Is.EqualTo(Vector2.zero), "the widest level is the see-everything state");
-            Assert.That(controller.HasFocus, Is.True, "the focus itself is remembered");
 
+            // Nothing was remembered, so the way back in keeps the center it finds. Re-aiming here was
+            // the old behavior and it is gone with the focus state.
             controller.Zoom = 2f;
-            Assert.That(controller.Center.x, Is.EqualTo(controller.MaxOffset.x).Within(0.00001f), "zooming back in re-aims");
+            Assert.That(controller.Center, Is.EqualTo(Vector2.zero), "a zoom change keeps the center it finds");
         }
 
         [Test]
-        public void AGestureZoomDoesNotPullTheCameraTowardsTheFocus()
+        public void AZoomChangeKeepsTheCenterItFinds()
         {
             var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
             var camera = CreateCamera(PortraitAspect);
@@ -322,15 +321,14 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(controller.TrySetOffset(new Vector2(12f, 5f), out error), Is.True, error);
             Assert.That(controller.Center, Is.EqualTo(new Vector2(12f, 5f)));
 
-            controller.BeginGesture();
             controller.Zoom = 3f;
-            Assert.That(controller.Center, Is.EqualTo(new Vector2(12f, 5f)), "a gesture keeps the dragged centre");
-            controller.EndGesture();
+            Assert.That(controller.Center, Is.EqualTo(new Vector2(12f, 5f)), "a zoom change keeps the dragged centre");
 
-            // The focus is still recorded, so the next non-gesture zoom change re-aims at it.
+            // Aiming afterwards moves it, and the next zoom change keeps that instead of the old value.
             Assert.That(controller.FocusOn(new HexCoord(0, 0), out error), Is.True, error);
+            Assert.That(controller.Center, Is.EqualTo(Vector2.zero));
             controller.Zoom = 4f;
-            Assert.That(controller.Center, Is.EqualTo(Vector2.zero), "a non-gesture zoom re-aims at the focus");
+            Assert.That(controller.Center, Is.EqualTo(Vector2.zero), "zooming again keeps the aimed centre");
         }
 
         [Test]
@@ -366,7 +364,7 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void AnAnchoredZoomOutranksTheFocus()
+        public void ZoomingToAPointClampsAgainstTheNewZoomRatherThanTheOldOne()
         {
             var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
             var camera = CreateCamera(PortraitAspect);
@@ -374,13 +372,36 @@ namespace HexMap.UnityRuntime.Tests
 
             string error;
             Assert.That(controller.TryRefresh(out error), Is.True, error);
-            controller.Zoom = 2f;
-            Assert.That(controller.FocusOn(new HexCoord(0, 0), out error), Is.True, error);
+
+            // The widest level leaves a narrow range: aiming here and zooming afterwards would clamp the
+            // aim to 10.17 and leave the edge cell outside the frame at zoom 3.
+            controller.Zoom = 1f;
+            var widestRangeX = controller.MaxOffset.x;
+
+            var edgeCellCentre = new Vector3(19.05256f, 0f, 0f);
+            Assert.That(controller.TryZoomToPoint(3f, edgeCellCentre, out error), Is.True, error);
+
+            Assert.That(controller.Zoom, Is.EqualTo(3f).Within(0.00001f));
+            Assert.That(controller.Center.x, Is.EqualTo(controller.MaxOffset.x).Within(0.00001f));
+            Assert.That(
+                controller.Center.x,
+                Is.GreaterThan(widestRangeX),
+                "the aim was clamped against the range the new zoom leaves, not the one it left");
+
+            OrthographicMapFraming framing;
+            Assert.That(controller.TryGetFraming(out framing), Is.True);
+            Assert.That(
+                controller.Center.x + (framing.VisibleWidth * 0.5f),
+                Is.GreaterThanOrEqualTo(edgeCellCentre.x),
+                "the aimed cell is inside the frame");
+
+            // The widest level still recenters, so an aim asking for it is ignored on purpose.
+            Assert.That(controller.TryZoomToPoint(1f, edgeCellCentre, out error), Is.True, error);
             Assert.That(controller.Center, Is.EqualTo(Vector2.zero));
 
-            // Pinching away from the focus must move the view, not snap back to the focus.
-            Assert.That(controller.TryZoomTo(3f, new Vector2(0.6f, 0f), out error), Is.True, error);
-            Assert.That(controller.Center.x, Is.GreaterThan(0f), "the anchored zoom wins over the focus");
+            // A point that cannot be aimed at is refused rather than clamped.
+            Assert.That(controller.TryZoomToPoint(3f, new Vector3(float.NaN, 0f, 0f), out error), Is.False);
+            Assert.That(error, Does.Contain("finite"));
         }
 
         [Test]

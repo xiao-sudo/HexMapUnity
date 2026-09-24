@@ -291,14 +291,13 @@ namespace HexMap.Sample
                 return;
             }
 
+            // One call, because the aim travels with the zoom. Aiming first would clamp the target
+            // against the wider range of the zoom being left, which can leave it off the frame.
             string error;
-            if (!m_MapCamera.FocusOnWorld(m_FocusTarget.position, out error))
+            if (!m_MapCamera.TryZoomToPoint(m_FocusZoom, m_FocusTarget.position, out error))
             {
                 Debug.LogWarning("MapViewModeSwitcher could not focus the map view: " + error, this);
-                return;
             }
-
-            m_MapCamera.SetZoomImmediate(m_FocusZoom);
         }
 
         private void SnapshotGameplayCamera()

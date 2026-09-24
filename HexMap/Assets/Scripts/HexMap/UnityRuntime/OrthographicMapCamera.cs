@@ -35,13 +35,15 @@ namespace HexMap.UnityRuntime
     /// vertical panning.
     /// </para>
     /// <para>
-    /// The camera always aims at a center point expressed in the map's two plane coordinates. A focus
-    /// is a request, not a position: the center is the focus clamped into the current panning range, so
-    /// a focus at the map's edge ends up beside the viewport center rather than outside the map.
+    /// The camera aims at a center point expressed in the map's two plane coordinates, and aiming is
+    /// clamped into the panning range, so an aim at the map's edge ends up beside the viewport center
+    /// rather than outside the map.
     /// </para>
     /// <para>
-    /// The focus is applied when it is set and when a zoom change happens outside a gesture. Dragging
-    /// moves the center without clearing the focus, so the next non-gesture zoom change re-aims at it.
+    /// The camera keeps no memory of where it was asked to look. Aiming takes effect immediately and a
+    /// zoom change keeps whatever center the camera has, so there is nothing to re-aim later. A caller
+    /// that wants both at once asks for both at once with <see cref="TryZoomToPoint"/>, which is the only
+    /// order that cannot clamp an aim against the range of the zoom it is about to leave.
     /// </para>
     /// </summary>
     [DisallowMultipleComponent]
@@ -153,9 +155,6 @@ namespace HexMap.UnityRuntime
         private float m_AppliedAspect;
         private int m_AppliedCullingMask = -1;
         private bool m_HasFraming;
-        private Vector2 m_Focus;
-        private bool m_HasFocus;
-        private bool m_IsGestureActive;
 
         public HexMapView HexMapView
         {
@@ -270,28 +269,6 @@ namespace HexMap.UnityRuntime
         public Vector2 Center
         {
             get { return m_DesiredCenter; }
-        }
-
-        /// <summary>
-        /// The focus last requested, in the map's local plane coordinates. Reading it does not imply
-        /// the camera is aiming at it; <see cref="Center"/> is where the camera actually is.
-        /// </summary>
-        public Vector2 Focus
-        {
-            get { return m_Focus; }
-        }
-
-        public bool HasFocus
-        {
-            get { return m_HasFocus; }
-        }
-
-        /// <summary>
-        /// True when a gesture owns the pan and zoom. While true, a zoom change does not re-aim at the focus.
-        /// </summary>
-        public bool IsGestureActive
-        {
-            get { return m_IsGestureActive; }
         }
 
         /// <summary>
@@ -515,13 +492,12 @@ namespace HexMap.UnityRuntime
 
             ApplyInitialFocus();
 
-            if (!m_HasFocus && !HasUserCenter)
+            if (!HasUserCenter)
             {
                 m_DesiredCenter = Vector2.zero;
             }
 
             m_Framing = m_BaseFraming.WithZoom(m_Zoom);
-            AlignCenterToFocus();
             ClampCenter();
             ApplyToCamera();
             error = string.Empty;
@@ -602,8 +578,8 @@ namespace HexMap.UnityRuntime
             m_DesiredCenter = ClampToRange(offset);
             m_HasCenter = true;
 
-            // Dragging moves the camera without forgetting the focus: the next non-gesture zoom change
-            // re-aims at it. Clearing the focus here would make zoom stop tracking it silently.
+            // Dragging only moves the camera. Nothing else is recorded, so a later zoom keeps this
+            // center instead of pulling the view back to where it used to be aimed.
             ApplyToCamera();
             error = string.Empty;
             return true;
@@ -653,13 +629,51 @@ namespace HexMap.UnityRuntime
             m_Zoom = clamped;
             m_TargetZoom = clamped;
 
-            // An anchored zoom is itself a gesture, so it outranks the focus. Without this the
-            // re-aim rule would discard the anchored center and snap the camera back to the focus,
-            // which is exactly the case the anchor exists to serve.
-            var wasGestureActive = m_IsGestureActive;
-            m_IsGestureActive = true;
             ApplyZoom();
-            m_IsGestureActive = wasGestureActive;
+
+            error = string.Empty;
+            return true;
+        }
+
+        /// <summary>
+        /// Sets the zoom and aims at a world point, in that order.
+        /// <para>
+        /// Immediate rather than eased: aiming at a point while the frame is still changing would be
+        /// aiming at a moving target, and re-aiming every frame of an ease is exactly the state this
+        /// class no longer keeps. Set the frame, then aim inside it.
+        /// </para>
+        /// </summary>
+        public bool TryZoomToPoint(float zoom, Vector3 worldPoint, out string error)
+        {
+            if (!m_HasFraming)
+            {
+                error = "Refresh the camera before zooming to a point.";
+                return false;
+            }
+
+            if (!IsFinite(worldPoint))
+            {
+                error = "World point must be finite.";
+                return false;
+            }
+
+            var clamped = ClampZoom(zoom);
+            m_Zoom = clamped;
+            m_TargetZoom = clamped;
+
+            if (clamped <= MinZoom)
+            {
+                // Reaching the widest level re-centers, so an aim asking for it is ignored on purpose.
+                m_DesiredCenter = Vector2.zero;
+                m_HasCenter = false;
+            }
+            else
+            {
+                m_DesiredCenter = ClampToRange(ToPlaneCoordinates(worldPoint));
+                m_HasCenter = true;
+            }
+
+            ApplyZoom();
 
             error = string.Empty;
             return true;
@@ -667,7 +681,8 @@ namespace HexMap.UnityRuntime
 
         /// <summary>
         /// Aims the camera at a cell. The center ends up clamped, so an edge cell sits beside the
-        /// viewport center rather than outside the map.
+        /// viewport center rather than outside the map. Like <see cref="FocusOnWorld"/> this is a
+        /// one-shot request rather than a setting that later zoom changes return to.
         /// </summary>
         public bool FocusOn(HexCoord coordinate, out string error)
         {
@@ -691,7 +706,8 @@ namespace HexMap.UnityRuntime
 
         /// <summary>
         /// Aims the camera at a world point. The center ends up clamped, so a point outside the
-        /// panning range sits at the edge of the frame instead.
+        /// panning range sits at the edge of the frame instead. Nothing is remembered: a later zoom
+        /// keeps the center this produced rather than coming back here.
         /// </summary>
         public bool FocusOnWorld(Vector3 worldPoint, out string error)
         {
@@ -707,38 +723,11 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            m_Focus = ToPlaneCoordinates(worldPoint);
-            m_HasFocus = true;
-            m_DesiredCenter = ClampToRange(m_Focus);
+            m_DesiredCenter = ClampToRange(ToPlaneCoordinates(worldPoint));
             m_HasCenter = true;
             ApplyToCamera();
             error = string.Empty;
             return true;
-        }
-
-        /// <summary>
-        /// Clears the focus so later zoom changes stop re-aiming at it.
-        /// </summary>
-        public void ClearFocus()
-        {
-            m_HasFocus = false;
-        }
-
-        /// <summary>
-        /// Declares that a gesture owns the pan and zoom. Zoom changes while a gesture is active do not
-        /// re-aim at the focus.
-        /// </summary>
-        public void BeginGesture()
-        {
-            m_IsGestureActive = true;
-        }
-
-        /// <summary>
-        /// Ends the gesture. The focus is kept, so the next non-gesture zoom change re-aims at it.
-        /// </summary>
-        public void EndGesture()
-        {
-            m_IsGestureActive = false;
         }
 
         private bool HasUserCenter
@@ -789,8 +778,8 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// Rebuilds the framing for the current zoom, re-aims at the focus when it should, and writes
-        /// the camera. This is the single place a zoom change flows through.
+        /// Rebuilds the framing for the current zoom, keeps the center by re-clamping it, and writes the
+        /// camera. This is the single place a zoom change flows through.
         /// </summary>
         /// <summary>
         /// True when nothing the base framing depends on has changed since the last refresh, so the base
@@ -833,13 +822,13 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// Rebuilds the zoomed framing from the retained base framing and re-applies the centering rules.
+        /// Rebuilds the zoomed framing from the retained base framing and keeps the center, re-clamped
+        /// against the range the new frame leaves.
         /// </summary>
         private void RefreshFramingFromZoom()
         {
             m_Zoom = ClampZoom(m_Zoom);
             m_Framing = m_BaseFraming.WithZoom(m_Zoom);
-            AlignCenterToFocus();
             ClampCenter();
         }
 
@@ -859,40 +848,34 @@ namespace HexMap.UnityRuntime
                 m_DesiredCenter = Vector2.zero;
                 m_HasCenter = false;
             }
-            else if (m_HasFocus && !m_IsGestureActive)
-            {
-                m_DesiredCenter = ClampToRange(m_Focus);
-                m_HasCenter = true;
-            }
 
+            // A zoom change keeps the center it finds: the clamp below is all that moves it, and it
+            // only pulls the center back when a narrower frame no longer contains it.
             ClampCenter();
             ApplyToCamera();
         }
 
-        private void AlignCenterToFocus()
-        {
-            if (m_HasFocus)
-            {
-                m_DesiredCenter = ClampToRange(m_Focus);
-                m_HasCenter = true;
-            }
-        }
-
+        /// <summary>
+        /// Applies the serialized starting center, but only while nothing else has claimed the center.
+        /// A drag, an aim request or a zoom all mean the player or the game has taken over, and a later
+        /// refresh must not undo that.
+        /// </summary>
         private void ApplyInitialFocus()
         {
-            if (!m_HasInitialFocus || m_HasFocus)
+            if (!m_HasInitialFocus || HasUserCenter)
             {
                 return;
             }
 
             // The initial focus is already in map plane coordinates, so it only needs the plane's
-            // perpendicular axis filled in to become a local point.
+            // perpendicular axis filled in to become a local point. The clamp happens after the framing
+            // for the current zoom exists, which is why this only records where to look.
             var local = m_AppliedLayout.Plane == HexPlane.XY
                 ? new Vector3(m_InitialFocus.x, m_InitialFocus.y, m_AppliedLayout.Origin.z)
                 : new Vector3(m_InitialFocus.x, m_AppliedLayout.Origin.y, m_InitialFocus.y);
 
-            m_Focus = ToPlaneCoordinates(m_AppliedTransform.TransformPoint(local));
-            m_HasFocus = true;
+            m_DesiredCenter = ToPlaneCoordinates(m_AppliedTransform.TransformPoint(local));
+            m_HasCenter = true;
         }
 
         private Vector2 ClampToRange(Vector2 offset)
