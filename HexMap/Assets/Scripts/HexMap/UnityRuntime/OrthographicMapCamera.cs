@@ -50,12 +50,6 @@ namespace HexMap.UnityRuntime
     public sealed class OrthographicMapCamera : MonoBehaviour
     {
         /// <summary>
-        /// Aspect ratios within this distance of <see cref="TargetAspect"/> are treated as equal, so the
-        /// serialized target is kept instead of being replaced by a negligible difference.
-        /// </summary>
-        public const float AspectTolerance = 0.001f;
-
-        /// <summary>
         /// The zoom level that keeps every row inside the frame.
         /// </summary>
         public const float MinZoom = 1f;
@@ -101,10 +95,6 @@ namespace HexMap.UnityRuntime
         [SerializeField]
         [Tooltip("How much empty space to leave around the map's depth. Must be at least 1.")]
         private float m_ViewMargin = 1.1f;
-
-        [SerializeField]
-        [Tooltip("Portrait 9:16. Used only when the real camera aspect is within the tolerance.")]
-        private float m_TargetAspect = 9f / 16f;
 
         [SerializeField]
         private MapPlaneMode m_PlaneMode = MapPlaneMode.FollowMapView;
@@ -184,12 +174,6 @@ namespace HexMap.UnityRuntime
         {
             get { return m_ViewMargin; }
             set { m_ViewMargin = value; }
-        }
-
-        public float TargetAspect
-        {
-            get { return m_TargetAspect; }
-            set { m_TargetAspect = value; }
         }
 
         public float Height
@@ -413,7 +397,7 @@ namespace HexMap.UnityRuntime
             }
 
             var layout = m_HexMapView.Layout;
-            var aspect = ResolveAspect();
+            var aspect = m_Camera.aspect;
 
             if (!m_Camera.orthographic)
             {
@@ -547,7 +531,7 @@ namespace HexMap.UnityRuntime
                 layout,
                 m_HexMapView.Radius,
                 m_ViewMargin,
-                ResolveAspect(),
+                m_Camera.aspect,
                 m_Zoom,
                 out framing,
                 out error);
@@ -973,19 +957,6 @@ namespace HexMap.UnityRuntime
 
             error = string.Empty;
             return true;
-        }
-
-        private float ResolveAspect()
-        {
-            var cameraAspect = m_Camera.aspect;
-            if (IsFinitePositive(cameraAspect) &&
-                IsFinitePositive(m_TargetAspect) &&
-                Mathf.Abs(cameraAspect - m_TargetAspect) <= AspectTolerance)
-            {
-                return m_TargetAspect;
-            }
-
-            return cameraAspect;
         }
 
         private void ApplyToCamera()

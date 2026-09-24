@@ -92,7 +92,7 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 `map.unity` 的主相机：
 
 1. `Camera`：勾上 **Orthographic**（这是摆放设置，控制器运行时只校验、不偷偷改）。
-2. `OrthographicMapCamera`：`m_HexMapView` → 场景里的 **HexMap**；`m_Camera` → **自身**；`m_Height = 30`、`m_Near = 28`、`m_Far = 32`、`m_ViewMargin = 1.1`、`m_TargetAspect = 0.5625`、`m_PlaneMode = FollowMapView`。
+2. `OrthographicMapCamera`：`m_HexMapView` → 场景里的 **HexMap**；`m_Camera` → **自身**；`m_Height = 30`、`m_Near = 28`、`m_Far = 32`、`m_ViewMargin = 1.1`、`m_PlaneMode = FollowMapView`。（宽高比没有配置项，一律取 `Camera.aspect`。）
 3. `OrthographicMapLayerSettings`：`m_HexMapView` → **HexMap**；`m_CullingMask` 必须包含 HexMap 的 cell 层（默认 `Everything` 即可）。
 4. 回到 `OrthographicMapCamera`，把 `m_LayerSettings` 指向第 3 步那个组件。
 5. `OrthographicMapDragInput`：`m_MapCamera` → 那个 `OrthographicMapCamera`。它可以从 `HexMap.Sample` 程序集挂到任意常驻物件上。
@@ -104,7 +104,7 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 
 | 症状 | 真相 | 怎么办 |
 | --- | --- | --- |
-| 左右拖不动 | 当前档位下屏宽 ≥ 地图宽。可视高被"所有行"钉死，可视宽 = 可视高 × aspect ⇒ **aspect 越大越拖不动** | 先确认 Game 视图 / `m_TargetAspect` 是竖屏 9:16；放大一档就会有可拖余量 |
+| 左右拖不动 | 当前档位下屏宽 ≥ 地图宽。可视高被"所有行"钉死，可视宽 = 可视高 × aspect ⇒ **aspect 越大越拖不动** | 先确认 Game 视图是竖屏 9:16（相机 aspect 直接取视口比例，没有配置项）；放大一档就会有可拖余量 |
 | 编辑器能拖、真机不能（或反之） | 编辑器 Game 视图还是横屏分辨率 | 设为 750×1334 / 1080×1920 |
 | 相机是透视的 | `orthographic` 是摆放设置 | 在场景里勾上，不是运行时问题 |
 | 相机在地图**下方** | 位置必须写成 `原点 − forward × 高度`（`forward` 指向世界 −Y） | 这是实现时真踩过的坑，测试有断言钉住 `position.y == 30` |

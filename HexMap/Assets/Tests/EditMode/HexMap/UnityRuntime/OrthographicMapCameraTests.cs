@@ -622,21 +622,6 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void TargetAspectIsKeptWhenTheRealAspectIsWithinTolerance()
-        {
-            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
-            var camera = CreateCamera(PortraitAspect + 0.0001f);
-            var controller = CreateController(mapView, camera);
-
-            string error;
-            Assert.That(controller.TryRefresh(out error), Is.True, error);
-
-            OrthographicMapFraming framing;
-            Assert.That(controller.TryGetFraming(out framing), Is.True);
-            Assert.That(framing.VisibleWidth, Is.EqualTo(framing.VisibleHeight * PortraitAspect).Within(0.0001f));
-        }
-
-        [Test]
         public void NonIdentityMapTransformAndScaleAreRespected()
         {
             var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
