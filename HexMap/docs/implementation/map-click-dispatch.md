@@ -167,7 +167,7 @@ if (!baseData.cameraStack.Contains(m_UiCamera)) baseData.cameraStack.Add(m_UiCam
   打开平移与缩放手势（它们驱动的是俯视相机）
   切两个 Canvas 根节点
   dispatcher.SetActiveCamera(俯视相机) + SetActiveChannel(TopDown)   ← 与相机切换同一步
-  可选：FocusOnWorld(焦点) + SetZoomImmediate(焦点档位)
+  可选：TryZoomToPoint(焦点档位, 焦点世界坐标)
 
 退出俯视：
   迁移 UI 相机栈 → 俯视相机 enabled = false → 常规相机 enabled = true
@@ -179,7 +179,7 @@ if (!baseData.cameraStack.Contains(m_UiCamera)) baseData.cameraStack.Add(m_UiCam
 
 **`SetActiveCamera` 与 `enabled` 切换必须在同一帧内完成**。若隔一帧，那一帧的点击会拿着上一模式的相机去拾取（画面已换、拾取还旧），表现为"第一次点击响应错面板"。
 
-**为什么要快照而不是重算**：退出时重算常规相机的位置需要复制玩法相机的跟随逻辑，两份实现必然漂移。快照是"完全复原"的唯一可靠方式。`SetZoomImmediate` 而不是写 `TargetZoom`——后者会让镜头从 1 平滑追到目标档位，而复原应该是无缝的。
+**为什么要快照而不是重算**：退出时重算常规相机的位置需要复制玩法相机的跟随逻辑，两份实现必然漂移。快照是"完全复原"的唯一可靠方式。（复原写的是常规相机自己的 `position` / `rotation` / `fieldOfView` / `orthographicSize`，与 `OrthographicMapCamera` 无关。）
 
 `Start()` 里按序列化的 `m_IsTopDown` 应用一次初始状态（只推状态、不触发切换），这样**第一次点击就能找到正确的相机与通道**，即使模式被留在 Inspector 里勾着的状态。这段逻辑在 `ApplySerializedMode()` 里，`Start()` 只是调它：EditMode 测试没有 start 回调，留一个可调用的入口才能验证它。
 
@@ -252,7 +252,7 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 - 重复按地图按钮不会重新快照（否则会把"被移动过的相机"当成原状态存下来）；
 - `Toggle` 两个方向都正确；**连按 5 个来回无漂移**；
 - `m_IsTopDown` 被序列化成 `true` 的场景（`ApplySerializedMode`）能正确进入俯视；且这种"开局就在俯视"的场景退出时**没有快照可还原**，相机保持原位；
-- 有焦点目标 ⇒ `FocusOnWorld` + `SetZoomImmediate`；无焦点目标 ⇒ 保持玩家离开时的档位；
+- 有焦点目标 ⇒ `TryZoomToPoint(档位, 焦点世界坐标)`（一次调用，因为对准必须按新档位的范围夹取）；无焦点目标 ⇒ 保持玩家离开时的档位；
 - **焦点失败（如地图相机尚未 refresh）只 `LogWarning`，模式切换照常完成**；
 - 全字段为 null 时 `Toggle` 不抛异常；UI 相机与 base 相机接成同一个时 `LogError` 一次且不去动栈；
 - **平移与缩放手势只在俯视模式下为 `IsEnabled`**（否则玩法模式的一次拖拽会悄悄移走玩家退出后看到的视图）。

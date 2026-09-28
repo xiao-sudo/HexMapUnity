@@ -168,22 +168,22 @@ namespace HexMap.UnityRuntime.Tests
             // describe, and the aspect entered twice once the visible width was the quantity limited.
             Assert.That(controller.MaxZoom, Is.EqualTo(12f).Within(0.00001f));
 
-            controller.TargetZoom = 1000f;
-            Assert.That(controller.TargetZoom, Is.EqualTo(controller.MaxZoom).Within(0.00001f));
+            controller.Zoom = 1000f;
+            Assert.That(controller.Zoom, Is.EqualTo(controller.MaxZoom).Within(0.00001f));
 
             controller.MaxZoom = 5f;
-            controller.TargetZoom = 1000f;
-            Assert.That(controller.TargetZoom, Is.EqualTo(5f).Within(0.00001f));
+            controller.Zoom = 1000f;
+            Assert.That(controller.Zoom, Is.EqualTo(5f).Within(0.00001f));
 
             controller.MaxZoom = 1f;
-            controller.TargetZoom = 1000f;
+            controller.Zoom = 1000f;
             Assert.That(
-                controller.TargetZoom,
+                controller.Zoom,
                 Is.EqualTo(1f).Within(0.00001f),
                 "a ceiling of 1 is a camera that pans but never zooms");
 
-            controller.TargetZoom = 0.5f;
-            Assert.That(controller.TargetZoom, Is.EqualTo(1f).Within(0.00001f));
+            controller.Zoom = 0.5f;
+            Assert.That(controller.Zoom, Is.EqualTo(1f).Within(0.00001f));
         }
 
         [Test]
@@ -198,7 +198,6 @@ namespace HexMap.UnityRuntime.Tests
             controller.Zoom = 1000f;
 
             Assert.That(controller.Zoom, Is.EqualTo(controller.MaxZoom).Within(0.00001f));
-            Assert.That(controller.TargetZoom, Is.EqualTo(controller.MaxZoom).Within(0.00001f));
         }
 
         [Test]
@@ -214,12 +213,12 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(error, Does.Contain("Max zoom"));
 
             // A zoom written while the ceiling is nonsense stops at the floor rather than at zero.
-            controller.TargetZoom = 1000f;
-            Assert.That(controller.TargetZoom, Is.EqualTo(1f).Within(0.00001f));
+            controller.Zoom = 1000f;
+            Assert.That(controller.Zoom, Is.EqualTo(1f).Within(0.00001f));
         }
 
         [Test]
-        public void ZoomEasesTowardsTheTargetOverSeveralFrames()
+        public void RefreshingIfStaleLeavesACurrentCameraAlone()
         {
             var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
             var camera = CreateCamera(PortraitAspect);
@@ -228,22 +227,79 @@ namespace HexMap.UnityRuntime.Tests
             string error;
             Assert.That(controller.TryRefresh(out error), Is.True, error);
 
-            controller.Zoom = 1f;
-            controller.TargetZoom = 3f;
+            // A frame the camera already wrote must survive a call that finds nothing stale, or every
+            // gesture would undo the view the player is looking at.
+            var size = camera.orthographicSize;
+            camera.transform.position = new Vector3(1f, 2f, 3f);
 
-            var steps = 0;
-            while (!Mathf.Approximately(controller.Zoom, 3f) && steps < 1000)
-            {
-                controller.Tick(1f / 60f);
-                steps++;
-            }
+            Assert.That(controller.TryRefreshIfStale(out error), Is.True, error);
+            Assert.That(error, Is.Empty);
+            Assert.That(camera.orthographicSize, Is.EqualTo(size).Within(0.00001f));
+            Assert.That(camera.transform.position, Is.EqualTo(new Vector3(1f, 2f, 3f)));
+        }
 
-            Assert.That(controller.Zoom, Is.EqualTo(3f).Within(0.0001f));
-            Assert.That(steps, Is.GreaterThan(1), "the zoom must not snap in a single step");
+        [Test]
+        public void RefreshingIfStaleCatchesAViewportChangeThatNoCallerReported()
+        {
+            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+
+            string error;
+            Assert.That(controller.TryRefresh(out error), Is.True, error);
+
+            // This is what a window resize or a device rotation does: the engine changes the camera's
+            // aspect with no callback and no setter of ours behind it, so nothing but this check can
+            // notice it. Vertical panning is unaffected, which is why only the horizontal range moves.
+            camera.aspect = LandscapeAspect;
+            var staleMaxX = controller.MaxOffset.x;
+
+            Assert.That(controller.TryRefreshIfStale(out error), Is.True, error);
 
             OrthographicMapFraming framing;
             Assert.That(controller.TryGetFraming(out framing), Is.True);
-            Assert.That(framing.OrthographicSize, Is.EqualTo(17.325f / 3f).Within(0.001f));
+            Assert.That(framing.Aspect, Is.EqualTo(LandscapeAspect).Within(0.00001f));
+            Assert.That(camera.orthographicSize, Is.EqualTo(framing.OrthographicSize).Within(0.00001f));
+
+            // A wider frame covers more of the map, so less of it can be panned into view.
+            Assert.That(controller.MaxOffset.x, Is.LessThan(staleMaxX));
+        }
+
+        [Test]
+        public void RefreshingIfStaleRetriesAFramingThatFailedOnLoad()
+        {
+            m_MapObject = new GameObject("Hex Map View");
+            var mapView = m_MapObject.AddComponent<HexMapView>();
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+
+            // The map is not built yet, so there is nothing to frame and nothing to retry against.
+            string error;
+            Assert.That(controller.TryRefreshIfStale(out error), Is.False);
+            Assert.That(error, Does.Contain("built"));
+
+            mapView.Build();
+            Assert.That(controller.TryRefreshIfStale(out error), Is.True, error);
+            Assert.That(controller.HasFraming, Is.True);
+        }
+
+        [Test]
+        public void CreatingAFramingWithoutACameraIsReportedInsteadOfThrowing()
+        {
+            // The camera comes first because CreateMap reassigns m_CameraObject; CreateCamera is what
+            // creates the GameObject, and the controller below goes on it.
+            var camera = CreateCamera(PortraitAspect);
+            var mapView = CreateMap();
+            var controller = camera.gameObject.AddComponent<OrthographicMapCamera>();
+            controller.HexMapView = mapView;
+
+            OrthographicMapFraming framing;
+            string error;
+
+            // The camera is only read for its aspect, so the null check is easy to forget and the
+            // failure would otherwise be a NullReferenceException rather than a reported refusal.
+            Assert.That(controller.TryCreateFraming(out framing, out error), Is.False);
+            Assert.That(error, Does.Contain("Camera"));
         }
 
         [Test]
@@ -259,6 +315,107 @@ namespace HexMap.UnityRuntime.Tests
 
             Assert.That(controller.FocusOn(new HexCoord(0, 0), out error), Is.True, error);
             Assert.That(controller.Center, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void ZoomingToACellClampsTheAimAgainstTheZoomItAsksFor()
+        {
+            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+
+            string error;
+            Assert.That(controller.TryRefresh(out error), Is.True, error);
+
+            var northEdge = new HexCoord(0, 11);
+
+            // Zoom 1 leaves no vertical room at all, so this is the sequence the one-call form exists to
+            // make unrepresentable: the aim is clamped against a range of zero and the north edge lands on
+            // the horizontal axis, where nothing that happens afterwards can recover it.
+            Assert.That(controller.FocusOn(northEdge, out error), Is.True, error);
+            Assert.That(controller.Zoom, Is.EqualTo(1f).Within(0.00001f));
+            Assert.That(controller.Center.y, Is.EqualTo(0f).Within(0.00001f));
+
+            controller.Zoom = 4f;
+            Assert.That(controller.Center.y, Is.EqualTo(0f).Within(0.00001f), "aiming first loses the aim");
+
+            // The cell form sets the zoom before it clamps, so the same request reaches the range the
+            // zoom 4 frame actually leaves.
+            Assert.That(controller.TryZoomToCell(northEdge, 4f, out error), Is.True, error);
+            Assert.That(controller.Zoom, Is.EqualTo(4f).Within(0.00001f));
+            Assert.That(controller.Center.y, Is.EqualTo(controller.MaxOffset.y).Within(0.00001f));
+            Assert.That(controller.Center.y, Is.GreaterThan(0f));
+
+            // Its mirror ends up at the opposite end of the same range.
+            var north = controller.Center.y;
+            Assert.That(controller.TryZoomToCell(new HexCoord(0, -11), 4f, out error), Is.True, error);
+            Assert.That(controller.Center.y, Is.EqualTo(-north).Within(0.00001f));
+        }
+
+        [Test]
+        public void ZoomingToACellAndToItsWorldCentreAgree()
+        {
+            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+
+            string error;
+            Assert.That(controller.TryRefresh(out error), Is.True, error);
+
+            // The cell form is only a conversion plus ordering, so it must agree with the world-point
+            // form on the point the layout puts the cell at.
+            const float zoom = 2.5f;
+            var coordinate = new HexCoord(4, -7);
+            var world = mapView.transform.TransformPoint(mapView.Layout.HexToWorld(coordinate));
+
+            Assert.That(controller.TryZoomToCell(coordinate, zoom, out error), Is.True, error);
+            var fromCell = controller.Center;
+
+            Assert.That(controller.TryZoomToPoint(zoom, world, out error), Is.True, error);
+            Assert.That(controller.Center.x, Is.EqualTo(fromCell.x).Within(0.00001f));
+            Assert.That(controller.Center.y, Is.EqualTo(fromCell.y).Within(0.00001f));
+        }
+
+        [Test]
+        public void ZoomingToACellReportsAnOutsideCoordinateAndANonFiniteZoom()
+        {
+            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+
+            string error;
+            Assert.That(controller.TryRefresh(out error), Is.True, error);
+
+            Assert.That(controller.TryZoomToCell(new HexCoord(12, 0), 2f, out error), Is.False);
+            Assert.That(error, Does.Contain("outside the map"));
+
+            Assert.That(controller.TryZoomToCell(new HexCoord(0, 0), float.NaN, out error), Is.False);
+            Assert.That(error, Does.Contain("zoom"));
+
+            // (0,0) and a corner on the ring are both inside, which is the boundary the distance test
+            // has to get right.
+            Assert.That(controller.TryZoomToCell(new HexCoord(0, 0), 2f, out error), Is.True, error);
+            Assert.That(controller.TryZoomToCell(new HexCoord(-11, 11), 2f, out error), Is.True, error);
+        }
+
+        [Test]
+        public void AimingBeforeTheFirstRefreshIsRefusedInsteadOfThrowing()
+        {
+            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+
+            // The applied layout and transform are snapshots a refresh leaves behind, so aiming without
+            // one would dereference them. All three aiming entry points have to refuse instead.
+            string error;
+            Assert.That(controller.FocusOn(new HexCoord(0, 0), out error), Is.False);
+            Assert.That(error, Does.Contain("Refresh the camera"));
+
+            Assert.That(controller.TryZoomToCell(new HexCoord(0, 0), 2f, out error), Is.False);
+            Assert.That(error, Does.Contain("Refresh the camera"));
+
+            Assert.That(controller.FocusOnWorld(Vector3.zero, out error), Is.False);
+            Assert.That(error, Does.Contain("Refresh the camera"));
         }
 
         [Test]
@@ -287,7 +444,7 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void ReachingTheWidestLevelRecentersAndTheWayBackKeepsIt()
+        public void TheWidestLevelKeepsTheHorizontalAimAndDropsTheVerticalOne()
         {
             var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
             var camera = CreateCamera(PortraitAspect);
@@ -299,13 +456,44 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(controller.FocusOn(new HexCoord(11, 0), out error), Is.True, error);
             Assert.That(controller.Center.x, Is.GreaterThan(0f));
 
+            // The widest level shows the whole depth, so the vertical range collapses and the clamp takes
+            // the vertical component to the middle by itself. The horizontal component is untouched: the
+            // player asked to look at the right edge and the widest level still shows the right edge.
             controller.Zoom = 1f;
-            Assert.That(controller.Center, Is.EqualTo(Vector2.zero), "the widest level is the see-everything state");
+            Assert.That(controller.Center.y, Is.EqualTo(0f).Within(0.00001f));
+            Assert.That(
+                controller.Center.x,
+                Is.EqualTo(controller.MaxOffset.x).Within(0.00001f),
+                "the widest level must not throw the horizontal aim away");
 
-            // Nothing was remembered, so the way back in keeps the center it finds. Re-aiming here was
-            // the old behavior and it is gone with the focus state.
+            // The way back in keeps the centre it finds rather than re-aiming anything. Note it keeps the
+            // widest level's value (10.17), not the value the zoom 2 aim asked for (15.05): the clamp at
+            // zoom 1 already moved it, and a zoom change never restores an older centre.
+            var atWidest = controller.Center.x;
             controller.Zoom = 2f;
-            Assert.That(controller.Center, Is.EqualTo(Vector2.zero), "a zoom change keeps the center it finds");
+            Assert.That(controller.Center.x, Is.EqualTo(atWidest).Within(0.00001f));
+            Assert.That(controller.Center.y, Is.EqualTo(0f).Within(0.00001f));
+        }
+
+        [Test]
+        public void PanningWorksAtTheWidestLevelBecauseTheHorizontalRangeSurvives()
+        {
+            var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
+            var camera = CreateCamera(PortraitAspect);
+            var controller = CreateController(mapView, camera);
+
+            string error;
+            Assert.That(controller.TryRefresh(out error), Is.True, error);
+
+            // This is the whole point of keeping the aim at zoom 1: a portrait screen shows roughly half
+            // the map's width, so looking at the left half and the right half in turn is the only way to
+            // see the whole map at the level that shows every row.
+            Assert.That(controller.Zoom, Is.EqualTo(1f).Within(0.00001f));
+            Assert.That(controller.MaxOffset.x, Is.GreaterThan(0f));
+
+            Assert.That(controller.TrySetOffset(new Vector2(-controller.MaxOffset.x, 0f), out error), Is.True, error);
+            Assert.That(controller.Center.x, Is.EqualTo(controller.MinOffset.x).Within(0.00001f));
+            Assert.That(controller.Center.y, Is.EqualTo(0f).Within(0.00001f));
         }
 
         [Test]
@@ -395,9 +583,18 @@ namespace HexMap.UnityRuntime.Tests
                 Is.GreaterThanOrEqualTo(edgeCellCentre.x),
                 "the aimed cell is inside the frame");
 
-            // The widest level still recenters, so an aim asking for it is ignored on purpose.
+            // The widest level is not special-cased: the same aim keeps its horizontal component and
+            // loses only the vertical one, which the clamp removes because the frame covers the depth.
             Assert.That(controller.TryZoomToPoint(1f, edgeCellCentre, out error), Is.True, error);
-            Assert.That(controller.Center, Is.EqualTo(Vector2.zero));
+            Assert.That(controller.Center.x, Is.EqualTo(controller.MaxOffset.x).Within(0.00001f));
+            Assert.That(controller.Center.x, Is.GreaterThan(0f));
+            Assert.That(controller.Center.y, Is.EqualTo(0f).Within(0.00001f));
+
+            // The mirror aim must land on the mirror end of the range rather than on the middle.
+            var westEdgeCentre = new Vector3(-19.05256f, 0f, 0f);
+            Assert.That(controller.TryZoomToPoint(1f, westEdgeCentre, out error), Is.True, error);
+            Assert.That(controller.Center.x, Is.EqualTo(controller.MinOffset.x).Within(0.00001f));
+            Assert.That(controller.Center.x, Is.LessThan(0f));
 
             // A point that cannot be aimed at is refused rather than clamped.
             Assert.That(controller.TryZoomToPoint(3f, new Vector3(float.NaN, 0f, 0f), out error), Is.False);
@@ -709,32 +906,31 @@ namespace HexMap.UnityRuntime.Tests
 
             m_SettingsObject = new GameObject("Map Layer Settings");
             var settings = m_SettingsObject.AddComponent<OrthographicMapLayerSettings>();
-            settings.HexMapView = mapView;
             controller.LayerSettings = settings;
 
             string error;
             var cellLayer = mapView.CellLayer;
 
             // The default mask is everything, which must cover the map.
-            Assert.That(settings.TryValidate(out error), Is.True, error);
+            Assert.That(settings.TryValidate(cellLayer, out error), Is.True, error);
 
             // A mask that omits the cell layer must stop the refresh, not silently blank the map.
             var blindLayer = cellLayer == 0 ? 1 : 0;
             settings.CullingMask = 1 << blindLayer;
-            Assert.That(settings.TryValidate(out error), Is.False);
+            Assert.That(settings.TryValidate(cellLayer, out error), Is.False);
             Assert.That(error, Is.Not.Empty);
             Assert.That(controller.TryRefresh(out error), Is.False);
             Assert.That(error, Does.Contain("cell layer"));
 
             // A mask that covers the cell layer is accepted and copied onto the camera.
             settings.CullingMask = ~0;
-            Assert.That(settings.TryValidate(out error), Is.True, error);
+            Assert.That(settings.TryValidate(cellLayer, out error), Is.True, error);
             Assert.That(controller.TryRefresh(out error), Is.True, error);
             Assert.That(camera.cullingMask, Is.EqualTo(~0));
 
             var narrowMask = (1 << cellLayer) | (1 << blindLayer);
             settings.CullingMask = narrowMask;
-            Assert.That(settings.TryValidate(out error), Is.True, error);
+            Assert.That(settings.TryValidate(cellLayer, out error), Is.True, error);
             Assert.That(controller.TryRefresh(out error), Is.True, error);
             Assert.That(camera.cullingMask, Is.EqualTo(narrowMask));
         }
@@ -746,24 +942,42 @@ namespace HexMap.UnityRuntime.Tests
 
             m_SettingsObject = new GameObject("Map Layer Settings");
             var settings = m_SettingsObject.AddComponent<OrthographicMapLayerSettings>();
-            settings.HexMapView = mapView;
 
             var otherLayer = mapView.CellLayer == 0 ? 1 : 0;
             settings.CullingMask = 1 << otherLayer;
 
             string error;
-            Assert.That(settings.TryValidate(out error), Is.False);
+            Assert.That(settings.TryValidate(mapView.CellLayer, out error), Is.False);
             Assert.That(error, Is.Not.Empty);
         }
 
         [Test]
-        public void LayerSettingsReportAMissingView()
+        public void LayerSettingsReportALayerOutsideTheUsableRange()
         {
             m_SettingsObject = new GameObject("Map Layer Settings");
             var settings = m_SettingsObject.AddComponent<OrthographicMapLayerSettings>();
 
             string error;
-            Assert.That(settings.TryValidate(out error), Is.False);
+            Assert.That(settings.TryValidate(32, out error), Is.False);
+            Assert.That(error, Does.Contain("0..31"));
+        }
+
+        [Test]
+        public void LayerSettingsReportAMissingViewThroughTheCamera()
+        {
+            // The settings hold only the mask now, so the missing view is the camera's refusal to report.
+            // It has to be checked before the mask is validated: the mask is checked against the layer the
+            // missing view would have named, so the other order would dereference it.
+            m_SettingsObject = new GameObject("Map Layer Settings");
+            var settings = m_SettingsObject.AddComponent<OrthographicMapLayerSettings>();
+
+            var camera = CreateCamera(PortraitAspect);
+            var controller = m_CameraObject.AddComponent<OrthographicMapCamera>();
+            controller.Camera = camera;
+            controller.LayerSettings = settings;
+
+            string error;
+            Assert.That(controller.TryRefresh(out error), Is.False);
             Assert.That(error, Does.Contain("HexMapView"));
         }
 

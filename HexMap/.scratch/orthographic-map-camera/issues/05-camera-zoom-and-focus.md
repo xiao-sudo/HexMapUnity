@@ -30,7 +30,7 @@
 
 - [x] 序列化初始焦点 `m_InitialFocus` + `m_HasInitialFocus`
 - [x] `FocusOn(HexCoord)` / `FocusOnWorld(Vector3)`：**瞬时**把 `m_DesiredCenter` 设为 `clamp(焦点, 当前范围)`。`FocusOn` 用 `HexCoord.Distance` 判断是否在地图内（半径 R 的地图恰好是"距原点 ≤ R"的集合，不必碰渲染器）
-- [x] `zoom == 1` 时**强制居中**，忽略焦点
+- [x] `zoom == 1` 时**强制居中**，忽略焦点（**后续已删除这条规则**，见下方 Comments）
 - [x] 焦点只在两个时刻生效：`FocusOn` 被调用时，以及**非手势的** zoom 变化时
 - [x] 拖拽只改 `m_DesiredCenter`，**不改焦点**
 - [x] `BeginGesture()` / `EndGesture()` / `IsGestureActive` 让输入层声明手势
@@ -77,4 +77,9 @@
   - 缓动路径**不提供**"带瞄准"的变体：在还在变形的框里瞄准是移动靶，而每帧重瞄正是被删掉的那份状态；生产代码里缓动只被锚点手势使用（`TargetZoom` 全仓只有测试在写）。
   - 为什么这不是"把状态推给上层"：那条规则跨帧、跨调用方（zoom 由输入组件改、refresh 由视口变化触发），搬上去只会散到每个调用点，而 refresh 没有回调可接。把它变成**参数**才是既无状态又不丢正确性的做法。触发这次改动的具体证据：`MapViewModeSwitcher` 是"先 `FocusOnWorld` 后 `SetZoomImmediate`"，而 `FocusOnWorld` 按旧档位夹取——`sw.unity` 下会把边缘目标夹到 `9.09` 而正确值是 zoom 3 的 `16.31`，目标整个出画面。
   - 行为变化：`FocusOn` 过的地方不会再被之后的 zoom 变化"重新对准"；`zoom = 1` 居中后放大不再回到原处。测试 `ZoomOneIsAlwaysCenteredButRemembersTheFocus` / `AGestureZoomDoesNotPullTheCameraTowardsTheFocus` / `AnAnchoredZoomOutranksTheFocus` 已按新契约改写。
-  - `m_InitialFocus` / `m_HasInitialFocus` **保留**（它是序列化配置而不是运行时记忆），但"是否还要应用"的判据从 `m_HasFocus` 改成 `m_HasCenter` —— 这顺手修掉一个潜伏 bug：拖拽只设 `m_HasCenter`，旧判据会让一次 refresh 把玩家的拖拽推回初始焦点。
+  - `m_InitialFocus` / `m_HasInitialFocus` 当时**保留**（它是序列化配置而不是运行时记忆），但"是否还要应用"的判据从 `m_HasFocus` 改成 `m_HasCenter` —— 这顺手修掉一个潜伏 bug：拖拽只设 `m_HasCenter`，旧判据会让一次 refresh 把玩家的拖拽推回初始焦点。
+  - **再后续：`m_InitialFocus` / `m_HasInitialFocus` / `ApplyInitialFocus` 全部删除**（本票的"序列化初始焦点"验收项作废）。两个场景都没启用它，它是 API 里的第三种坐标表达，且只在序列化 zoom > 1 时有可见效果。想"开场对准某处"由知道这件事的 composer 调 `FocusOn` / `TryZoomToCell` 完成，见 `../spec.md` 第 7 节。`m_HasCenter` 保留（现在只用于"全量重建时是否保留中心"）。
+  - **再后续：新增 `TryZoomToCell(HexCoord, zoom)`**。原来从格子出发只能自己转世界坐标再调 `TryZoomToPoint`，而写换算时容易写成"先 `FocusOn` 再设档位"（先对准按旧档位夹取 ⇒ 边缘格被夹偏）。本票的"焦点来源只做外部 API"因此多了一个入口；`FocusOn` 与 `TryZoomToCell` 现在共用私有 `TryGetCellWorldCenter`（同时承担 `m_HasFraming` 守卫与地图范围判定）。
+- **后续修正：zoom 缓动整块删除**。`m_TargetZoom` / `TargetZoom` / `m_ZoomSpeed` / `ZoomSpeed` / `Tick(float)` / `SetZoomImmediate` / `Update` 全部删除，`ApplyZoom` 的入口从四条变成三条（`Zoom` setter、`TryZoomTo`、`TryZoomToPoint`）。原因见 `../spec.md` 第 6 节末尾"缓动的归宿"：生产代码从未走过这条路径，而且缓动每一帧都要重新套用手势锚点，等于把 6.4 里删掉的 `m_IsGestureActive` 那套状态请回来。本票 4.5 节规格里"每帧向 TargetZoom 插值"的验收项（`插值：Tick 多帧后到达目标；steps > 1`）随实现一起作废。
+- **后续修正：删除"`zoom == 1` 强制居中"（规则 A）**。`ApplyZoom` 里的 `if (m_Zoom <= MinZoom) { m_DesiredCenter = Vector2.zero; m_HasCenter = false; }` 删除，本票"`zoom == 1` 时强制居中，忽略焦点"的验收项作废。原规则做了一件 clamp 已经会做的事（最远端竖向范围为 0 ⇒ `y` 自动归中）和一件有害的事（连 `x` 一起清零，把"正在看哪一半"扔掉——竖屏最远端可视宽只有地图宽的 48%，左右拖着看两半正是这个档位的用法）。修正后**任何档位变化都保持当前中心，只由逐轴夹取拉回**。详见 `../spec.md` 第 8 节；原测试 `ReachingTheWidestLevelRecentersAndTheWayBackKeepsIt` 改写为 `TheWidestLevelKeepsTheHorizontalAimAndDropsTheVerticalOne`，并新增 `PanningWorksAtTheWidestLevelBecauseTheHorizontalRangeSurvives`。
+- **后续修正：`TryRefresh` 不再是唯一的重建入口**。新增 `TryRefreshIfStale(out error)`，供"不知道有没有变、但知道自己的输入即将开始"的调用方使用（两个输入适配器在**手势开始**各调一次）。陈旧判据仍由相机自己持有（比较 `m_AppliedAspect` 等快照），因为 `Camera.aspect` 由引擎在窗口尺寸 / 设备旋转时重算，既没有回调也没有本组件的 setter 参与。详见 `docs/implementation/orthographic-map-camera-internals.md` §4.2.1。

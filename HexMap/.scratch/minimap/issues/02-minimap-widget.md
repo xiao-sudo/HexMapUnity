@@ -9,12 +9,12 @@
 ## 范围
 
 - [ ] `RenderTexture` 的创建与 `Release`（`OnDestroy` 里释放，避免重复进入场景泄漏）；`targetTexture` 常驻 ⇒ 相机永不画到屏幕
-- [ ] 重烤状态机，**可被 `Tick(deltaTime)` 驱动**（与 `OrthographicMapCamera.Tick` 同一套路，便于 EditMode 测试）：`RequestRefresh()` / `SetFocus` 置脏 → `Tick` 里 `camera.enabled = true` → 下一帧 `false`
+- [ ] 重烤状态机，**可被 `Tick(deltaTime)` 驱动**（便于 EditMode 测试；注意 `OrthographicMapCamera.Tick` 已随 zoom 缓动一起删除，不要再拿它当"同一套路"的先例）：`RequestRefresh()` / `SetFocus` 置脏 → `Tick` 里 `camera.enabled = true` → 下一帧 `false`
 - [ ] 队伍位置点：一个 `Image`，位置由 01 的 `TryGetLocalPoint(部队世界位置)` 得出；`local` 越界时**隐藏**（不夹取）
 - [ ] `event Action<Vector3> Clicked`：实现 `IPointerClickHandler` → 局部点 → `TryGetWorldPoint` → 抛事件。**事件里不含 PlotId / HexCoord**，只给世界点
 - [ ] **不引用** `MapClickDispatcher`、`GvgMapRuntimeController`、`GvgMapRuntimeController.Select`
 - [ ] `MapViewModeSwitcher` 增加"小地图相机"槽：进俯视时 `enabled = false`，回 gameplay 时恢复（与现有 drag / zoom 槽同形）
-- [ ] 小地图相机与 `OrthographicMapLayerSettings` 都用**独立实例**；mask 必须包含 `HexMapView.CellLayer`，否则 `TryValidate` 会报错
+- [ ] 小地图相机与 `OrthographicMapLayerSettings` 都用**独立实例**；mask 必须包含 `HexMapView.CellLayer`，否则 `TryValidate(cellLayer, out error)` 会报错
 
 ## 验收
 

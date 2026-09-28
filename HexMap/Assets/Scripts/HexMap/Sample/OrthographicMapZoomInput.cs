@@ -130,6 +130,14 @@ namespace HexMap.Sample
             if (!m_IsGestureActive)
             {
                 m_IsGestureActive = true;
+
+                // The refresh runs before anything is captured, because a rebuild replaces the frame the
+                // capture reads: the start zoom and the anchor both describe the frame this gesture will
+                // work in, so they have to be read from the frame it will actually be applying to.
+                // A pinch is anchored in viewport coordinates, so a stale frame would anchor the zoom
+                // against a viewport the camera no longer has. Asked once per gesture, never per frame.
+                RefreshFramingIfStale();
+
                 m_AnchorViewport = ScreenToViewportAnchor(midpoint, UnityEngine.Screen.width, UnityEngine.Screen.height);
                 m_PinchStartZoom = m_MapCamera.Zoom;
                 m_PinchStartDistance = distance;
@@ -149,12 +157,32 @@ namespace HexMap.Sample
                 return;
             }
 
-            // Each notch is one wheel gesture in its own right, anchored where the pointer is.
+            // Each notch is one wheel gesture in its own right, anchored where the pointer is. The refresh
+            // comes first for the same reason as the pinch: the anchor and the zoom it is applied to both
+            // describe the frame, so the frame has to be current before either is read.
+            RefreshFramingIfStale();
+
             m_AnchorViewport = ScreenToViewportAnchor(
                 Input.mousePosition,
                 UnityEngine.Screen.width,
                 UnityEngine.Screen.height);
+
             ApplyZoom(m_MapCamera.Zoom * Mathf.Pow(WheelZoomPerNotch, scroll));
+        }
+
+        /// <summary>
+        /// Asks the camera to re-frame if its viewport snapshot no longer holds. This is a gesture-start
+        /// question, not a per-frame one: the camera rebuilds on demand so it does not need a frame loop,
+        /// and a pinch or a wheel notch is the moment the answer starts to matter.
+        /// </summary>
+        private void RefreshFramingIfStale()
+        {
+            string error;
+            if (!m_MapCamera.TryRefreshIfStale(out error))
+            {
+                // Not fatal to the gesture: the zoom below clamps itself and reports its own failure.
+                Debug.LogWarning("OrthographicMapZoomInput could not refresh the map framing: " + error, this);
+            }
         }
 
         private void ApplyZoom(float zoom)

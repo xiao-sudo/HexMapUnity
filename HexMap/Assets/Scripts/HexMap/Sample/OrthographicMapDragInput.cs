@@ -88,6 +88,18 @@ namespace HexMap.Sample
             {
                 m_IsDragging = true;
                 m_PreviousPointerPosition = pointerPosition;
+
+                // The camera snapshots the viewport, and a drag is the only thing that can expose a stale
+                // one: a wider or narrower frame moves the horizontal panning limit. Asking once here
+                // rather than every frame keeps the camera free of a frame loop. A refusal is not fatal
+                // to the gesture, but it has to be reported: the pan below would otherwise fail once per
+                // frame and say only that the camera has no framing.
+                string framingError;
+                if (!m_MapCamera.TryRefreshIfStale(out framingError))
+                {
+                    Debug.LogWarning("OrthographicMapDragInput could not refresh the map framing: " + framingError, this);
+                }
+
                 return;
             }
 

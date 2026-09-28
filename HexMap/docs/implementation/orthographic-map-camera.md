@@ -51,14 +51,18 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 
 所以**边缘格永远到不了视口正中心**——地图在那里就结束了。放大后夹取范围变宽，同一个边缘格会**越来越接近**中心但不会到达（`zoom = 2` 时距右边约 42% 屏宽，`zoom = 4` 时约 46%）。
 
-**要"改档位 + 对准某点"，用一次调用 `TryZoomToPoint(zoom, worldPoint)`**，它内部**先定框、再对准**。顺序不能反：反过来（先 `FocusOnWorld` 再改 zoom）会拿**旧**档位的范围去夹取目标，边缘目标被夹在旧范围上、之后再也没有机会回到正确位置——`map.unity` 下从 zoom 1 会夹到 `10.17`，而正确值是 zoom 3 的 `16.67`，目标整个落在画面外。
+**要"改档位 + 对准某点"，用一次调用 `TryZoomToPoint(zoom, worldPoint)`**，它内部**先定框、再对准**；从格子出发用 `TryZoomToCell(coord, zoom)`（它多做一步"格子 → 世界中心"的换算）。顺序不能反：反过来（先 `FocusOnWorld` 再改 zoom）会拿**旧**档位的范围去夹取目标，边缘目标被夹在旧范围上、之后再也没有机会回到正确位置——`map.unity` 下从 zoom 1 会夹到 `10.17`，而正确值是 zoom 3 的 `16.67`，目标整个落在画面外。
 
 **这也是相机不再保存焦点状态的原因**：把"对准谁"放进调用本身，就不需要一条"等以后某次 zoom 变化时再重新对准"的规则，也就没有那条规则与缩放锚点抢中心的问题（旧实现为此需要 `BeginGesture` / `EndGesture` 与一段 save/restore 来仲裁，那套机制随焦点状态一起删掉了）。
 
-**两条中心规则**：
+**一条中心规则**：**任何 zoom 变化都保持当前中心**，只由逐轴独立夹取在"框装不下"时把它拉回来。没有例外，尤其**降到 `zoom = 1` 不再强制居中**：
 
-1. **降到 `zoom = 1` 会强制居中**（它代表"看全貌"）。之后再放大**不会**回到之前对准的地方——相机不记得它。
-2. **其他任何 zoom 变化都保持当前中心**，只在框变窄装不下时才被夹回来。拖拽同理：没有任何"焦点"会把镜头拉回去。
+- 最远端下竖向范围本来就是 0，所以 `y` 会**自动**归中——这不是一条规则，是夹取的算术结果；
+- 但 `x` 会**保留**。竖屏一屏只装得下地图宽度的 48% 左右，玩家在最远端左右拖、分别看两半，正是这个档位的用法；强制把 `x` 清掉等于在最需要这个位置的时候把它扔掉。
+- 于是"降档看全貌 → 再放大"会从**你刚才看的那一半**继续放大，而不是跳回正中。
+- **注意保留的是"夹取后的位置"**：每个档位的水平范围不同（框越宽范围越窄），所以降档时相机可能被往地图中间拉一点。`map.unity` 下在 zoom 2 对准东边缘是 `x = 15.05`，降到最远端变成 `10.17`（受最远端那 `±10.17` 限制），再放大回来仍是 `10.17`。表现像"降档时镜头向左滑了一点"，这是夹取的必然结果，不是抖动。
+
+拖拽同理：没有任何"焦点"会把镜头拉回去。
 
 **缩放锚点**取双指中点（移动端）或鼠标位置（滚轮），这样"捏住的地方不动"。三个细节：
 
@@ -75,7 +79,7 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 | 地图包络 | `39.8372 × 31.5000` |
 | 最远档（zoom 1）`orthographicSize` | `17.325` |
 | 竖屏 9:16 可视区 | `34.65 × 19.4906` |
-| 竖屏 9:16 可移动范围 | 水平 `±10.1733`、垂直 `±0` |
+| 竖屏 9:16 可移动范围 | 水平 `±10.1733`、垂直 `±0`（最远端只能左右看两半，上下已被"所有行"占满） |
 | 一行占屏高 | `2.86`（约 12 行同屏） |
 | 一列占屏宽 | `3.62`（约 5～6 列同屏） |
 
@@ -93,12 +97,12 @@ orthographicSize = 地图半深 × m_ViewMargin      ← orthographicSize 本身
 
 1. `Camera`：勾上 **Orthographic**（这是摆放设置，控制器运行时只校验、不偷偷改）。
 2. `OrthographicMapCamera`：`m_HexMapView` → 场景里的 **HexMap**；`m_Camera` → **自身**；`m_Height = 30`、`m_Near = 28`、`m_Far = 32`、`m_ViewMargin = 1.1`、`m_PlaneMode = FollowMapView`。（宽高比没有配置项，一律取 `Camera.aspect`。）
-3. `OrthographicMapLayerSettings`：`m_HexMapView` → **HexMap**；`m_CullingMask` 必须包含 HexMap 的 cell 层（默认 `Everything` 即可）。
+3. `OrthographicMapLayerSettings`：`m_CullingMask` 必须包含 HexMap 的 cell 层（默认 `Everything` 即可）。它**不再持有 `m_HexMapView`**：要校验的那个层由相机在刷新时传进来。
 4. 回到 `OrthographicMapCamera`，把 `m_LayerSettings` 指向第 3 步那个组件。
 5. `OrthographicMapDragInput`：`m_MapCamera` → 那个 `OrthographicMapCamera`。它可以从 `HexMap.Sample` 程序集挂到任意常驻物件上。
 6. `OrthographicMapZoomInput`：`m_MapCamera` → 同一个 `OrthographicMapCamera`；`m_UseMouseWheel` 默认开（触摸捏合不受它影响）。
 
-相机在 `Start()` 里自动取景一次。之后**视口变化需要调用方显式调 `TryRefresh()`**，本特性不做逐帧监听。
+相机在 `Start()` 里自动取景一次，**之后就完全没有任何逐帧行为**（本组件没有 `Update`）。视口变化（窗口尺寸、设备旋转）不改 `OrthographicMapCamera` 的任何字段，所以只有相机自己知道"快照过期了"；两个输入适配器在**手势开始**（拖拽起点、捏合起点、每个滚轮档位）各调一次 `TryRefreshIfStale()`，不陈旧时它连相机都不碰（见 `orthographic-map-camera-internals.md` §4.2.1）。调用方若自己知道配置变了（改了 `ViewMargin`、重建了地图），直接调 `TryRefresh()`。
 
 ## 看到异常时先查这里
 

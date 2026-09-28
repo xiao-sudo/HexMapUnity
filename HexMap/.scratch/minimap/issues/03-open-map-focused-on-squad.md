@@ -8,7 +8,7 @@
 
 ## 范围
 
-- [ ] `MapViewModeSwitcher` 增加焦点格入口（如 `FocusCell(HexCoord)`，或在打开前推入一个待用焦点格）：进俯视时先 `FocusOn(格)` 再 `SetZoomImmediate(m_FocusZoom)`
+- [ ] `MapViewModeSwitcher` 增加焦点格入口（如 `FocusCell(HexCoord)`，或在打开前推入一个待用焦点格）：进俯视时**一次调用** `TryZoomToCell(格, m_FocusZoom)`（`OrthographicMapCamera` 为此新增的入口）。不要拆成"先 `FocusOn(格)` 再设档位"：`FocusOn` 按**旧档位**的范围夹取，边缘格会被永久夹偏。现有 `m_FocusTarget` 路径走的是 `TryZoomToPoint`，与它同源。
 - [ ] 现有 `m_FocusTarget`（`Transform`）那条路径**行为不变**，两条路径不互相覆盖（后设置者生效，或明确二选一 —— 在实现时定，并写进注释）
 - [ ] 焦点格在地图外 ⇒ `LogWarning`（复用现有 `FocusFailureMessage` 的措辞风格）**但模式照常切换**，与 `m_FocusTarget` 的现有行为一致
 - [ ] 复用 `OrthographicMapCamera.FocusOn` 的夹取，**不新写夹取**

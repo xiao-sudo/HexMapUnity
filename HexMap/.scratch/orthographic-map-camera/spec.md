@@ -226,14 +226,14 @@ orthographicSize = 地图半深 · m_ViewMargin            （m_ViewMargin，默
 | zoom 定义 | `≥ 1`，**越大越近**。`zoom = 1` 是**唯一**"所有行可见"的端点 |
 | `size(zoom)` | `基础 size / zoom`（基础 = 2.2 公式算出的那个值，`map.unity` 下为 `17.325`） |
 | 可移动范围 | 升级为**二维**（地图局部 +X 与 +Z 两个分量），逐轴独立夹取 |
-| `zoom = 1` 行为 | **强制居中**（`Offset = (0,0)`），忽略焦点——此时垂直范围本就是 0，横向也不该偏着 |
+| `zoom = 1` 行为 | **不强制居中**（后续修正）：降档保留水平位置，垂直分量被夹成 0（最远端竖向本来就无余量）。原来的"强制居中"见第 8 节 |
 | zoom 上限 | **由"最小可视宽度占地图宽的比例"反推**：`zoom_max = 1 / (m_MinVisibleWidthRatio × aspect)`。`ratio = 0.15` 时竖屏 9:16 下 `11.85`、横屏 16:9 下 `3.75`——公式自动适应宽高比，不需要两套配置 |
 | zoom 下限 | 固定 `1.0`（即"所有行可见"），不做"整图入画"的更远端——那会在上下留 15 个单位空白 |
-| 焦点来源 | **只做外部 API**：`FocusOn(HexCoord)` / `FocusOnWorld(Vector3)`，加一个序列化的初始焦点。**不做点选拾取**（属于 `.scratch/gvg-hex-map/issues/08`） |
-| 焦点过渡 | **瞬时**（夹取后直接到位），不做飞行动画；但 zoom 本身的插值仍平滑改变视野大小 |
-| 平滑 | 输入写 `TargetZoom`，每帧向 `Zoom` 插值；端点**硬停**（与 2.7 的"无惯性"一致） |
-| 缩放锚点 | **双指中点**（移动端）/ **鼠标位置**（滚轮）。**锚点缩放本身算一次手势**，因此优先于焦点（见 6.4） |
-| 状态存储 | `m_Zoom` / `m_TargetZoom` / 初始焦点序列化在相机组件上；`m_Zoom <= 0` 视为未初始化，回落到 `1.0`（Unity 新建组件的 `float` 是 0，必须处理） |
+| 焦点来源 | **只做外部 API**：`FocusOn(HexCoord)` / `FocusOnWorld(Vector3)` / `TryZoomToCell(HexCoord, zoom)` / `TryZoomToPoint(zoom, world)`。**不做点选拾取**（属于 `.scratch/gvg-hex-map/issues/08`） |
+| 焦点过渡 | **瞬时**（夹取后直接到位），不做飞行动画 |
+| 平滑 | **无平滑**（后续修正）：接口只提供绝对档位，写进去立即生效。见本文件末尾"缓动的归宿" |
+| 缩放锚点 | **双指中点**（移动端）/ **鼠标位置**（滚轮）。锚点随每次调用传入（`TryZoomTo(zoom, anchor)`），相机不持有手势状态 |
+| 状态存储 | `m_Zoom` / `m_DesiredCenter` / `m_HasCenter` 序列化在相机组件上；`m_Zoom <= 0` 视为未初始化，回落到 `1.0`（Unity 新建组件的 `float` 是 0，必须处理）。**没有初始焦点字段**（后续修正，见末尾） |
 
 ```
 size(zoom)      = 基础 size / zoom
@@ -272,7 +272,7 @@ zoom 上限       = 1 / (m_MinVisibleWidthRatio × aspect)
 
 | zoom | 水平范围 | 夹取后 | 该 Hex 距视口右边缘 |
 | --- | --- | --- | --- |
-| 1.0 | `±10.17` | —（6.1：强制居中） | 视口外 |
+| 1.0 | `±10.17` | `+10.17`（后续修正：不再强制居中） | 视口外（可视宽 19.49 装不下该格） |
 | 2.0 | `±15.05` | `+15.05` | 约 42% 屏宽 |
 | 4.0 | `±17.48` | `+17.48` | 约 46% 屏宽 |
 | 8.2 | `±18.73` | `+18.73` | 约 47% 屏宽 |
@@ -305,8 +305,7 @@ zoom 上限       = 1 / (m_MinVisibleWidthRatio × aspect)
 ```
 m_DesiredCenter : Vector2   相机"想"对准的中心（局部 +X / +Z）
 m_HasCenter     : bool      是否已被用户/焦点设置过（零向量与"没设过"不可区分，必须单独记）
-m_Zoom          : float     当前倍率（每帧向 TargetZoom 插值）
-m_TargetZoom    : float     输入写入的目标倍率
+m_Zoom          : float     当前档位（唯一一份缩放状态）
 m_Focus         : Vector2   当前焦点（局部平面坐标）
 m_HasFocus      : bool
 m_IsGestureActive : bool    本帧是否由手势驱动 zoom（见下）
@@ -315,7 +314,7 @@ m_IsGestureActive : bool    本帧是否由手势驱动 zoom（见下）
 | 事件 | 动作 |
 | --- | --- |
 | `FocusOn` / `FocusOnWorld` | 设 `m_Focus`、`m_HasFocus = true`；**瞬时**把 `m_DesiredCenter` 设为 `clamp(焦点, 范围)` |
-| zoom 变化（插值每帧）且**无手势进行中** | 重算 `size` 与两轴范围；`zoom == 1` ⇒ 居中；否则若 `m_HasFocus` ⇒ 重对准焦点；然后夹取 |
+| zoom 变化（每次写入）且**无手势进行中** | 重算 `size` 与两轴范围；若 `m_HasFocus` ⇒ 重对准焦点；然后逐轴夹取。**`zoom == 1` 不再强制居中**（后续修正，见第 8 节） |
 | **缩放手势进行中**（捏合 / 滚轮） | **手势优先**：按 6.3 的锚点公式推移中心。焦点仍然保留，下一次**非手势**的 zoom 变化才重新对准 |
 | **`TryZoomTo(zoom, anchor)`** | **它自己就算一次手势**：先把中心按锚点公式推移并夹取，再在 `m_IsGestureActive = true` 下应用 zoom。若不做这一步，"zoom 变化重对准焦点"会立刻把锚点算出的中心丢掉、把镜头弹回焦点——**这是实现时真踩过的 bug** |
 | 拖拽 | 直接改 `m_DesiredCenter`（夹取后），**不改 `m_Focus`** |
@@ -342,3 +341,47 @@ m_IsGestureActive : bool    本帧是否由手势驱动 zoom（见下）
 | `04-framing-zoom.md` | `OrthographicMapFraming.WithZoom` 纯函数 + 单测（第 6.1 节） | 01 |
 | `05-camera-zoom-and-focus.md` | 二维 `Offset`、zoom 状态与插值、`FocusOn`、二维夹取 + EditMode 测试（第 6.1 / 6.2 / 6.4 节） | 04 |
 | `06-zoom-input.md` | 捏合 + 滚轮适配器（双指中点锚点）、拖拽适配器适配二维与 zoom、文档更新（第 6.3 节） | 05 |
+
+## 6. 缓动的归宿（后续修正：从相机里删除）
+
+**相机不再有 `TargetZoom` / `ZoomSpeed` / `Tick` / `SetZoomImmediate`，连 `Update` 也没有。** 6.1 的"平滑"行按历史记录保留在上面，现行契约见 `docs/implementation/orthographic-map-camera-internals.md` §4.5。
+
+理由是一个可执行的事实：**生产代码里缓动一次都没被走过**。`OrthographicMapZoomInput` 调 `TryZoomTo(zoom, anchor)`、`MapViewModeSwitcher` 调 `TryZoomToPoint(zoom, worldPoint)`，两者都是立即生效；`TargetZoom` 只有测试在写。所以删掉它不是"砍功能"，是把一条从未启用的路径连同它的状态一起清掉（`m_ZoomSpeed` 在 `map.unity` / `sw.unity` 里序列化着，但没有读者）。
+
+**为什么缓动不该由相机提供**（不只是"能在外围做"）：锚点在整个手势里固定（6.3），而缓动每帧是一个新档位，所以缓动的每一帧都要重新套用那个锚点。相机要做到这点就必须再持有"当前锚点"，那正是 6.4 末尾被删掉的 `m_IsGestureActive` 仲裁机制的入口。现在 `TryZoomTo(zoom, anchor)` **每次调用自带锚点**，调用方逐帧喂递增的 zoom 就自动正确——动画留在调用方不是妥协，而是"锚点随调用传递"这条纪律的延续。
+
+代价与替代：本特性**没有任何缩放动画**，切模式时的 `TryZoomToPoint` 是跳变（这本来就是它的行为）。将来若要做"平滑飞到某格"，实现放在调用方：自己把档位从当前值向目标值推进，每帧调一次 `TryZoomTo(档位, 锚点)`。
+
+`SetZoomImmediate` 是缓动的伴生品（它的全部意义是"绕过缓动"），随缓动一起删除：没有缓动时它与 `Zoom = …` 完全等价。
+
+## 7. 初始焦点的归宿（后续修正：从相机里删除）
+
+**删除 `m_InitialFocus` / `m_HasInitialFocus` / `ApplyInitialFocus`。** 6.1 的"焦点来源"行里"加一个序列化的初始焦点"按历史记录保留在上面，现行做法见 `docs/implementation/orthographic-map-camera-internals.md` §4.2。
+
+理由：
+
+- **没有场景用它**：`map.unity` / `sw.unity` 里 `m_HasInitialFocus` 都是 `0`。`sw.unity` 走的是 `MapViewModeSwitcher.m_FocusTarget`（`TryZoomToPoint`），那才是现行做法。
+- **它是第三种坐标表达**：`Vector2` 地图局部平面坐标，既不是 `HexCoord` 也不是世界坐标，作者很难填对；而且它**只在序列化 zoom > 1 时才会被完整应用**（zoom = 1 的竖向无余量，纵向那半会被夹掉），而 `m_Zoom` 是 `[HideInInspector]` 的——"配了却看不到全貌"。
+- **与"信息留在持有者手里"这条原则冲突**：想让场景开场对准某处，正确的位置是知道这件事的那个 composer（`MapViewModeSwitcher` / 场景脚本），一次调用即可：`TryRefreshIfStale()` → `FocusOn(格)` 或 `TryZoomToCell(格, 档位)`。
+- **零测试覆盖**。
+
+`m_HasCenter` **保留**（它不是初始焦点的一部分）：它区分"用户把地图拖到正中"与"从来没人认领过中心"，两者都是 `(0,0)`；全量重建（例如视口变化之后）用它决定是保留中心还是清零。删掉初始焦点后，全量重建时保留中心成了它唯一的用途。
+
+顺带补齐了一个缺口：新增 `TryZoomToCell(HexCoord, zoom)`，因为原来的 API 只有 `TryZoomToPoint(zoom, worldPoint)`，从格子出发的调用方（`.scratch/minimap/issues/03`：小地图打开时以队伍格为中心）必须自己把 `HexCoord` 转成世界坐标，而**写这一步换算时很容易顺手写成"先 `FocusOn` 再设档位"**（先对准会拿旧档位的范围夹取，边缘格被永久夹偏）。把"换算 + 正确顺序"收进一个方法，这个错误就不可表达了。
+
+## 8. 最远端不再强制居中（后续修正：删除"规则 A"）
+
+**删除"规则 A"：它在 `ApplyZoom` 与 `TryZoomToPoint` 里各有一份副本，两份一起删。** 6.1 / 6.2 / 6.4 里"`zoom = 1` 强制居中"那几处按历史记录保留，现行契约见 `docs/implementation/orthographic-map-camera-internals.md` §4.3 / §4.4。
+
+原规则做了两件事，其中一件是多余的、另一件是有害的：
+
+- **多余的**：最远端竖向范围本来就是 0（可视高 = 地图深 × margin ≥ 地图深），所以 `ClampCenter()` 自己就会把 `y` 收成 0。把中心整体清零并不能"多做出"这个效果——`TryZoomToPoint` 那份副本更彻底：它**跳过整个夹取**、直接回中并丢掉瞄准，等于把 clamp 的结果又实现了一遍。
+- **有害的**：它把 `x` 也一起清零，等于把"正在看地图的左半边还是右半边"这个意图在最需要它的时候扔掉。竖屏 9:16 下最远端可视宽只有 `19.49`、地图宽 `39.84`——一屏只装得下 48%，**左右拖着看两半正是这个档位的用法**。清掉 `x` 之后玩家每次降档都要重新拖一遍再放大。
+
+两份副本必须一起删，否则同一次"瞄准 + 定档位"的请求会因为走 `Zoom` setter 还是走 `TryZoomToPoint` 而结果不同（后者会丢掉瞄准）。修正后两处都只剩同一条规则：**先定帧、再按新帧逐轴夹取**。
+
+修正后的行为：**任何档位变化都保持当前中心，只由逐轴独立夹取拉回**；最远端的效果是"保留水平位置、垂直分量归中"（瞄准最远端时同样如此）。这也让"降到最远看全貌 → 再放大"从**刚才看的那一半**继续放大，而不是跳回正中。
+
+`m_HasCenter` 不动：它只表示"中心有没有被认领过"（拖拽、对准、任何档位变化都会认领），与"是不是 `(0,0)`"无关。最远端不再清零中心，也就不再需要在那里清这个标志——原来 `TryZoomToPoint` 那份副本还会把它设成 `false`，现在两处都不再碰它。它唯一的用途仍是全量重建（视口变化等）时决定保留还是清零中心。
+
+回归测试：`TheWidestLevelKeepsTheHorizontalAimAndDropsTheVerticalOne`（水平保留、垂直归中、再放大沿用）、`PanningWorksAtTheWidestLevelBecauseTheHorizontalRangeSurvives`（最远端真的能左右拖到两端）、以及 `ZoomingToAPointClampsAgainstTheNewZoomRatherThanTheOldOne` 末尾新增的两个方向（瞄准最远端 ⇒ 东西两端各自保留、垂直归中）。原测试 `ReachingTheWidestLevelRecentersAndTheWayBackKeepsIt` 已按新契约改写。

@@ -45,6 +45,18 @@ namespace HexMap.UnityRuntime
     /// that wants both at once asks for both at once with <see cref="TryZoomToPoint"/>, which is the only
     /// order that cannot clamp an aim against the range of the zoom it is about to leave.
     /// </para>
+    /// <para>
+    /// Zoom is applied immediately and never eased here. An ease would have to re-apply the gesture's
+    /// anchor on every step, so the animation belongs with whoever knows the anchor; this component
+    /// offers one absolute level at a time and lets the caller ramp it across frames.
+    /// </para>
+    /// <para>
+    /// The framing is a snapshot of the view, the camera and the viewport, and the component does not
+    /// watch for changes to those. It rebuilds on demand: <see cref="TryRefresh"/> for a caller that
+    /// knows something changed, and <see cref="TryRefreshIfStale"/> for one that only knows its input is
+    /// about to start doing something, which is what keeps a viewport change from going unnoticed
+    /// without any per-frame work here.
+    /// </para>
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class OrthographicMapCamera : MonoBehaviour
@@ -104,13 +116,14 @@ namespace HexMap.UnityRuntime
         private float m_MaxZoom = DefaultMaxZoom;
 
         [SerializeField]
-        [Tooltip("Zoom levels per second while easing towards the target zoom.")]
-        private float m_ZoomSpeed = 6f;
-
-        [SerializeField]
         [HideInInspector]
         private Vector2 m_DesiredCenter;
 
+        /// <summary>
+        /// Whether anything has claimed the center. It exists because "the player dragged the map back to
+        /// the middle" and "nobody has ever aimed this camera" are both <c>(0, 0)</c> and cannot be told
+        /// apart by the value alone. A full rebuild keeps a claimed center and clears an unclaimed one.
+        /// </summary>
         [SerializeField]
         [HideInInspector]
         private bool m_HasCenter;
@@ -118,22 +131,6 @@ namespace HexMap.UnityRuntime
         [SerializeField]
         [HideInInspector]
         private float m_Zoom = MinZoom;
-
-        [SerializeField]
-        [HideInInspector]
-        private float m_TargetZoom = MinZoom;
-
-        // Assigned by scene serialization only, so the compiler cannot see a write. Nothing in code sets
-        // these, and the inspector is the intended author, so the warning is suppressed rather than faked
-        // with a self-assignment.
-#pragma warning disable 0649
-        [SerializeField]
-        [Tooltip("Optional starting focus, in map plane coordinates. Applied on the first refresh.")]
-        private Vector2 m_InitialFocus;
-
-        [SerializeField]
-        private bool m_HasInitialFocus;
-#pragma warning restore 0649
 
         private OrthographicMapFraming m_BaseFraming;
         private OrthographicMapFraming m_Framing;
@@ -194,12 +191,6 @@ namespace HexMap.UnityRuntime
             set { m_MaxZoom = value; }
         }
 
-        public float ZoomSpeed
-        {
-            get { return m_ZoomSpeed; }
-            set { m_ZoomSpeed = value; }
-        }
-
         public bool HasFraming
         {
             get { return m_HasFraming; }
@@ -207,6 +198,11 @@ namespace HexMap.UnityRuntime
 
         /// <summary>
         /// The zoom level in use. Zoom 1 is the widest and keeps every row inside the frame.
+        /// <para>
+        /// Writing it applies the new frame immediately. There is no target to ease towards: a caller
+        /// that wants an animated zoom ramps this value itself, because only the caller knows whether
+        /// the change belongs to an anchored gesture.
+        /// </para>
         /// </summary>
         public float Zoom
         {
@@ -215,35 +211,10 @@ namespace HexMap.UnityRuntime
             {
                 // The ceiling is a plain number now, so it applies before the first refresh too.
                 m_Zoom = ClampZoom(value);
-                m_TargetZoom = m_Zoom;
                 if (m_HasFraming)
                 {
                     ApplyZoom();
                 }
-            }
-        }
-
-        /// <summary>
-        /// The zoom level the camera is easing towards. Writing it clamps into the allowed range.
-        /// </summary>
-        public float TargetZoom
-        {
-            get { return m_TargetZoom; }
-            set { m_TargetZoom = ClampZoom(value); }
-        }
-
-        /// <summary>
-        /// Restores a zoom level immediately, without easing towards it. Use this to put the camera back
-        /// the way a caller found it; <see cref="TargetZoom"/> would animate across the difference instead.
-        /// </summary>
-        public void SetZoomImmediate(float zoom)
-        {
-            m_Zoom = ClampZoom(zoom);
-            m_TargetZoom = m_Zoom;
-
-            if (m_HasFraming)
-            {
-                ApplyZoom();
             }
         }
 
@@ -339,7 +310,16 @@ namespace HexMap.UnityRuntime
             var cullingMask = -1;
             if (m_LayerSettings != null)
             {
-                if (!m_LayerSettings.TryValidate(out error))
+                // The view reference is checked here rather than inside the settings: the settings no
+                // longer holds one, and this check has to happen before the mask is validated, because
+                // validating it needs the layer the map's cells are on.
+                if (m_HexMapView == null)
+                {
+                    error = "A HexMapView reference is required.";
+                    return false;
+                }
+
+                if (!m_LayerSettings.TryValidate(m_HexMapView.CellLayer, out error))
                 {
                     return false;
                 }
@@ -466,18 +446,12 @@ namespace HexMap.UnityRuntime
                 m_Zoom = MinZoom;
             }
 
-            if (!IsFinitePositive(m_TargetZoom))
-            {
-                m_TargetZoom = m_Zoom;
-            }
-
             m_Zoom = ClampZoom(m_Zoom);
-            m_TargetZoom = ClampZoom(m_TargetZoom);
-
-            ApplyInitialFocus();
 
             if (!HasUserCenter)
             {
+                // Nothing has aimed this camera, so a rebuild has no center worth keeping. A center that
+                // was aimed at is kept instead, which is why the flag exists rather than the value.
                 m_DesiredCenter = Vector2.zero;
             }
 
@@ -489,7 +463,59 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// Creates the framing snapshot for the current configuration without touching the camera.
+        /// Re-frames the camera only when the snapshot behind <see cref="TryRefresh"/> no longer holds.
+        /// <para>
+        /// This is the entry point for a caller that cannot know whether anything changed but does know
+        /// that its input is about to start doing something, so it must not be called per frame. The
+        /// check compares the camera's own reported configuration against what this component snapshotted,
+        /// which is knowledge that belongs here rather than in every caller: a viewport change arrives
+        /// through <see cref="Camera.aspect"/> with no callback and no setter of ours behind it.
+        /// </para>
+        /// <para>
+        /// When nothing changed this does not touch the camera at all, and it does not re-validate the
+        /// layer settings either, so a mistyped mask reports its one loud failure from the refresh that
+        /// found it instead of once per gesture. An empty <paramref name="error"/> with a true result
+        /// means "the framing in hand is current".
+        /// </para>
+        /// </summary>
+        public bool TryRefreshIfStale(out string error)
+        {
+            if (m_Camera == null)
+            {
+                error = "A Camera reference is required.";
+                return false;
+            }
+
+            if (m_HexMapView == null)
+            {
+                error = "A HexMapView reference is required.";
+                return false;
+            }
+
+            // Nothing changed, so the framing in hand is current and the camera is left alone entirely.
+            if (m_HasFraming && IsCameraConfigurationUnchanged())
+            {
+                error = string.Empty;
+                return true;
+            }
+
+            // Only a view that has no map at all is refused up front, because an attempt there can only
+            // reproduce the failure the refresh that built nothing already reported. Every other refusal
+            // is left to the full path: a refresh that failed before the map was built must be allowed to
+            // retry once it is, since nothing else calls back into this component.
+            if (!m_HexMapView.HasMap)
+            {
+                error = "HexMapView must be built before the camera can frame it.";
+                return false;
+            }
+
+            return TryRefresh(out error);
+        }
+
+        /// <summary>
+        /// Creates the framing snapshot for the current configuration and the current zoom, without
+        /// touching the camera. Reports what is missing instead of throwing, in the same order
+        /// <see cref="TryRefresh"/> uses so that both refuse the same configuration for the same reason.
         /// </summary>
         public bool TryCreateFraming(out OrthographicMapFraming framing, out string error)
         {
@@ -498,6 +524,14 @@ namespace HexMap.UnityRuntime
             if (m_HexMapView == null)
             {
                 error = "A HexMapView reference is required.";
+                return false;
+            }
+
+            // The camera is only read for its aspect, but it is required all the same: reading through a
+            // missing reference would throw where every other refusal in this class reports.
+            if (m_Camera == null)
+            {
+                error = "A Camera reference is required.";
                 return false;
             }
 
@@ -611,7 +645,6 @@ namespace HexMap.UnityRuntime
             m_DesiredCenter = ClampToRange(m_DesiredCenter);
             m_HasCenter = true;
             m_Zoom = clamped;
-            m_TargetZoom = clamped;
 
             ApplyZoom();
 
@@ -622,9 +655,14 @@ namespace HexMap.UnityRuntime
         /// <summary>
         /// Sets the zoom and aims at a world point, in that order.
         /// <para>
-        /// Immediate rather than eased: aiming at a point while the frame is still changing would be
-        /// aiming at a moving target, and re-aiming every frame of an ease is exactly the state this
-        /// class no longer keeps. Set the frame, then aim inside it.
+        /// One call rather than two because the aim has to be clamped against the frame it is about to
+        /// live in. Aiming first would clamp against the range of the zoom being left, and an edge aim
+        /// can never recover from that. Set the frame, then aim inside it.
+        /// </para>
+        /// <para>
+        /// No zoom level is special-cased, the widest included: the aim is clamped there like anywhere
+        /// else, so it keeps its horizontal component and loses only the vertical one, which the clamp
+        /// removes on its own because the widest frame covers the whole depth.
         /// </para>
         /// </summary>
         public bool TryZoomToPoint(float zoom, Vector3 worldPoint, out string error)
@@ -643,24 +681,19 @@ namespace HexMap.UnityRuntime
 
             var clamped = ClampZoom(zoom);
             m_Zoom = clamped;
-            m_TargetZoom = clamped;
 
-            if (clamped <= MinZoom)
-            {
-                // Reaching the widest level re-centers, so an aim asking for it is ignored on purpose.
-                m_DesiredCenter = Vector2.zero;
-                m_HasCenter = false;
-            }
-            else
-            {
-                // The frame for the new zoom has to exist before the aim is clamped. Clamping first
-                // measures the aim against the range of the zoom being left, which is the exact mistake
-                // this method exists to prevent: at the widest level the vertical range is zero, so an
-                // edge aim collapses onto the horizontal axis.
-                m_Framing = m_BaseFraming.WithZoom(m_Zoom);
-                m_DesiredCenter = ClampToRange(ToPlaneCoordinates(worldPoint));
-                m_HasCenter = true;
-            }
+            // The frame for the new zoom has to exist before the aim is clamped. Clamping first measures
+            // the aim against the range of the zoom being left, which is the exact mistake this method
+            // exists to prevent: at the widest level the vertical range is zero, so an edge aim collapses
+            // onto the horizontal axis.
+            m_Framing = m_BaseFraming.WithZoom(m_Zoom);
+
+            // Every level is treated the same, the widest included. It used to re-center and drop the aim
+            // on the grounds that it is the see-everything state; that threw the horizontal half of the
+            // aim away for no reason, because the vertical half is what the clamp removes anyway (the
+            // widest frame covers the whole depth, so its vertical range is zero).
+            m_DesiredCenter = ClampToRange(ToPlaneCoordinates(worldPoint));
+            m_HasCenter = true;
 
             ApplyZoom();
 
@@ -669,28 +702,48 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// Aims the camera at a cell. The center ends up clamped, so an edge cell sits beside the
-        /// viewport center rather than outside the map. Like <see cref="FocusOnWorld"/> this is a
-        /// one-shot request rather than a setting that later zoom changes return to.
+        /// Aims the camera at a cell, keeping the current zoom. The center ends up clamped, so an edge
+        /// cell sits beside the viewport center rather than outside the map. Like
+        /// <see cref="FocusOnWorld"/> this is a one-shot request rather than a setting that later zoom
+        /// changes return to. Use <see cref="TryZoomToCell"/> to pick the zoom in the same call.
         /// </summary>
         public bool FocusOn(HexCoord coordinate, out string error)
         {
-            if (!m_HasFraming)
+            Vector3 world;
+            if (!TryGetCellWorldCenter(coordinate, out world, out error))
             {
-                error = "Refresh the camera before focusing.";
                 return false;
             }
 
-            // A radius-R hex map is exactly the set of cells within R steps of the origin, so the
-            // distance test is the membership test and needs nothing from the renderer.
-            if (HexCoord.Distance(HexCoordOrigin, coordinate) > m_HexMapView.Radius)
-            {
-                error = "The coordinate is outside the map.";
-                return false;
-            }
-
-            var world = m_AppliedTransform.TransformPoint(m_AppliedLayout.HexToWorld(coordinate));
             return FocusOnWorld(world, out error);
+        }
+
+        /// <summary>
+        /// Aims the camera at a cell and sets the zoom, in that order, in one call.
+        /// <para>
+        /// The one call is the point of it: the aim has to be clamped against the frame it is about to
+        /// live in, so a caller that aims first and changes the zoom second clamps against the range of
+        /// the zoom it is leaving, and an edge cell can never recover from that. This is
+        /// <see cref="TryZoomToPoint"/> with the cell-to-world conversion done here, because every caller
+        /// that starts from a cell would otherwise write that conversion itself, and the wrong order is
+        /// exactly the mistake that is easy to make while doing it.
+        /// </para>
+        /// </summary>
+        public bool TryZoomToCell(HexCoord coordinate, float zoom, out string error)
+        {
+            if (!IsFinite(zoom))
+            {
+                error = "Target zoom must be finite.";
+                return false;
+            }
+
+            Vector3 world;
+            if (!TryGetCellWorldCenter(coordinate, out world, out error))
+            {
+                return false;
+            }
+
+            return TryZoomToPoint(zoom, world, out error);
         }
 
         /// <summary>
@@ -719,6 +772,36 @@ namespace HexMap.UnityRuntime
             return true;
         }
 
+        /// <summary>
+        /// Resolves a cell to its world center, refusing anything that cannot be resolved.
+        /// <para>
+        /// A radius-R hex map is exactly the set of cells within R steps of the origin, so the distance
+        /// test is the membership test and needs nothing from the renderer.
+        /// </para>
+        /// </summary>
+        private bool TryGetCellWorldCenter(HexCoord coordinate, out Vector3 worldPoint, out string error)
+        {
+            worldPoint = Vector3.zero;
+
+            if (!m_HasFraming)
+            {
+                // The applied layout and transform are the snapshots a refresh leaves behind, so they are
+                // the reason this has to be asked after one rather than before.
+                error = "Refresh the camera before focusing.";
+                return false;
+            }
+
+            if (HexCoord.Distance(HexCoordOrigin, coordinate) > m_HexMapView.Radius)
+            {
+                error = "The coordinate is outside the map.";
+                return false;
+            }
+
+            worldPoint = m_AppliedTransform.TransformPoint(m_AppliedLayout.HexToWorld(coordinate));
+            error = string.Empty;
+            return true;
+        }
+
         private bool HasUserCenter
         {
             get { return m_HasCenter; }
@@ -736,34 +819,6 @@ namespace HexMap.UnityRuntime
                 var range = m_Framing.MapHalfDepth - m_Framing.VisibleHeight * 0.5f;
                 return range > 0f ? range : 0f;
             }
-        }
-
-        private void Update()
-        {
-            Tick(Time.deltaTime);
-        }
-
-        /// <summary>
-        /// Advances the zoom easing by one step. Exposed so a caller or a test can drive the easing
-        /// without owning the frame loop; <see cref="Update"/> calls it with the frame delta.
-        /// </summary>
-        public void Tick(float deltaTime)
-        {
-            if (!m_HasFraming)
-            {
-                return;
-            }
-
-            if (Mathf.Approximately(m_Zoom, m_TargetZoom))
-            {
-                return;
-            }
-
-            m_Zoom = m_ZoomSpeed > 0f && deltaTime > 0f
-                ? Mathf.MoveTowards(m_Zoom, m_TargetZoom, m_ZoomSpeed * deltaTime)
-                : m_TargetZoom;
-
-            ApplyZoom();
         }
 
         /// <summary>
@@ -808,6 +863,13 @@ namespace HexMap.UnityRuntime
         /// <summary>
         /// Rebuilds the zoomed framing from the retained base framing and keeps the center, re-clamped
         /// against the range the new frame leaves.
+        /// <para>
+        /// The base framing is kept as it is, including the aspect it was built from, so a viewport that
+        /// changed since the last full rebuild stays stale for exactly as long as this path is taken. That
+        /// is deliberate: the comparison in <see cref="IsCameraConfigurationUnchanged"/> reads
+        /// <c>m_AppliedAspect</c> rather than the framing, so the next <see cref="TryRefresh"/> sees the
+        /// same difference and takes the full path instead.
+        /// </para>
         /// </summary>
         private void RefreshFramingFromZoom()
         {
@@ -826,40 +888,14 @@ namespace HexMap.UnityRuntime
             m_Zoom = ClampZoom(m_Zoom);
             m_Framing = m_BaseFraming.WithZoom(m_Zoom);
 
-            if (m_Zoom <= MinZoom)
-            {
-                // The widest level is the "see everything" state, so it is always centered.
-                m_DesiredCenter = Vector2.zero;
-                m_HasCenter = false;
-            }
-
-            // A zoom change keeps the center it finds: the clamp below is all that moves it, and it
-            // only pulls the center back when a narrower frame no longer contains it.
+            // A zoom change keeps the center it finds, at every level including the widest. The clamp
+            // below is the only thing that moves it, and it moves one axis at a time: at the widest level
+            // the frame covers the whole depth, so the vertical range is zero and the vertical component
+            // collapses to the middle on its own, while the horizontal component survives. That is what
+            // lets the player look at the left half of the map and then zoom in on it — re-centering here
+            // would throw that aim away at the exact moment it is most useful.
             ClampCenter();
             ApplyToCamera();
-        }
-
-        /// <summary>
-        /// Applies the serialized starting center, but only while nothing else has claimed the center.
-        /// A drag, an aim request or a zoom all mean the player or the game has taken over, and a later
-        /// refresh must not undo that.
-        /// </summary>
-        private void ApplyInitialFocus()
-        {
-            if (!m_HasInitialFocus || HasUserCenter)
-            {
-                return;
-            }
-
-            // The initial focus is already in map plane coordinates, so it only needs the plane's
-            // perpendicular axis filled in to become a local point. The clamp happens after the framing
-            // for the current zoom exists, which is why this only records where to look.
-            var local = m_AppliedLayout.Plane == HexPlane.XY
-                ? new Vector3(m_InitialFocus.x, m_InitialFocus.y, m_AppliedLayout.Origin.z)
-                : new Vector3(m_InitialFocus.x, m_AppliedLayout.Origin.y, m_InitialFocus.y);
-
-            m_DesiredCenter = ToPlaneCoordinates(m_AppliedTransform.TransformPoint(local));
-            m_HasCenter = true;
         }
 
         private Vector2 ClampToRange(Vector2 offset)
@@ -1005,7 +1041,8 @@ namespace HexMap.UnityRuntime
         {
             // Frame once on load so the scene shows the intended view without any caller.
             // Start runs after every Awake, which matters because HexMapView builds its map in Awake.
-            // Viewport changes still need an explicit TryRefresh from the caller.
+            // A viewport change afterwards is picked up by whoever calls TryRefreshIfStale, and by a
+            // caller that knows something changed through TryRefresh; nothing here watches for either.
             string error;
             if (!TryRefresh(out error))
             {

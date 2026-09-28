@@ -24,10 +24,12 @@
 
 ### Layer 配置组件（已完成）
 
-- [x] 新增 `OrthographicMapLayerSettings`（独立于 `HexMapView`）：序列化 `m_HexMapView` + `m_CullingMask`（默认 `~0`）
-- [x] 自检：未引用 `HexMapView`、层号越界、或 mask 未包含 cell 层 → `TryValidate` 返回失败原因
+- [x] 新增 `OrthographicMapLayerSettings`（独立组件）：序列化 `m_CullingMask`（默认 `~0`）
+- [x] 自检：层号越界、或 mask 未包含 cell 层 → `TryValidate(int cellLayer, out error)` 返回失败原因
 - [x] **不接管** `HexMapView.m_CellLayer` 的写入。为此给 `HexMapView` 加了一个只读 `CellLayer` 属性（唯一的既有文件改动）
 - [x] 控制器在 `m_LayerSettings` 有值时校验并把 mask 写进相机；未接线时**不碰**相机的 `cullingMask`
+
+> **后续修正**：`OrthographicMapLayerSettings` 的 `m_HexMapView` 字段与 `HexMapView` 属性已删除，`TryValidate` 改为接收 `cellLayer` 参数（由相机在刷新时传入）。原因：唯一的调用方就是相机，而相机自己已经持有那份 view；settings 再持有一份只可能与之不一致，却提供不了任何相机自己做不了的校验（见 `orthographic-map-camera-internals.md` §4.2 与 `orthographic-map-camera.md` 接线一节）。
 
 ### 场景接线（未完成，留给人工）
 

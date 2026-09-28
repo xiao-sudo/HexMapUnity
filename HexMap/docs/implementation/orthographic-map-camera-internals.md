@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `Assets/Scripts/HexMap/Core/OrthographicMapFraming.cs` | `HexMap.Core` | 全部数学。不可变结构体，零场景依赖 |
 | `Assets/Scripts/HexMap/UnityRuntime/OrthographicMapCamera.cs` | `HexMap.UnityRuntime` | 状态机 + 写相机 |
-| `Assets/Scripts/HexMap/UnityRuntime/OrthographicMapLayerSettings.cs` | `HexMap.UnityRuntime` | culling mask 与自检 |
+| `Assets/Scripts/HexMap/UnityRuntime/OrthographicMapLayerSettings.cs` | `HexMap.UnityRuntime` | 只持有 culling mask；校验由相机传入 cell layer |
 | `Assets/Scripts/HexMap/Sample/OrthographicMapDragInput.cs` | `HexMap.Sample` | 拖拽输入 |
 | `Assets/Scripts/HexMap/Sample/OrthographicMapZoomInput.cs` | `HexMap.Sample` | 捏合 / 滚轮输入 |
 
@@ -171,9 +171,9 @@ private Vector2 ClampToRange(Vector2 offset)      // 逐轴独立
 | --- | --- | --- |
 | `m_BaseFraming` | `zoom = 1` 的 framing | `TryRefresh` 成功后非 `default` |
 | `m_Framing` | 当前 zoom 的 framing = `m_BaseFraming.WithZoom(m_Zoom)` | 只在 `ApplyZoom` / `TryRefresh` 里更新 |
-| `m_Zoom` / `m_TargetZoom` | 当前 / 目标档位 | 都在 `[1, MaxZoom]`；`Tick` 让前者追后者 |
+| `m_Zoom` | 当前档位，**唯一一份缩放状态** | 在 `[1, MaxZoom]`，无 target、无插值 |
 | `m_DesiredCenter` | **想要**的中心（地图局部平面坐标） | 始终在 `[MinOffset, MaxOffset]` 内 |
-| `m_HasCenter` | 是否被显式设过 | 见 4.4 的坑；也是"初始焦点是否还要应用"的判据 |
+| `m_HasCenter` | 中心是否已被认领（拖拽 / 对准 / 非 1 档位） | 见 4.4 的坑；全量重建时决定是否清零中心 |
 | `m_AppliedLayout` / `m_AppliedTransform` / `m_AppliedScale` | 在 `TryRefresh` 里快照 | 让 `TrySetOffset` 等无需重新解析配置 |
 
 **没有焦点状态**。相机不记录"哪里被要求对准"：`FocusOn` 只改中心，之后任何 zoom 变化都保持这个中心。要"改档位 + 对准"就用 `TryZoomToPoint(zoom, worldPoint)`，对准与档位在同一次调用里、按正确顺序发生。**删除焦点状态的同时也删掉了它带来的仲裁机制**：旧实现需要 `m_IsGestureActive` + `BeginGesture`/`EndGesture` + `TryZoomTo` 里一段 save/restore，只为解决"锚点算出的中心会不会被重对准规则覆盖"。没有常驻焦点，就没有这个冲突。
@@ -184,15 +184,39 @@ private Vector2 ClampToRange(Vector2 offset)      // 逐轴独立
 
 顺序（`OrthographicMapCamera.TryRefresh`）：
 
-1. 引用与配置校验（`HexMapView` / `Camera` / 正交 / near-far / height）；
-2. `TryGetLayout`：要求 `HexMapView.HasMap`（即 `Build()` 已跑过）；
-3. `TryResolvePlaneAndOrientation`：`ForceXY` / `ForceXZ` 与地图实际平面不符 ⇒ **失败**，不静默取其一；
-4. `LayerSettings.TryValidate`（有接的话），取 `cullingMask`；
+1. `LayerSettings.TryValidate(m_HexMapView.CellLayer, …)`（有接的话）取 `cullingMask`；接之前先确认 `m_HexMapView != null`，因为 mask 要对着**相机那份** view 的 cell layer 校验（settings 自己不再持有 view）；
+2. 引用与配置校验（`HexMapView` / `Camera` / 正交 / near-far / height）；
+3. `TryGetLayout`：要求 `HexMapView.HasMap`（即 `Build()` 已跑过）；
+4. `TryResolvePlaneAndOrientation`：`ForceXY` / `ForceXZ` 与地图实际平面不符 ⇒ **失败**，不静默取其一；
 5. `OrthographicMapFraming.TryCreate(...)` 得到 `m_BaseFraming`；
-6. 修正 `m_Zoom` / `m_TargetZoom`：**非有限或 ≤ 0 回落到 1**（Unity 新建组件的 `float` 是 0，若不管会导致"放大到无穷"）；
-7. `ApplyInitialFocus()`（仅在没人认领中心时）、按需清零中心、`WithZoom`、`ClampCenter`、`ApplyToCamera`。
+6. 修正 `m_Zoom`：**非有限或 ≤ 0 回落到 1**（Unity 新建组件的 `float` 是 0，若不管会导致"放大到无穷"）；
+7. 按需清零中心（`!HasUserCenter` 时）、`WithZoom`、`ClampCenter`、`ApplyToCamera`。
 
-这个函数是**幂等**的：连续调两次结果相同（除了 `ResolveAspect` 会重新读 `Camera.aspect`）。
+这个函数是**幂等**的：连续调两次结果相同（除了会重新读 `Camera.aspect`）。
+
+**建帧与"对准哪里"是两件事，只有前者留在这里。** `TryRefresh` 只产生帧；"开场对准某处"由知道它的调用方在 refresh 之后调 `FocusOn` / `TryZoomToCell` / `TryZoomToPoint` 完成。序列化的初始焦点（`m_InitialFocus` / `m_HasInitialFocus` / `ApplyInitialFocus`）已经删除，理由与 Q3 相同（知识留在持有者那里），另外它还有两个实际缺陷：它用**第三种坐标表达**（`Vector2` 地图局部平面坐标，既不是 `HexCoord` 也不是世界坐标），而且**只在序列化 zoom > 1 时有可见效果**（zoom = 1 时竖向无余量、横向才有，所以它的一半效果会被夹掉），是个"配了却看不到全貌"的坑。
+
+### 4.2.1 `TryRefreshIfStale`：给"不知道有没有变"的调用方的入口
+
+```csharp
+public bool TryRefreshIfStale(out string error)
+{
+    // 相机/地图引用缺失、地图还没 Build：直接报错，不去尝试
+    if (m_HasFraming && IsCameraConfigurationUnchanged()) return true;   // 不碰相机
+    if (!m_HexMapView.HasMap) { error = "…built…"; return false; }
+    return TryRefresh(out error);
+}
+```
+
+**为什么需要它**：`Camera.aspect` 由引擎在窗口尺寸 / 设备旋转变化时重算——**没有任何回调、也没有本组件的 setter 参与**，所以"是否需要重建"这件事只有相机自己知道，而"现在是个好时机"只有外围知道。输入适配器在**手势开始**那一刻问一次（`OrthographicMapDragInput` 的拖拽起点、`OrthographicMapZoomInput` 的捏合起点与每个滚轮档位），既不是逐帧，也不是让外围去猜 aspect。
+
+三条性质：
+
+- **不陈旧就完全不碰相机**（连 `ApplyToCamera` 都不调），所以外面手动摆过的相机姿态不会被一次无谓的 refresh 覆盖；
+- **不重复校验 LayerSettings**，于是配错的 mask 只在发现它的那次 refresh 上大声报一次，而不是每次手势报一次；
+- **地图没 Build 时不尝试**，但"上次 refresh 因为别的原因失败"是可以重试的——否则 `Start` 早于 `Build` 就会让相机永久不取景，而没有任何东西会再调回来。
+
+新鲜度判据就是 `IsCameraConfigurationUnchanged()`，它比较 `m_AppliedAspect` 等快照，所以 `RefreshFramingFromZoom`（廉价路径）故意**不**更新 `m_AppliedAspect`：这样"aspect 变了但走了廉价路径"只落后一步，下一次调用立刻走全量重建。
 
 **`orthographic` 只校验、不写入**。它是"摆放设置"，与 `sortingOrder` 同类（ADR-0001 的结论）。控制器在运行时偷偷改它，会造成"编辑器里是透视、跑起来变了"。
 
@@ -203,24 +227,32 @@ private void ApplyZoom()
 {
     m_Zoom = ClampZoom(m_Zoom);
     m_Framing = m_BaseFraming.WithZoom(m_Zoom);
-
-    if (m_Zoom <= MinZoom) { m_DesiredCenter = Vector2.zero; m_HasCenter = false; }   // 规则 A
-
     ClampCenter();
     ApplyToCamera();
 }
 ```
 
-四条入口都汇聚到这里：`Zoom` setter、`Tick`（插值）、`TryZoomTo`、`TryZoomToPoint`。**Review 时确认没有任何别的地方改 `m_Framing`**。
+三个入口都汇聚到这里：`Zoom` setter、`TryZoomTo`、`TryZoomToPoint`。**Review 时确认没有任何别的地方改 `m_Framing`**。
 
-- **规则 A**：`zoom = 1` 是"看全貌"状态 ⇒ 强制居中，并把"中心有人认领"这件事清掉。
-- **其他情况**：保持当前中心，只由 `ClampCenter()` 在框变窄装不下时夹回来。**没有任何重对准**——相机不记得任何目标，所以也就没有"什么时候该重新对准它"这条规则。
+**所有档位一视同仁：保持当前中心，只由 `ClampCenter()` 夹回来。没有任何重对准，也没有"最远端强制居中"这条特例**——相机不记得任何目标，所以也就没有"什么时候该重新对准它"这条规则可言。
+
+> **已删除的规则 A（历史）：两处。** 它有**两份副本**，必须一起删，否则行为会自相矛盾（同一次调用走 `Zoom` setter 与走 `TryZoomToPoint` 结果不同）：
+>
+> 1. `ApplyZoom` 里：`if (m_Zoom <= MinZoom) { m_DesiredCenter = Vector2.zero; m_HasCenter = false; }`
+> 2. `TryZoomToPoint` 里：`if (clamped <= MinZoom) { m_DesiredCenter = Vector2.zero; m_HasCenter = false; } else { …夹取瞄准点… }`——"瞄准最远端"这条路不夹取瞄准点，而是直接回中并**丢掉瞄准**。
+>
+> 删掉的理由一样：最远端下竖向范围本来就是 0，所以 `ClampCenter()` 自己会把 `y` 收成 0（第二处连"夹取"都跳过了，等于重复实现 clamp 的结果）；而强制把 `x` 也清零，等于把"正在看地图哪一半"这个意图在最需要它的时候扔掉——竖屏一屏只能装下地图宽度的一半左右，玩家在最远端左右拖看两半正是这个档位的用法。
+>
+> 删掉之后两处都变成同一条规则：**先定帧、再按新帧逐轴夹取瞄准点**。行为是：**保留水平位置、垂直分量自动归中**，且"瞄准最远端"与"先瞄准再降档"终于得到同一个结果。回归测试 `TheWidestLevelKeepsTheHorizontalAimAndDropsTheVerticalOne`、`PanningWorksAtTheWidestLevelBecauseTheHorizontalRangeSurvives`、以及 `ZoomingToAPointClampsAgainstTheNewZoomRatherThanTheOldOne` 末尾两个方向的最远端瞄准钉住它。
+>
+> **一个必须知道的副作用**：降档**保留的是"夹取后的中心"，不是"原来那个对准点"**。因为每个档位的水平范围不同（框越宽，范围越窄），夹取会在降档时把中心往地图中间拉：`map.unity` 下在 zoom 2 对准东边缘得到 `x = 15.05`，降到最远端后是 `x = 10.17`（受最远端自己那 10.17 的范围限制），再放大回来仍是 `10.17`——**不会**回到 `15.05`。画面上的表现是"降档时相机向左滑了一点"，看起来像镜头在追地图，其实只是相机再也到不了那么靠右的地方了。这与挂点（`FocusOn` / `TryZoomToCell` 是"想去哪"，`ClampToRange` 决定"能到哪"）是同一条 I5 的产物，不是新的不一致。
 
 ### 4.4 三个必须写死的优先级（都踩过坑）
 
 **① `m_HasCenter` 的存在理由。**
+它不是"中心是不是非零"（那是 `m_DesiredCenter` 的值），而是**"中心有没有被认领过"**：拖拽、对准、任何一次非 0 的档位变化都会认领它。
 
-`m_DesiredCenter` 默认是 `(0,0)`，而"用户把地图拖到正中"也是 `(0,0)`。**两者不可区分**，若用 `m_DesiredCenter != Vector2.zero` 判断"用户是否设过"，那么用户拖回正中后 `TryRefresh` 会把它当成"没设过"而重置（还会让序列化的初始焦点重新生效）。所以需要一个独立的布尔。
+`m_DesiredCenter` 默认是 `(0,0)`，而"用户把地图拖到正中"也是 `(0,0)`。**两者不可区分**，若用 `m_DesiredCenter != Vector2.zero` 判断"是否被认领过"，那么用户拖回正中后，一次全量重建会把它当成"没设过"而**静默重置到原点**。所以需要一个独立的布尔：全量重建（`TryRefresh` 走长路径，例如视口变化之后）时，`HasUserCenter` 为真就保留中心，为假才清零。（这也是规则 A 删除后它唯一的用途。）
 
 **② 拖拽与 zoom 都不改任何"目标"。**
 
@@ -229,31 +261,30 @@ private void ApplyZoom()
 | 动作序列 | 结果 |
 | --- | --- |
 | `FocusOn` → 拖走 → zoom | 保持拖走后的位置 |
-| `FocusOn` → 拖走 → zoom 回 1 | 居中（规则 A） |
-| `FocusOn` → 拖走 → zoom 回 1 → 再放大 | 保持居中：**不会**回到 `FocusOn` 过的地方 |
+| `FocusOn` → 拖走 → zoom 回 1 | **保留水平位置**，垂直分量被夹成 0（最远端竖向无余量） |
+| `FocusOn` → 拖走 → zoom 回 1 → 再放大 | 从上面那个位置继续：**不会**回到 `FocusOn` 过的地方 |
 
-旧实现的后两行分别靠"重对准焦点（规则 B）"和"焦点被记住"实现，那两条行为随状态一起删掉了。历史原因与"锚点缩放和重对准打架"的 bug 记在 `.scratch/orthographic-map-camera/issues/05`。
+旧实现的后两行分别靠"重对准焦点（规则 B）"和"最远端强制居中（规则 A）"实现，那两条行为随状态和这条规则一起删掉了。历史原因与"锚点缩放和重对准打架"的 bug 记在 `.scratch/orthographic-map-camera/issues/05`。
 
 **③ 对准与档位要在同一次调用里发生。**
 
-`TryZoomToPoint(zoom, worldPoint)` 先定档位与 framing、再按新范围夹取对准点。**顺序反过来会静默出错**（旧范围更窄 ⇒ 边缘目标被夹在旧范围上且再也回不来），所以 API 不提供"先对准、后改档位"这条路。
+`TryZoomToPoint(zoom, worldPoint)`（以及 `TryZoomToCell`）先定档位与 framing、再按新范围夹取对准点。**顺序反过来会静默出错**（旧范围更窄 ⇒ 边缘目标被夹在旧范围上且再也回不来），所以 API 不提供"先对准、后改档位"这条路。这里**没有"最远端就丢掉瞄准"的例外**（那是已删除的规则 A 的第二份副本，见 4.3）：档位为 1 时也照样夹取瞄准点，只是竖向分量会被夹成 0。
 
-### 4.5 插值
+### 4.5 没有插值：缓动属于调用方
 
 ```csharp
-public void Tick(float deltaTime)     // Update() 调用它，测试也直接调
-{
-    if (Mathf.Approximately(m_Zoom, m_TargetZoom)) return;
-    m_Zoom = m_ZoomSpeed > 0f && deltaTime > 0f
-        ? Mathf.MoveTowards(m_Zoom, m_TargetZoom, m_ZoomSpeed * deltaTime)
-        : m_TargetZoom;
-    ApplyZoom();
-}
+public float Zoom { get => m_Zoom; set { m_Zoom = ClampZoom(value); if (m_HasFraming) ApplyZoom(); } }
 ```
 
-- **`zoom` 的插值是"档位/秒"**（`m_ZoomSpeed = 6`），不是指数逼近。这样到端点**硬停**（与"无惯性"一致），也不会出现永远逼近不到的死循环。
-- **`Tick` 是 public**：让测试与调用方能驱动时间，不依赖 Unity 的帧循环。`Update` 只是它的一个调用点。
-- 插值过程中**每帧**重算 `m_Framing` 与范围 ⇒ 相机在缩放动画里始终被夹取，不会中途跑出地图。
+相机里**只有一份缩放状态**，写进去就立刻夹取、立刻生效。**没有 `TargetZoom` / `ZoomSpeed` / `Tick` / `SetZoomImmediate`**，也没有 `Update`。
+
+为什么缓动不在相机里（这曾经存在过，是被删掉的，别走回头路）：
+
+- **锚点缩放要求缓动的每一帧都重新套用锚点**。锚点在整个手势里固定（§5.3），而缓动每帧是一个新档位；相机要做对这件事就得再持有"当前锚点"这份状态，而那正是 §4.1 里被删掉的 `m_IsGestureActive` 那套仲裁机制的入口。
+- `TryZoomTo(zoom, anchor)` **每次调用自带锚点**，所以调用方逐帧喂递增的 zoom 就自动正确；把动画放在调用方不是妥协，而是把"锚点随调用传递"这条纪律贯彻到底。
+- 生产代码里**从来没有一次**走过缓动：`OrthographicMapZoomInput` 用 `TryZoomTo`、`MapViewModeSwitcher` 用 `TryZoomToPoint`，都是立即生效。
+
+历史提醒：文档曾写"生产代码里缓动只被锚点手势使用"，那是指旧的 `TargetZoom = …` 写法。输入适配器改用 `TryZoomTo`（自带锚点、立即生效）之后，这句话就失效了，但 `m_ZoomSpeed` 与插值路径一直留到现在才删。
 
 ### 4.6 zoom 上下限
 
@@ -279,7 +310,7 @@ zoom 的定义本身就是相对的：`size(zoom) = BaseOrthographicSize / zoom`
 
 - 下限固定 `MinZoom = 1`（唯一"所有行可见"的档位）。
 - `MaxZoom == 1` **合法**：那是一台"只平移、从不缩放"的相机。`MaxZoom < 1` 或非有限值 ⇒ `TryRefresh` 拒绝取景并报 `"Max zoom must be finite and at least 1."`（否则 `size` 会变成 0 而不是报错）；`ClampZoom` 另有兜底，坏上限退化成下限，不会变成 0。
-- 上限**不再依赖 framing**，所以 `Zoom` / `TargetZoom` / `SetZoomImmediate` 的 setter **一律**走 `ClampZoom`。以前"没有 framing 时不做上限夹取、要等第一次 `TryRefresh` 才补夹"的那个特例（以及 `NormalizeZoom`）已经删除。
+- 上限**不依赖 framing**，所以 `Zoom` 的 setter **一律**走 `ClampZoom`：没有 framing 时也夹，这样"没有 framing 就不做上限夹取、要等第一次 `TryRefresh` 才补夹"的特例（以及 `NormalizeZoom`、`SetZoomImmediate`、`TargetZoom`）都不需要存在。
 
 ---
 
@@ -296,7 +327,9 @@ public bool FocusOnWorld(Vector3 worldPoint, out string error)
 }
 ```
 
-**要同时改档位并对准，用 `TryZoomToPoint(zoom, worldPoint)`**：它先把 `m_Zoom`/`m_TargetZoom`/framing 设成新档位，再把中心设成"该点在新范围下的夹取结果"。**顺序是硬要求**——先对准再改档位会拿旧范围夹取，边缘目标被永久夹在旧范围上（`map.unity` 下从 zoom 1 得到 `10.17` 而不是 zoom 3 的 `16.67`，目标整个出画面）。把两者放进同一次调用，调用方就不可能写反。
+**要同时改档位并对准，用 `TryZoomToPoint(zoom, worldPoint)`**：它先把 `m_Zoom` 与 framing 设成新档位，再把中心设成"该点在新范围下的夹取结果"。**顺序是硬要求**——先对准再改档位会拿旧范围夹取，边缘目标被永久夹在旧范围上（`map.unity` 下从 zoom 1 得到 `10.17` 而不是 zoom 3 的 `16.67`，目标整个出画面）。把两者放进同一次调用，调用方就不可能写反。**档位取 1 时也走同一条路**（不特殊处理、不丢瞄准，只是竖向被夹成 0）。
+
+**从格子出发就用 `TryZoomToCell(HexCoord, zoom)`**：它是 `TryZoomToPoint` 加上"格子 → 世界中心"的换算。存在的理由是每个从格子出发的调用方（小地图"以队伍格为中心打开"）都要做这一步换算，而**写换算的时候最容易顺手写成"先对准再改档位"**——把那两步收进一个方法，这个错误就不可表达了。
 
 `ToPlaneCoordinates` 把世界点经 `InverseTransformPoint` 转地图局部，再取两个平面分量：
 
@@ -306,14 +339,17 @@ return m_AppliedLayout.Plane == HexPlane.XY
     : new Vector2(local.x, local.z);
 ```
 
-`FocusOn(HexCoord)` 先算世界中心再走上面这条：
+`FocusOn(HexCoord)` 与 `TryZoomToCell` 共用同一个换算（私有 `TryGetCellWorldCenter`）：
 
 ```csharp
+if (!m_HasFraming) { 失败 /* 快照还没建立 */ }
 if (HexCoord.Distance(HexCoordOrigin, coordinate) > m_HexMapView.Radius) { 失败 }
-var world = m_AppliedTransform.TransformPoint(m_AppliedLayout.HexToWorld(coordinate));
+worldPoint = m_AppliedTransform.TransformPoint(m_AppliedLayout.HexToWorld(coordinate));
 ```
 
 **用距离判断"是否在地图内"**，而不是 `HexMap.Query(...).HasCell`：半径 R 的六边形地图恰好是"距原点 ≤ R 步"的格子集合（`CONTEXT.md` 对"地图半径"的定义），所以距离判据是精确的，而且**不需要渲染器**。
+
+**`m_HasFraming` 这道守卫是必需的，不是仪式**：换算用的是 `m_AppliedTransform` / `m_AppliedLayout`，它们只有在一次成功的 `TryRefresh` 之后才存在（默认值是 `null` 与 `default`）。三个对准入口都要拦：`FocusOn`、`TryZoomToCell` 走这道守卫，`FocusOnWorld` 自己再查一次（它不需要换算，但同样需要帧）。所以"外围先 refresh 再对准"不只是正确性要求，也是**不崩的要求**——而调用方用 `TryRefreshIfStale()` 就能同时满足它和"快照可能过期"。
 
 数值示例（`map.unity`，`zoom = 2`，水平范围 `±15.05`）：把焦点设在最外圈 Hex（局部 `X = 19.05`），夹取后中心是 `+15.05`，该格落在屏幕偏右——**"焦点不在正中心"是 I5 的必然结果**。
 
@@ -394,10 +430,10 @@ public static Vector2 ScreenDeltaToOffsetDelta(
 | 时机 | 行为 | 理由 |
 | --- | --- | --- |
 | `Start()` | 自动 `TryRefresh()` 一次，失败 `Debug.LogError` | **不能用 `Awake()`**：`HexMapView.Build()` 在它自己的 `Awake()` 里跑，而组件间 `Awake` 顺序未定义 |
-| 之后 | **不逐帧做任何事**（除非在 zoom 插值中） | 视口变化需调用方显式 `TryRefresh()`；本特性不监听分辨率 |
-| `Tick` | 只在 `m_Zoom != m_TargetZoom` 时工作 | 静止时零开销 |
+| 之后 | **本组件不逐帧做任何事，没有 `Update`** | 视口变化由输入适配器在**手势开始**调一次 `TryRefreshIfStale()`；配置变化由知道它的调用方调 `TryRefresh()` |
+| 首帧失败 | 不重试，但也不锁死 | 地图还没 Build 时 `TryRefreshIfStale()` 会拒绝；Build 之后第一次手势就能把它补上 |
 
-`Update` → `Tick(Time.deltaTime)`；`Tick` 也公开给测试与调用方。
+`Start` 失败后相机是"未取景"状态（`HasFraming == false`）：此时 `TrySetOffset` / `TryZoomTo` / `FocusOn` 全部返回 `false` 并给出原因，而不是静默做一半。
 
 ---
 

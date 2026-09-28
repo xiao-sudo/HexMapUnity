@@ -379,7 +379,7 @@ namespace HexMap.Sample.Tests
         {
             CreateRig();
             var mapCamera = CreateMapCamera();
-            mapCamera.SetZoomImmediate(2f);
+            mapCamera.Zoom = 2f;
             m_Switcher.MapCamera = mapCamera;
 
             m_Switcher.EnterTopDown();
