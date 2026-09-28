@@ -43,8 +43,10 @@ namespace HexMap.Sample.Editor
                 return;
             }
 
-            var dispatcher = switcher.Dispatcher != null
-                ? switcher.Dispatcher
+            var wiring = switcher.Wiring;
+
+            var dispatcher = wiring.Dispatcher != null
+                ? wiring.Dispatcher
                 : FindSingle<MapClickDispatcher>();
             if (dispatcher == null)
             {
@@ -52,9 +54,9 @@ namespace HexMap.Sample.Editor
                 return;
             }
 
-            var mapCamera = switcher.MapCamera != null
-                ? switcher.MapCamera
-                : FindSingle<OrthographicMapCamera>();
+            // The map camera is found by component now: the switcher no longer holds one, because the only
+            // thing that ever used it there was the focus request, which is gone.
+            var mapCamera = FindSingle<OrthographicMapCamera>();
 
             // The click entry point: without one nothing calls OnMapClicked, so the whole chain is dead.
             var tap = EnsureComponent<MapClickTapInput>(dispatcher.gameObject, changes);
@@ -66,17 +68,17 @@ namespace HexMap.Sample.Editor
                 changes.Add("pointed MapClickTapInput at '" + dispatcher.name + "'");
             }
 
-            // The gestures belong on the camera they drive, which is the one the switcher switches off.
-            OrthographicMapDragInput drag = null;
-            OrthographicMapZoomInput zoom = null;
+            // The gestures belong on the camera they drive. The switcher does not take them any more: a
+            // gesture refuses to act while its camera is off, which is the only thing the mode change was
+            // ever providing.
             if (mapCamera == null)
             {
                 notes.Add("no OrthographicMapCamera in the scene, so panning and zooming were not wired");
             }
             else
             {
-                drag = EnsureComponent<OrthographicMapDragInput>(mapCamera.gameObject, changes);
-                zoom = EnsureComponent<OrthographicMapZoomInput>(mapCamera.gameObject, changes);
+                var drag = EnsureComponent<OrthographicMapDragInput>(mapCamera.gameObject, changes);
+                var zoom = EnsureComponent<OrthographicMapZoomInput>(mapCamera.gameObject, changes);
 
                 if (drag.MapCamera != mapCamera)
                 {
@@ -95,21 +97,21 @@ namespace HexMap.Sample.Editor
                 }
             }
 
-            WireSwitcher(switcher, dispatcher, mapCamera, drag, zoom, changes);
+            WireSwitcher(switcher, dispatcher, changes);
             StartInGameplayMode(switcher, changes);
 
-            WireModeButton(switcher, switcher.GameplayUiRoot, "gameplay", changes, notes);
-            WireModeButton(switcher, switcher.TopDownUiRoot, "top-down", changes, notes);
+            WireModeButton(switcher, wiring.GameplayUiRoot, "gameplay", changes, notes);
+            WireModeButton(switcher, wiring.TopDownUiRoot, "top-down", changes, notes);
 
             WirePanel(
-                switcher.GameplayUiRoot,
+                wiring.GameplayUiRoot,
                 FindSingle<GameplayMapClickHandler>(),
                 "Gameplay",
                 "gameplay",
                 changes,
                 notes);
             WirePanel(
-                switcher.TopDownUiRoot,
+                wiring.TopDownUiRoot,
                 FindSingle<TopDownMapClickHandler>(),
                 "Map view",
                 "top-down",
@@ -139,35 +141,24 @@ namespace HexMap.Sample.Editor
         private static void WireSwitcher(
             MapViewModeSwitcher switcher,
             MapClickDispatcher dispatcher,
-            OrthographicMapCamera mapCamera,
-            OrthographicMapDragInput drag,
-            OrthographicMapZoomInput zoom,
             List<string> changes)
         {
             Undo.RecordObject(switcher, ChangeLabel);
 
-            if (switcher.Dispatcher != dispatcher)
+            var wiring = switcher.Wiring;
+            if (wiring.Dispatcher != dispatcher)
             {
-                switcher.Dispatcher = dispatcher;
+                // Configure is the one writer of the wiring. The rest of the value is read back from the
+                // switcher and handed straight back, so this only replaces the dispatcher.
+                switcher.Configure(new MapViewModeWiring(
+                    wiring.GameplayCamera,
+                    wiring.TopDownCamera,
+                    wiring.UiCamera,
+                    wiring.GameplayUiRoot,
+                    wiring.TopDownUiRoot,
+                    dispatcher,
+                    wiring.StartMode));
                 changes.Add("pointed the switcher at '" + dispatcher.name + "'");
-            }
-
-            if (mapCamera != null && switcher.MapCamera != mapCamera)
-            {
-                switcher.MapCamera = mapCamera;
-                changes.Add("pointed the switcher at the map camera on '" + mapCamera.gameObject.name + "'");
-            }
-
-            if (drag != null && switcher.MapDragInput != drag)
-            {
-                switcher.MapDragInput = drag;
-                changes.Add("gave the switcher the drag gesture to switch on and off");
-            }
-
-            if (zoom != null && switcher.MapZoomInput != zoom)
-            {
-                switcher.MapZoomInput = zoom;
-                changes.Add("gave the switcher the zoom gesture to switch on and off");
             }
 
             EditorUtility.SetDirty(switcher);
@@ -175,27 +166,28 @@ namespace HexMap.Sample.Editor
 
         /// <summary>
         /// Leaves the scene starting in gameplay mode. Starting in the map view applies the mode without
-        /// taking a snapshot, so the first return has nothing to restore and the camera stays wherever the
-        /// scene left it, which looks like a broken restore the first time it is tried.
+        /// taking a capture of the gameplay camera, so the first return has nothing to restore and the
+        /// camera stays wherever the scene left it, which looks like a broken restore the first time it is
+        /// tried.
         /// </summary>
         private static void StartInGameplayMode(MapViewModeSwitcher switcher, List<string> changes)
         {
             var serialized = new SerializedObject(switcher);
-            var property = serialized.FindProperty("m_IsTopDown");
+            var property = serialized.FindProperty("m_StartMode");
             if (property == null)
             {
-                changes.Add("could not find the starting mode field; check the mode flag by hand");
+                changes.Add("could not find the starting mode field; check the start mode by hand");
                 return;
             }
 
-            if (!property.boolValue)
+            if (property.intValue == (int)MapViewMode.Gameplay)
             {
                 return;
             }
 
-            property.boolValue = false;
+            property.intValue = (int)MapViewMode.Gameplay;
             serialized.ApplyModifiedProperties();
-            changes.Add("start in gameplay mode, so the first switch has a snapshot to restore");
+            changes.Add("start in gameplay mode, so the first switch has a camera pose to restore");
         }
 
         private static void WireModeButton(

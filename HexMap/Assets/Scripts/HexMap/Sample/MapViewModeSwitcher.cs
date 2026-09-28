@@ -7,16 +7,26 @@ namespace HexMap.Sample
     /// <summary>
     /// Owns which way the map is being looked at, and nothing else.
     /// <para>
-    /// It is the single owner of the mode, the single place that moves a camera between URP stacks, and
-    /// the single place that tells the click dispatcher which camera and channel are live. Keeping those
-    /// three in one step is what makes a switch atomic: no frame can render the new mode while still
-    /// resolving clicks through the old one.
+    /// The modes themselves are states (<see cref="MapGameplayViewState"/>, <see cref="MapTopDownViewState"/>),
+    /// each of which knows how to put its own view up, and each of which keeps whatever it needs to undo that.
+    /// This component is the driver around them: it decides when a mode changes, refuses a change that is not
+    /// one, tells the incoming mode what it is replacing, and keeps the one thing that belongs to no single
+    /// mode — where the UI camera's stack membership goes.
+    /// </para>
+    /// <para>
+    /// A switch is one synchronous step: exit, reset, enter. That is what makes it atomic, so no frame can
+    /// render the new mode while still resolving clicks through the old one, and it is why the driver is the
+    /// only place that ever needs to know the ordering.
     /// </para>
     /// <para>
     /// Both cameras stay in the scene and enabled states are swapped. The UI camera is never rebuilt and
     /// never moved; only the stack it belongs to changes, because a URP overlay camera is only rendered
     /// while its base camera is rendered. Moving it also means owning its render type: URP skips a stack
     /// member that is still a base camera, so moving the UI camera into a stack also marks it an overlay.
+    /// </para>
+    /// <para>
+    /// Adding a mode means adding a state and registering it in <see cref="CreateStates"/>. Nothing else
+    /// here has to learn its name: the driver resets whatever the states declare, not what it knows.
     /// </para>
     /// </summary>
     [DisallowMultipleComponent]
@@ -35,20 +45,6 @@ namespace HexMap.Sample
         private Camera m_UiCamera;
 
         [SerializeField]
-        private OrthographicMapCamera m_MapCamera;
-
-        [SerializeField]
-        private MapClickDispatcher m_Dispatcher;
-
-        [SerializeField]
-        [Tooltip("Optional. Map panning is only live while the map view is up.")]
-        private OrthographicMapDragInput m_MapDragInput;
-
-        [SerializeField]
-        [Tooltip("Optional. Map zooming is only live while the map view is up.")]
-        private OrthographicMapZoomInput m_MapZoomInput;
-
-        [SerializeField]
         [Tooltip("Shown during normal gameplay. Goes inactive while the map view is up.")]
         private GameObject m_GameplayUiRoot;
 
@@ -57,86 +53,48 @@ namespace HexMap.Sample
         private GameObject m_TopDownUiRoot;
 
         [SerializeField]
-        [Tooltip("Optional. When set, opening the map view aims the camera at it and zooms in.")]
-        private Transform m_FocusTarget;
+        [Tooltip("Receives the active camera and click channel whenever the mode changes.")]
+        private MapClickDispatcher m_Dispatcher;
 
         [SerializeField]
-        [Tooltip("Zoom to use when opening the map view with a focus target assigned.")]
-        private float m_FocusZoom = 3f;
+        [Tooltip("Which mode the scene starts in. Set to gameplay so the first switch has a camera pose to restore.")]
+        private MapViewMode m_StartMode;
 
-        [SerializeField]
-        private bool m_IsTopDown;
-
-        private CameraState m_GameplayCameraState;
-        private bool m_HasGameplayCameraState;
+        private MapViewModeContext m_Context;
+        private IMapViewModeState m_GameplayState;
+        private IMapViewModeState m_TopDownState;
+        private IMapViewModeState m_CurrentState;
         private bool m_HasReportedSharedCameraWiring;
 
         /// <summary>
-        /// True while the whole map view is up.
+        /// The mode the app is in now. Derived from the current state rather than tracked beside it, so
+        /// there is one answer to "which mode is this": before the first mode is entered it is the
+        /// serialized start mode.
         /// </summary>
-        public bool IsTopDown
+        public MapViewMode CurrentMode
         {
-            get { return m_IsTopDown; }
+            get { return m_CurrentState != null ? m_CurrentState.Mode : m_StartMode; }
         }
 
-        public Camera GameplayCamera
+        /// <summary>
+        /// The wiring this switcher currently holds, read back as the same shape <see cref="Configure"/>
+        /// takes. It exists for the editor wiring tool, which has to know which UI roots to hang buttons and
+        /// panels under without being handed a second way to write them: the fields stay private, and the
+        /// one writer is still <see cref="Configure"/>.
+        /// </summary>
+        public MapViewModeWiring Wiring
         {
-            get { return m_GameplayCamera; }
-            set { m_GameplayCamera = value; }
-        }
-
-        public Camera TopDownCamera
-        {
-            get { return m_TopDownCamera; }
-            set { m_TopDownCamera = value; }
-        }
-
-        public Camera UiCamera
-        {
-            get { return m_UiCamera; }
-            set { m_UiCamera = value; }
-        }
-
-        public OrthographicMapCamera MapCamera
-        {
-            get { return m_MapCamera; }
-            set { m_MapCamera = value; }
-        }
-
-        public MapClickDispatcher Dispatcher
-        {
-            get { return m_Dispatcher; }
-            set { m_Dispatcher = value; }
-        }
-
-        public OrthographicMapDragInput MapDragInput
-        {
-            get { return m_MapDragInput; }
-            set { m_MapDragInput = value; }
-        }
-
-        public OrthographicMapZoomInput MapZoomInput
-        {
-            get { return m_MapZoomInput; }
-            set { m_MapZoomInput = value; }
-        }
-
-        public GameObject GameplayUiRoot
-        {
-            get { return m_GameplayUiRoot; }
-            set { m_GameplayUiRoot = value; }
-        }
-
-        public GameObject TopDownUiRoot
-        {
-            get { return m_TopDownUiRoot; }
-            set { m_TopDownUiRoot = value; }
-        }
-
-        public Transform FocusTarget
-        {
-            get { return m_FocusTarget; }
-            set { m_FocusTarget = value; }
+            get
+            {
+                return new MapViewModeWiring(
+                    m_GameplayCamera,
+                    m_TopDownCamera,
+                    m_UiCamera,
+                    m_GameplayUiRoot,
+                    m_TopDownUiRoot,
+                    m_Dispatcher,
+                    m_StartMode);
+            }
         }
 
         private void Start()
@@ -145,21 +103,35 @@ namespace HexMap.Sample
         }
 
         /// <summary>
-        /// Puts the scene into the state the serialized mode says it is in, without switching anything:
-        /// the first click must already find the right camera and channel, even if the mode was left
-        /// toggled on in the inspector. This is what <c>Start</c> runs; it is reachable so a test can drive
-        /// it, because start callbacks do not run in edit mode.
+        /// Replaces the scene wiring. Everything that is serialized can also be set from code, which is how
+        /// the editor wiring tool and the tests build a rig; the state objects themselves are built later, on
+        /// first use, so configuring a switcher never has to be paired with a particular call order.
+        /// </summary>
+        public void Configure(in MapViewModeWiring wiring)
+        {
+            m_GameplayCamera = wiring.GameplayCamera;
+            m_TopDownCamera = wiring.TopDownCamera;
+            m_UiCamera = wiring.UiCamera;
+            m_GameplayUiRoot = wiring.GameplayUiRoot;
+            m_TopDownUiRoot = wiring.TopDownUiRoot;
+            m_Dispatcher = wiring.Dispatcher;
+            m_StartMode = wiring.StartMode;
+        }
+
+        /// <summary>
+        /// Puts the scene into the mode the serialized field says it is in. This is what <c>Start</c> runs,
+        /// and it is reachable so a test can drive it, because start callbacks do not run in edit mode.
+        /// <para>
+        /// It does not leave a mode first — nothing has been presented yet — but it does clear the stage
+        /// before entering, exactly like an ordinary switch. That is the one entry path there is: there is no
+        /// separate "apply" variant that could drift out of step with the switch, and no reliance on how the
+        /// scene happened to be left in the inspector.
+        /// </para>
         /// </summary>
         public void ApplySerializedMode()
         {
-            if (m_IsTopDown)
-            {
-                ApplyTopDown();
-            }
-            else
-            {
-                ApplyGameplay();
-            }
+            EnsureStates();
+            SetMode(m_StartMode);
         }
 
         /// <summary>
@@ -167,182 +139,165 @@ namespace HexMap.Sample
         /// </summary>
         public void Toggle()
         {
-            if (m_IsTopDown)
-            {
-                ExitTopDown();
-            }
-            else
-            {
-                EnterTopDown();
-            }
+            EnsureStates();
+
+            // Before the first mode is entered there is no current state, and CurrentMode answers with the
+            // start mode, so this reads as "go to the mode that is not the one we are in" in every case
+            // including the very first press.
+            SetMode(CurrentMode == MapViewMode.Gameplay ? MapViewMode.TopDown : MapViewMode.Gameplay);
         }
 
-        /// <summary>
-        /// Shows the whole map view.
-        /// </summary>
-        public void EnterTopDown()
+        private void SetMode(MapViewMode target)
         {
-            if (m_IsTopDown)
+            if (m_CurrentState != null && m_CurrentState.Mode == target)
+            {
+                // Pressing the button twice is not a mode change, and must not re-run any of it: a second
+                // capture would replace the pose the player is owed with wherever the camera is now.
+                //
+                // The comparison is against the state, never against CurrentMode: before the first entry
+                // CurrentMode answers with the start mode, so asking it would call "start in the map view"
+                // a repeat of the map view and skip the whole entry.
+                return;
+            }
+
+            // What is being left, read before the current state changes. Null means this is the first entry,
+            // which is the only case where there is no earlier mode to hand over anything — and the case a
+            // mode that remembers camera poses has to be able to tell apart from a real switch.
+            var previousMode = m_CurrentState != null ? m_CurrentState.Mode : (MapViewMode?)null;
+
+            if (m_CurrentState != null)
+            {
+                m_CurrentState.Exit(m_Context);
+            }
+
+            // The reset runs on the first entry too, not only on a switch, because it is the only thing that
+            // switches anything off: entering a mode turns that mode's own camera and root on, and no state
+            // ever touches another mode's. Without it on the first entry a scene authored to start in the
+            // map view keeps both cameras enabled.
+            ResetPresentation();
+
+            // The state is written before it is entered, so CurrentMode already answers with the new mode
+            // while Enter runs. An Enter that throws therefore leaves the switcher believing it is in a mode
+            // it only partly presented, which is deliberate: the alternative is a switcher that reports the
+            // old mode while the new one is half up.
+            m_CurrentState = GetState(target);
+            m_CurrentState.Enter(previousMode, m_Context);
+        }
+
+        private void EnsureStates()
+        {
+            if (m_CurrentState != null)
             {
                 return;
             }
 
-            SnapshotGameplayCamera();
-            m_IsTopDown = true;
-            ApplyTopDown();
+            m_Context = new MapViewModeContext(this);
+            CreateStates();
+        }
+
+        private void CreateStates()
+        {
+            // Both states are handed the same UI camera: each has to move it into its own stack on the way
+            // in, and neither owns it — which stacks it may belong to is still decided in one place.
+            //
+            // The map view also gets the gameplay camera, because it is the mode that takes that camera out
+            // of service and therefore the mode that owes its pose back. Keeping the pose there rather than
+            // here is what makes "the view the player left" a property of one object instead of a fact spread
+            // across the driver and a state.
+            m_GameplayState = new MapGameplayViewState(
+                m_GameplayCamera,
+                m_UiCamera,
+                m_GameplayUiRoot,
+                SampleMapClickChannels.For(MapViewMode.Gameplay));
+
+            m_TopDownState = new MapTopDownViewState(
+                m_TopDownCamera,
+                m_UiCamera,
+                m_GameplayCamera,
+                m_TopDownUiRoot,
+                SampleMapClickChannels.For(MapViewMode.TopDown));
+        }
+
+        private IMapViewModeState GetState(MapViewMode mode)
+        {
+            return mode == MapViewMode.TopDown ? m_TopDownState : m_GameplayState;
         }
 
         /// <summary>
-        /// Returns to normal gameplay, putting the gameplay camera back exactly where it was.
+        /// Clears the stage before a mode is entered: every camera and UI root any mode declared, plus the
+        /// click channel, which is pointed at nothing. Runs on the first entry as well as on a switch, which
+        /// is what makes "exactly one mode is presenting" true from the very first frame.
+        /// <para>
+        /// The channel is cleared first so that the window between two modes is "no mode reacts to clicks"
+        /// rather than "the old mode's camera with the new mode's channel". The list is flat and belongs to
+        /// the states, not to this component, which is why adding a mode needs no change here.
+        /// </para>
         /// </summary>
-        public void ExitTopDown()
+        private void ResetPresentation()
         {
-            if (!m_IsTopDown)
-            {
-                return;
-            }
-
-            m_IsTopDown = false;
-            ApplyGameplay();
-        }
-
-        private void ApplyTopDown()
-        {
-            MoveUiCameraIntoStack(m_TopDownCamera);
-
-            if (m_GameplayCamera != null)
-            {
-                m_GameplayCamera.enabled = false;
-            }
-
-            if (m_TopDownCamera != null)
-            {
-                m_TopDownCamera.enabled = true;
-            }
-
-            SetMapInputEnabled(true);
-
-            // Both pushes happen in the same step as the camera swap so no frame can resolve a click with
-            // the previous mode's camera.
             if (m_Dispatcher != null)
             {
-                m_Dispatcher.SetActiveCamera(m_TopDownCamera);
-                m_Dispatcher.SetActiveChannel(SampleMapClickChannels.TopDown);
+                m_Dispatcher.SetActiveCamera(null);
+                m_Dispatcher.SetActiveChannel(MapClickChannels.None);
             }
 
-            SetUiRootActive(m_TopDownUiRoot, true);
-            SetUiRootActive(m_GameplayUiRoot, false);
-
-            FocusIfRequested();
+            HideAll(m_GameplayState);
+            HideAll(m_TopDownState);
         }
 
-        private void ApplyGameplay()
+        private static void HideAll(IMapViewModeState state)
         {
-            MoveUiCameraIntoStack(m_GameplayCamera);
-
-            if (m_TopDownCamera != null)
+            var presentations = state.Presentations;
+            for (var i = 0; i < presentations.Length; i++)
             {
-                m_TopDownCamera.enabled = false;
+                presentations[i].Hide();
             }
-
-            if (m_GameplayCamera != null)
-            {
-                m_GameplayCamera.enabled = true;
-            }
-
-            // The gestures act on the map camera, which is disabled now. Leaving them live would let a
-            // gameplay drag silently move the view the player gets back.
-            SetMapInputEnabled(false);
-
-            RestoreGameplayCamera();
-
-            if (m_Dispatcher != null)
-            {
-                m_Dispatcher.SetActiveCamera(m_GameplayCamera);
-                m_Dispatcher.SetActiveChannel(SampleMapClickChannels.Gameplay);
-            }
-
-            SetUiRootActive(m_GameplayUiRoot, true);
-            SetUiRootActive(m_TopDownUiRoot, false);
         }
 
         /// <summary>
-        /// Turns the map's pan and zoom gestures on or off with the mode. Both are optional, so a scene
-        /// that drives the map camera from somewhere else simply leaves the slots empty.
+        /// Puts this mode's camera in charge of clicks and its channel in charge of handlers, in one step.
+        /// Called by the context while a state is being entered.
         /// </summary>
-        private void SetMapInputEnabled(bool isEnabled)
+        internal void EnterMode(Camera camera, int channel)
         {
-            if (m_MapDragInput != null)
+            if (camera != null)
             {
-                m_MapDragInput.IsEnabled = isEnabled;
+                camera.enabled = true;
             }
 
-            if (m_MapZoomInput != null)
+            if (m_Dispatcher != null)
             {
-                m_MapZoomInput.IsEnabled = isEnabled;
+                m_Dispatcher.SetActiveCamera(camera);
+                m_Dispatcher.SetActiveChannel(channel);
             }
         }
 
-        private void FocusIfRequested()
+        /// <summary>Shows or hides a UI root, leaving it alone when it is already in that state.</summary>
+        internal void SetUiRootActive(GameObject root, bool active)
         {
-            if (m_FocusTarget == null || m_MapCamera == null)
+            if (root != null && root.activeSelf != active)
             {
-                // No focus target means the map view opens the way the player left it.
-                return;
+                root.SetActive(active);
             }
-
-            // One call, because the aim travels with the zoom. Aiming first would clamp the target
-            // against the wider range of the zoom being left, which can leave it off the frame.
-            string error;
-            if (!m_MapCamera.TryZoomToPoint(m_FocusZoom, m_FocusTarget.position, out error))
-            {
-                Debug.LogWarning("MapViewModeSwitcher could not focus the map view: " + error, this);
-            }
-        }
-
-        private void SnapshotGameplayCamera()
-        {
-            if (m_GameplayCamera == null)
-            {
-                m_HasGameplayCameraState = false;
-                return;
-            }
-
-            var transform = m_GameplayCamera.transform;
-            m_GameplayCameraState = new CameraState(
-                transform.position,
-                transform.rotation,
-                m_GameplayCamera.fieldOfView,
-                m_GameplayCamera.orthographicSize);
-            m_HasGameplayCameraState = true;
-        }
-
-        private void RestoreGameplayCamera()
-        {
-            if (!m_HasGameplayCameraState || m_GameplayCamera == null)
-            {
-                return;
-            }
-
-            var transform = m_GameplayCamera.transform;
-            transform.position = m_GameplayCameraState.Position;
-            transform.rotation = m_GameplayCameraState.Rotation;
-            m_GameplayCamera.fieldOfView = m_GameplayCameraState.FieldOfView;
-            m_GameplayCamera.orthographicSize = m_GameplayCameraState.OrthographicSize;
         }
 
         /// <summary>
         /// Moves the UI camera into a base camera's stack. A URP overlay camera is only rendered while its
         /// base camera is rendered, so leaving it in the stack of a disabled camera blanks the UI.
+        /// <para>
+        /// Both arguments come from the calling state, which is why the same UI camera is passed by both:
+        /// the states hold the reference, this method holds the rule. It used to read the UI camera off this
+        /// component, which would have been a second place the same fact could be wrong.
+        /// </para>
         /// </summary>
-        private void MoveUiCameraIntoStack(Camera baseCamera)
+        internal void MoveUiCameraIntoStack(Camera baseCamera, Camera uiCamera)
         {
-            if (m_UiCamera == null || baseCamera == null)
+            if (uiCamera == null || baseCamera == null)
             {
                 return;
             }
 
-            if (m_UiCamera == m_GameplayCamera || m_UiCamera == m_TopDownCamera)
+            if (uiCamera == m_GameplayCamera || uiCamera == m_TopDownCamera)
             {
                 // The same camera cannot be a base camera and the overlay it renders through. Marking it
                 // an overlay would also make its own cameraStack invalid, so a stack is left alone here.
@@ -354,24 +309,24 @@ namespace HexMap.Sample
             // is still a base camera, warning every frame while the UI quietly renders nothing, and a
             // fresh UniversalAdditionalCameraData is a base camera. This is the only owner of stack
             // membership, so it owns the render type too.
-            m_UiCamera.GetUniversalAdditionalCameraData().renderType = CameraRenderType.Overlay;
+            uiCamera.GetUniversalAdditionalCameraData().renderType = CameraRenderType.Overlay;
 
             // Remove it from wherever it currently is first: an overlay may belong to one stack only, and
             // adding it twice makes URP reject the stack.
             if (m_GameplayCamera != null && m_GameplayCamera != baseCamera)
             {
-                RemoveUiCameraFrom(m_GameplayCamera);
+                RemoveUiCameraFrom(m_GameplayCamera, uiCamera);
             }
 
             if (m_TopDownCamera != null && m_TopDownCamera != baseCamera)
             {
-                RemoveUiCameraFrom(m_TopDownCamera);
+                RemoveUiCameraFrom(m_TopDownCamera, uiCamera);
             }
 
             var baseData = baseCamera.GetUniversalAdditionalCameraData();
-            if (!baseData.cameraStack.Contains(m_UiCamera))
+            if (!baseData.cameraStack.Contains(uiCamera))
             {
-                baseData.cameraStack.Add(m_UiCamera);
+                baseData.cameraStack.Add(uiCamera);
             }
         }
 
@@ -393,7 +348,7 @@ namespace HexMap.Sample
                 this);
         }
 
-        private void RemoveUiCameraFrom(Camera baseCamera)
+        private void RemoveUiCameraFrom(Camera baseCamera, Camera uiCamera)
         {
             // A base camera is the only kind that has a stack; asking an overlay for one returns null.
             var data = baseCamera.GetUniversalAdditionalCameraData();
@@ -402,34 +357,7 @@ namespace HexMap.Sample
                 return;
             }
 
-            data.cameraStack.Remove(m_UiCamera);
-        }
-
-        private static void SetUiRootActive(GameObject root, bool active)
-        {
-            if (root != null && root.activeSelf != active)
-            {
-                root.SetActive(active);
-            }
-        }
-
-        private readonly struct CameraState
-        {
-            public CameraState(Vector3 position, Quaternion rotation, float fieldOfView, float orthographicSize)
-            {
-                Position = position;
-                Rotation = rotation;
-                FieldOfView = fieldOfView;
-                OrthographicSize = orthographicSize;
-            }
-
-            public Vector3 Position { get; }
-
-            public Quaternion Rotation { get; }
-
-            public float FieldOfView { get; }
-
-            public float OrthographicSize { get; }
+            data.cameraStack.Remove(uiCamera);
         }
     }
 }

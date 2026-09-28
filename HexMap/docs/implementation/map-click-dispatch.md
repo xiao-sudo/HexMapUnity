@@ -116,14 +116,23 @@ private static bool IsAlive(IMapClickHandler handler)
 
 **模式值必须有唯一主人，且必须能被读。** 至少要回答这些问题的消费者有四类：分派器（派给谁）、相机栈迁移（UI 相机挂哪个栈）、模式 UI 的显隐、以及将来任何"只在某种模式下生效"的输入。所以不能用"注册在哪个处理者上"来隐式表达模式。
 
+**"唯一主人"这条结论没变，变的是它的实现层次**：模式值不再是一个布尔字段，而是"当前是哪个状态对象"。每一个模式都是一个状态对象，自己知道要开哪台相机、哪个 UI 根、推哪个通道；`MapViewModeSwitcher` 退化成驱动它们的那个人，外加两件不属于任何单个模式的机制。
+
 ```
-MapViewModeSwitcher（应用层 Sample）       ← 模式值的唯一主人
-   ├ 切相机：快照 / 栈迁移 / enabled
-   ├ 切 UI：两个 Canvas 根节点
-   └ 推给分派器：SetActiveCamera(活动相机) + SetActiveChannel(通道)
+MapViewModeSwitcher（应用层 Sample）              ← 驱动器：决定何时换模式、换不成时不换
+   ├ m_CurrentState                                ← 模式值的唯一真相（CurrentMode 由它派生）
+   ├ 建两个状态（惰性、一次）：相机 / UI 根 / 通道各自注入
+   ├ 共享机制①：UI 相机栈迁移与 render type（唯一主人）
+   ├ 共享机制②：gameplay 相机快照与还原（唯一主人）
+   └ 一次切换 = 退出 → 归零 → 进入
+
+MapGameplayViewState / MapTopDownViewState        ← 模式自己：开自己的相机、自己的 UI 根、推自己的通道
+   └ 互不认识；加第三个模式 = 加一个状态类，驱动器与已有状态一行不改
 ```
 
 **为什么由模式主人推"活动相机"而不是每次点击去问**：既然切模式时就是它在切相机，它同时知道两者。推送一次让"分派器当前用哪个相机"成为可打印、可断言的状态；每次去问会把相机归属变成隐式依赖。
+
+**为什么"归零"由驱动器做，而不是每个状态在进入时关掉别人的东西**：关掉别的模式的东西，等于每个状态都要知道别的模式存在。驱动器有一张**扁平清单**（每个状态声明自己可能打开的组件），归零就是逐个关掉——它不知道有几个模式、也不知道它们叫什么。代价是 `退出 → 归零 → 进入` 中间有一瞬"没有任何模式在呈现"，而这一瞬在同一个同步方法里、不落到帧上。
 
 ## 5.1 相机栈：UI 会随主相机一起消失
 
@@ -137,7 +146,7 @@ if (baseCameraAdditionalData.renderType == CameraRenderType.Overlay) return;
 
 **Overlay 相机只在"它的 base 相机被渲染时"才会被渲染。** 现在 UI 相机挂在常规模式相机的栈里，所以**一旦为了进俯视而 `gameplayCamera.enabled = false`，整个 UI 会一起消失**——包括你想在俯视模式显示的那些面板。
 
-因此切换时**移动 UI 相机所在的栈**，而不是重建或隐藏它：
+因此切换时**移动 UI 相机所在的栈**，而不是重建或隐藏它：两个状态在进入时各调一次 `context.EnterOwnUiStack(自己的相机)`，实现只有一份（`MapViewModeSwitcher.MoveUiCameraIntoStack`）。
 
 ```csharp
 // 先摘再挂：一个 Overlay 只能属于一个栈，重复添加会被 URP 判定为不合法的栈成员
@@ -161,27 +170,39 @@ if (!baseData.cameraStack.Contains(m_UiCamera)) baseData.cameraStack.Add(m_UiCam
 ## 5.2 切换的时序
 
 ```
-进入俯视：
-  快照常规相机(position / rotation / fieldOfView / orthographicSize)
-  迁移 UI 相机栈 → 常规相机 enabled = false → 俯视相机 enabled = true
-  打开平移与缩放手势（它们驱动的是俯视相机）
-  切两个 Canvas 根节点
-  dispatcher.SetActiveCamera(俯视相机) + SetActiveChannel(TopDown)   ← 与相机切换同一步
-  可选：TryZoomToPoint(焦点档位, 焦点世界坐标)
+冷启动（Start → ApplySerializedMode）：
+  m_CurrentState == null ⇒ 没有前一个模式可退（不 Exit）
+  但**照常归零**：先推 (null, None)，再关掉每个状态声明的相机与 UI 根
+  然后进入 m_StartMode —— 它只负责打开自己的东西
 
-退出俯视：
-  迁移 UI 相机栈 → 俯视相机 enabled = false → 常规相机 enabled = true
-  关闭平移与缩放手势
-  还原常规相机快照
-  切两个 Canvas 根节点
-  dispatcher.SetActiveCamera(常规相机) + SetActiveChannel(Gameplay)
+按下地图按钮：
+  Toggle → SetMode(另一个模式)
+    当前状态存在且它的模式 == target ⇒ 到此为止（连按两次不是一次模式切换）
+                                      注意比的是"当前状态"，不是 CurrentMode：冷启动时
+                                      CurrentMode 会回落成起始模式，拿它比会把"起始模式就是
+                                      要进入的模式"误判成重复请求，于是整个进入被跳过
+    当前状态.Exit(context)          ← 冷启动时没有当前状态，跳过
+    ResetPresentation()   → 分派器推 (null, None)；逐个关掉每个状态声明的相机与 UI 根
+    m_CurrentState = 目标状态
+    目标状态.Enter(上一个模式, context)：   ← 上一个模式由驱动器在改变状态前读出，冷启动为 null
+      [俯视] 若上一个模式是 gameplay 且尚未记过 ⇒ 记下 gameplay 相机的位姿
+      context.Enter(自己的相机, 自己的通道)      ← 相机 enabled 与通道推送在同一句里
+      context.ShowOwnView(自己的 UI 根)
+      context.EnterOwnUiStack(自己的相机)
+      [俯视] 离开时（Exit）把记下的位姿还回去
 ```
 
-**`SetActiveCamera` 与 `enabled` 切换必须在同一帧内完成**。若隔一帧，那一帧的点击会拿着上一模式的相机去拾取（画面已换、拾取还旧），表现为"第一次点击响应错面板"。
+**归零是"恰好一个模式在呈现"这条性质的唯一来源，所以冷启动也要跑**：进入模式只打开自己的东西，关掉别人的只有归零。少了它，"开局即俯视"的场景会让两台相机同时开着（gameplay 相机不会被关）。旧实现从不依赖场景里相机的作者状态，进入任一模式都会把两台相机设成确定值，这里保持一致。
 
-**为什么要快照而不是重算**：退出时重算常规相机的位置需要复制玩法相机的跟随逻辑，两份实现必然漂移。快照是"完全复原"的唯一可靠方式。（复原写的是常规相机自己的 `position` / `rotation` / `fieldOfView` / `orthographicSize`，与 `OrthographicMapCamera` 无关。）
+**gameplay 相机的位姿由俯视模式自己持有**（数据、守卫、记与还都在它一个类里），但"该不该记"要看**上一个模式是不是 gameplay**：只有从 gameplay 切进俯视，那台相机才刚停止被使用，它当时的位姿才是玩家应得的那一份。这一项不能省 —— 场景**开局就在俯视**时从未进入过 gameplay，若照样记，第一次退回就会把一台玩家从未用过的相机"还原"成默认位置。记**一次就不再覆盖**，所以连按按钮不会把被移动过的相机当成原状态存下来。
 
-`Start()` 里按序列化的 `m_IsTopDown` 应用一次初始状态（只推状态、不触发切换），这样**第一次点击就能找到正确的相机与通道**，即使模式被留在 Inspector 里勾着的状态。这段逻辑在 `ApplySerializedMode()` 里，`Start()` 只是调它：EditMode 测试没有 start 回调，留一个可调用的入口才能验证它。
+**为什么驱动器要传"上一个模式"而不是让状态去问**：状态之间互不认识；而冷启动时根本没有"上一个状态"可问 —— 拿驱动器当前的模式去推断，会把"开场就在俯视"误判成"刚从 gameplay 过来"。
+
+**`SetActiveCamera` 与 `enabled` 切换必须在同一帧内完成**。若隔一帧，那一帧的点击会拿着上一模式的相机去拾取（画面已换、拾取还旧），表现为"第一次点击响应错面板"。现在这条不是靠纪律维持的：`SetMode` 是一个同步方法，退出／归零／进入之间没有协程、没有第二个入口，`context.Enter(camera, channel)` 也把"相机与通道同时换"写进了签名。
+
+**为什么要快照而不是重算**：退出时重算常规相机的位置需要复制玩法相机的跟随逻辑，两份实现必然漂移。快照是"完全复原"的唯一可靠方式。（复原写的是常规相机自己的 `position` / `rotation` / `fieldOfView` / `orthographicSize`，与 `OrthographicMapCamera` 无关。）快照**捕获一次就不再覆盖**，所以连按按钮不会把"被移动过的相机"当成原状态存下来。
+
+`Start()` 里按序列化的 `m_StartMode` 应用一次初始模式（**不退出、但照常归零**），这样**第一次点击就能找到正确的相机与通道**，即使场景被留在"开局即俯视"的状态。这段逻辑在 `ApplySerializedMode()` 里，`Start()` 只是调它：EditMode 测试没有 start 回调，留一个可调用的入口才能验证它。
 
 ## 6. 依赖方向（Review 时的关键检查点）
 
@@ -203,13 +224,18 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 
 | 类型 | 作用 |
 | --- | --- |
-| `SampleMapClickChannels` | 应用层的通道常量：`Gameplay = 1`、`TopDown = 2`。**运行时库里没有这些名字** |
+| `SampleMapClickChannels` | 应用层的通道常量：`Gameplay = 1`、`TopDown = 2`，取值由 `MapViewMode` 派生（`For(mode)`）。**运行时库里没有这些名字**。通道与模式仍是两套词汇：合并等于宣布"以后每加一个模式就必须加一个通道" |
+| `MapViewMode` | 模式的词汇表：`Gameplay = 0`、`TopDown = 1`。序列化的起始模式按名字写进场景 |
+| `IMapViewModeState` | 一个模式的全部行为：`Mode` / `Enter` / `Exit` / `Presentations`。状态之间互不认识 |
+| `MapGameplayViewState` / `MapTopDownViewState` | 两个模式各自开自己的相机与 UI 根、推自己的通道；俯视模式还**自己持有** gameplay 相机的位姿（进入时记、离开时还），记不记由驱动器传入的"上一个模式"决定 |
+| `MapViewPresentation` | 一个可被"归零"的东西（相机或 UI 根）。驱动器只对它做一件事：关掉 |
+| `MapViewModeContext` | 状态改世界的唯一通道：进模式（相机+通道）、搬自己的 UI 栈、显隐自己的 UI 根、捕获/还原 gameplay 相机。它自己不持有状态 |
 | `MapClickTapInput` | **唯一认识指针的组件**：判断一次按下是"点在图上"还是"拖拽/点在 UI 上"，是则调 `MapClickDispatcher.OnMapClicked(屏幕坐标)`。换 Input System 或 EasyTouch 只需替换它 |
 | `GameplayMapClickHandler` | `OnEnable` 注册 `Gameplay`、`OnDisable` 注销；点中则调 `GvgMapRuntimeController.Select`，然后抛 `PlotClicked(int)` 事件 |
 | `TopDownMapClickHandler` | 同样注册 `TopDown`；**不碰玩法选中**（预览不是玩），只抛 `PlotClicked(int)` |
 | `IMapPlotClickSource` | 两个处理者共同实现的事件契约，让一个面板类型能服务两个模式而不用写两份 |
 | `MapClickPanel` | 最小面板：`OnEnable` 订阅自己模式的 `PlotClicked`、`OnDisable` 退订；`-1` 关闭，否则显示 PlotId |
-| `MapViewModeSwitcher` | 模式值的唯一主人：栈迁移与 UI 相机的 render type、相机快照与还原、两个 Canvas 根节点的切换、平移/缩放手势的开关、向分派器推相机与通道 |
+| `MapViewModeSwitcher` | **驱动器，不再逐项切东西**：持有唯一真相 `m_CurrentState`（`CurrentMode` 由它派生）、懒建两个状态、一次切换走"退出 → 归零 → 进入"；另外持有两件不属于任何单个模式的机制——UI 相机栈迁移与 render type、gameplay 相机快照与还原。公开面只有 `Configure` / `ApplySerializedMode` / `Toggle` / `CurrentMode`（+ 只读的 `Wiring`，供编辑器接线工具读回） |
 
 **处理者为什么只抛事件、不直接操作面板**：面板是 UI 类型，而处理者在 `Sample` 里虽然可以引用 UI，但把"点击 → 事件"和"事件 → 面板"分开之后，两个模式对**同一个 Plot 点击**给出不同 UI 这件事就只是"谁订阅了这个事件"的差别，不需要在两个处理者里各写一遍面板逻辑。面板在 `OnEnable` 订阅、`OnDisable` 退订（与分派器的注册规则同形）。
 
@@ -222,12 +248,17 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 1. **两个 base 相机**：玩法相机（透视，保留 `MainCamera` tag 与 `AudioListener`）+ 俯视相机（正交，不带 tag）。
 2. **UI 相机**：URP `Camera Type = Overlay`、culling mask 只留 UI 层、`depth` 大于两个 base 相机。`Screen Space - Camera` 的 Canvas 必须把 `worldCamera` 指到它；它现在这份栈由 `MapViewModeSwitcher` 迁移（render type 也由它设）。
 3. **正交 rig 必须驱动俯视相机**：`OrthographicMapCamera.m_Camera` 要指向俯视相机。**这是最容易错的一处**——若它指向玩法相机，聚焦/缩放/拖拽全作用在一个被禁用的相机上，表现为"切过去了但地图不动、缩放没反应"。
-4. **`MapViewModeSwitcher`**：`m_GameplayCamera` / `m_TopDownCamera` / `m_UiCamera` / `m_MapCamera` / `m_Dispatcher` / 两个 UI root（+ 可选 `m_FocusTarget`、`m_MapDragInput`、`m_MapZoomInput`）。
-5. **两个 UI root 互不包含**，且**地图按钮必须放在切换器不碰的常驻 root 里**：放进玩法 root 的话，进俯视时它会被 `SetActive(false)`，就再也点不到、出不来了。
+4. **`MapViewModeSwitcher`**：`m_GameplayCamera` / `m_TopDownCamera` / `m_UiCamera` / `m_Dispatcher` / 两个 UI root / `m_StartMode`。代码侧用一次 `Configure(new MapViewModeWiring(...))` 写；场景侧就是这几个序列化字段。**不再有 `m_MapCamera` / `m_FocusTarget` / `m_FocusZoom` / `m_MapDragInput` / `m_MapZoomInput`**——焦点与手势都不是"模式"的事（见 §7.2）。
+5. **两个 UI root 互不包含**，且每个模式自己的按钮放在**自己那个 root** 里：进某个模式时它自己的 root 被打开、另一个被关掉，所以一个按钮负责"进去"、另一个负责"出来"。**不要按早先版本的写法把它们挪进某个常驻 root**：那样会把"两个按钮各管一个方向"改成"一个按钮要判当前模式"。（本条此前写反了，2026-02 修正。）
 6. **`MapClickTapInput`** 挂到场景里并接上 `m_Dispatcher`（这是点击链路的入口）。
 7. **两个 `MapClickPanel`**：各自接自己模式的处理者（`m_Source`），并放在各自的 UI root 下。
 8. **plot 数据要先初始化**（例如 `Facade`），否则每次点击都是 `MapNotInitialized`/`NoSelectablePlot`，面板永远打不开。
 9. `EventSystem` 必须存在（`Button` 与 `IsPointerOverGameObject` 都依赖它）。
+
+### 7.2 焦点与手势：不在这个组件里
+
+- **焦点**（旧 `m_FocusTarget` / `m_FocusZoom` / `FocusIfRequested`）已从切换器**删除**，没有替代组件。要在"打开大图时对准某处"就由**打开地图的调用方**在 `Toggle()` **之前**做**一次** `OrthographicMapCamera.TryZoomToCell(格, 档位)`（或 `TryZoomToPoint`）。**不要拆成"先对准、再设档位"**：对准会按**旧档位**的范围夹取，边缘目标会被永久夹偏（`.scratch/orthographic-map-camera/issues/05`）。原来的两条焦点的测试也随之删除，因为那条路径不存在了。
+- **平移与缩放手势**（旧 `m_MapDragInput` / `m_MapZoomInput` / `SetMapInputEnabled`）也已删除。手势组件自己判断相机是否可用（`IsCameraLive()`），相机没开就不产生任何效果。这是**必须**的：相机 `enabled = false` 并不会阻止 `OrthographicMapCamera` 接受一次 pan 或 zoom（pan 甚至不需要 framing），所以"相机灭着还能偷偷改视角"要靠输入侧自己挡住。切换器从此不知道手势存在。
 
 ## 8. 测试
 
@@ -243,18 +274,20 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 - `TryGetLastContext` 的三种情况（没点过 / 拾取前被丢弃不留过期结果 / 正常）；
 - 地图未 `TryInitialize` ⇒ `PickStatus == MapNotInitialized` 且点击仍派发。
 
-`Assets/Tests/EditMode/HexMap/Sample/MapViewModeSwitcherTests.cs`（`HexMap.Sample.Tests.EditMode`）覆盖切换器：
+`Assets/Tests/EditMode/HexMap/Sample/MapViewModeSwitcherTests.cs`（`HexMap.Sample.Tests.EditMode`）覆盖切换器。它可以驱动的公开面只有四个成员——`Configure` / `ApplySerializedMode` / `Toggle` / `CurrentMode`——所以每条测试按的按钮和场景里那个 UnityEvent 按的是同一个方法：
 
-- 进/退俯视各自一次性换掉相机 `enabled`、分派器的相机与通道、两个 UI 根节点；
-- **UI 相机既是 `Overlay`、又只在"正在渲染的那个栈"里**（只断言"在列表里"是不够的，见 5.1 第 3 点）；
+- 按一次地图按钮 ⇒ 整个地图视图起来：相机 `enabled`、分派器的相机与通道、两个 UI 根节点，一次性全换；
+- 再按一次 ⇒ 全部换回 gameplay（相机、通道、两个根）；
+- **UI 相机既是 `Overlay`、又只在"正在渲染的那个栈"里**（只断言"在列表里"是不够的，见 5.1 第 3 点），两个方向都查；
 - UI 相机全程不被移动、不被禁用、不被改父节点；
-- 退出时常规相机的 position / rotation / fieldOfView / orthographicSize **完全还原**，包括俯视期间被别处移动过的情况；
-- 重复按地图按钮不会重新快照（否则会把"被移动过的相机"当成原状态存下来）；
+- 回到 gameplay 时常规相机的 position / rotation / fieldOfView / orthographicSize **完全还原**，包括俯视期间被别处移动过的情况；
+- 重复按地图按钮**不是一次模式切换**：不重新快照（否则会把"被移动过的相机"当成原状态存下来）、不重推通道、不动呈现；
 - `Toggle` 两个方向都正确；**连按 5 个来回无漂移**；
-- `m_IsTopDown` 被序列化成 `true` 的场景（`ApplySerializedMode`）能正确进入俯视；且这种"开局就在俯视"的场景退出时**没有快照可还原**，相机保持原位；
-- 有焦点目标 ⇒ `TryZoomToPoint(档位, 焦点世界坐标)`（一次调用，因为对准必须按新档位的范围夹取）；无焦点目标 ⇒ 保持玩家离开时的档位；
-- **焦点失败（如地图相机尚未 refresh）只 `LogWarning`，模式切换照常完成**；
-- 全字段为 null 时 `Toggle` 不抛异常；UI 相机与 base 相机接成同一个时 `LogError` 一次且不去动栈；
-- **平移与缩放手势只在俯视模式下为 `IsEnabled`**（否则玩法模式的一次拖拽会悄悄移走玩家退出后看到的视图）。
+- `m_StartMode` 被序列化成 `TopDown` 的场景（`ApplySerializedMode`）能正确进入俯视；且这种"开局就在俯视"的场景退出时**没有快照可还原**，相机保持原位（gameplay 从未退出过，所以从未捕获）；
+- **按钮是第一个动作时也能建立状态**：起始模式决定第一次按往哪走（这条覆盖 `Toggle` 的冷启动分支，它与 `ApplySerializedMode` 是两条不同的入口）；
+- 模式仍然决定地图相机何时活着（gameplay 关掉它、俯视打开它）；**手势本身是否生效由手势组件自己判断**，不在切换器的断言范围里；
+- 全字段为 null 时 `Toggle` / `ApplySerializedMode` 不抛异常；UI 相机与 base 相机接成同一个时 `LogError` 一次且不去动栈。
 
-`MapClickTapInput` 与 `MapClickPanel` **没有自动化测试**：前者依赖 `Input` 与 `EventSystem.current`，后者依赖 UI 对象与 `TMP_Text`，两者都要玩家真的按一下、点一下才有意义。它们的验收靠手动：按地图按钮、点几个格子、再按一次退出，确认 UI 不消失、面板切换正确、点空关闭、退出后相机回到原位。设计讨论与决策全文见 `.scratch/orthographic-map-camera/spec.md`。
+**已删除的断言（连同它们测的 API）**：焦点与焦点失败、平移/缩放手势的 `IsEnabled`、`m_MapCamera` 的存在、`EnterTopDown` / `ExitTopDown` / `IsTopDown`。它们测的是被这次重构删掉的路径，留着只会让"什么还成立"变得含糊。
+
+`MapClickTapInput` 与 `MapClickPanel` **没有自动化测试**：前者依赖 `Input` 与 `EventSystem.current`，后者依赖 UI 对象与 `TMP_Text`，两者都要玩家真的按一下、点一下才有意义。它们的验收靠手动：按地图按钮、点几个格子、再按一次退出，确认 UI 不消失、面板切换正确、点空关闭、退出后相机回到原位。设计讨论与决策全文见 `.scratch/orthographic-map-camera/spec.md`；本次状态机重构的决策全文见 `.scratch/map-view-mode-state-machine/spec.md`。

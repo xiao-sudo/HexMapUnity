@@ -69,9 +69,24 @@ namespace HexMap.Sample
                 screenDelta.y / screenHeight * visibleHeight * DragDirection);
         }
 
+        /// <summary>
+        /// Whether there is a camera to drive and it is actually rendering. The switcher turns the camera
+        /// off while the whole map view is down, and this component is the only thing that knows the goal
+        /// of a drag, so it is the thing that has to refuse to act. The camera cannot be asked instead:
+        /// panning does not require framing, so a pan on a disabled camera would succeed.
+        /// </summary>
+        private bool IsCameraLive()
+        {
+            return m_MapCamera != null && m_MapCamera.Camera != null && m_MapCamera.Camera.enabled;
+        }
+
         private void Update()
         {
-            if (!m_IsEnabled || m_MapCamera == null)
+            // The camera being switched off is checked here rather than left to the camera: a pan does not
+            // require the camera to be framed, so a drag on a disabled camera would silently move the view
+            // the player is given back. Ending the gesture on the way out also means a drag that started
+            // before the switch cannot resume against a previous pointer position.
+            if (!m_IsEnabled || !IsCameraLive())
             {
                 m_IsDragging = false;
                 return;

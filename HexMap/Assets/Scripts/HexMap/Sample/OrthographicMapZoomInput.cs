@@ -93,9 +93,20 @@ namespace HexMap.Sample
             return startZoom * (currentDistance / startDistance);
         }
 
+        /// <summary>
+        /// Whether there is a camera to drive and it is actually rendering. The switcher turns the camera
+        /// off while the whole map view is down, and the camera would happily take a zoom while disabled, so
+        /// this component is the thing that has to refuse to act. Ending the gesture on the way out also
+        /// means a pinch that started before the switch cannot resume against a stale anchor and start zoom.
+        /// </summary>
+        private bool IsCameraLive()
+        {
+            return m_MapCamera != null && m_MapCamera.Camera != null && m_MapCamera.Camera.enabled;
+        }
+
         private void Update()
         {
-            if (!m_IsEnabled || m_MapCamera == null)
+            if (!m_IsEnabled || !IsCameraLive())
             {
                 EndGestureIfActive();
                 return;

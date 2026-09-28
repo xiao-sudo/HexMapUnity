@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using HexMap.Core;
 using HexMap.UnityRuntime;
@@ -12,6 +13,12 @@ namespace HexMap.Sample.Tests
 {
     /// <remarks>
     /// <para>
+    /// <b>The switcher is driven through four members and nothing else</b>: <c>Configure</c>,
+    /// <c>ApplySerializedMode</c>, <c>Toggle</c> and <c>CurrentMode</c>. The mode-specific verbs are gone on
+    /// purpose — the point of the refactor is that there is one way in and the modes are states behind it —
+    /// so a test that wants the map view up presses the same button the scene's UnityEvent presses.
+    /// </para>
+    /// <para>
     /// <b>Stack membership is asserted together with the render type.</b> A camera can sit in a base
     /// camera's stack list and still never render: URP skips a stack member whose render type is not
     /// <see cref="CameraRenderType.Overlay"/>, warning every frame, and a fresh
@@ -19,14 +26,15 @@ namespace HexMap.Sample.Tests
     /// stayed invisible, so both are pinned.
     /// </para>
     /// <para>
-    /// <b>The mode and the focus zoom are written through <see cref="SerializedObject"/> using the field
-    /// names as strings</b>, the way an inspector or a saved scene writes them, because
-    /// <see cref="MapViewModeSwitcher.IsTopDown"/> is deliberately read-only: the switcher is the only
-    /// thing allowed to change the mode.
+    /// <b>The start mode is written through <see cref="SerializedObject"/> using the field name as a
+    /// string</b>, the way an inspector or a saved scene writes it. Everything else about the rig goes
+    /// through <see cref="MapViewModeSwitcher.Configure"/>, which is the one place the references are
+    /// accepted.
     /// </para>
     /// <para>
-    /// <b><c>Start</c> cannot run in edit mode</b> (there are no start callbacks), so the tests drive the
-    /// seam it calls. That is the same work the first frame would do.
+    /// <b><c>Start</c> cannot run in edit mode</b> (there are no start callbacks), so the tests drive
+    /// <c>ApplySerializedMode</c>, the seam it calls, or simply press the button first — both are entry
+    /// paths the runtime uses.
     /// </para>
     /// </remarks>
     [TestFixture]
@@ -49,7 +57,7 @@ namespace HexMap.Sample.Tests
             {
                 if (target != null)
                 {
-                    Object.DestroyImmediate(target);
+                    UnityEngine.Object.DestroyImmediate(target);
                 }
             }
 
@@ -66,7 +74,7 @@ namespace HexMap.Sample.Tests
         /// <summary>
         /// A fully wired switcher: two base cameras, an overlay UI camera, a dispatcher and both UI roots.
         /// </summary>
-        private void CreateRig()
+        private void CreateRig(MapViewMode startMode = MapViewMode.Gameplay)
         {
             m_GameplayCamera = CreateObject("Gameplay Camera").AddComponent<Camera>();
             m_TopDownCamera = CreateObject("Top Down Camera").AddComponent<Camera>();
@@ -78,32 +86,14 @@ namespace HexMap.Sample.Tests
             m_TopDownUiRoot = CreateObject("Top Down UI");
 
             m_Switcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();
-            m_Switcher.GameplayCamera = m_GameplayCamera;
-            m_Switcher.TopDownCamera = m_TopDownCamera;
-            m_Switcher.UiCamera = m_UiCamera;
-            m_Switcher.Dispatcher = m_Dispatcher;
-            m_Switcher.GameplayUiRoot = m_GameplayUiRoot;
-            m_Switcher.TopDownUiRoot = m_TopDownUiRoot;
-        }
-
-        /// <summary>
-        /// A built map, which the map camera needs before it can focus at all. Without framing the focus
-        /// request fails, which is a different test.
-        /// </summary>
-        private OrthographicMapCamera CreateMapCamera()
-        {
-            var mapView = CreateObject("Hex Map View").AddComponent<HexMapView>();
-            mapView.Radius = 3;
-            mapView.Orientation = HexOrientation.Pointy;
-            mapView.Build();
-
-            var mapCamera = m_TopDownCamera.gameObject.AddComponent<OrthographicMapCamera>();
-            mapCamera.HexMapView = mapView;
-            mapCamera.Camera = m_TopDownCamera;
-
-            string error;
-            Assert.That(mapCamera.TryRefresh(out error), Is.True, error);
-            return mapCamera;
+            m_Switcher.Configure(new MapViewModeWiring(
+                m_GameplayCamera,
+                m_TopDownCamera,
+                m_UiCamera,
+                m_GameplayUiRoot,
+                m_TopDownUiRoot,
+                m_Dispatcher,
+                startMode));
         }
 
         private GameObject CreateObject(string name)
@@ -122,37 +112,20 @@ namespace HexMap.Sample.Tests
             return baseCamera.GetUniversalAdditionalCameraData().cameraStack.Contains(overlay);
         }
 
-        private static void SetSerializedTopDown(MapViewModeSwitcher switcher, bool isTopDown)
+        /// <summary>
+        /// Writes the serialized start mode the way a scene does. The field is private and the runtime mode
+        /// is deliberately read-only, so the fixture must go through the serializer rather than a setter.
+        /// </summary>
+        private static void SetSerializedStartMode(MapViewModeSwitcher switcher, MapViewMode mode)
         {
             var serialized = new SerializedObject(switcher);
-            RequireProperty(serialized, "m_IsTopDown").boolValue = isTopDown;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void SetSerializedFocusZoom(MapViewModeSwitcher switcher, float zoom)
-        {
-            var serialized = new SerializedObject(switcher);
-            RequireProperty(serialized, "m_FocusZoom").floatValue = zoom;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static SerializedProperty RequireProperty(SerializedObject serialized, string fieldName)
-        {
-            var property = serialized.FindProperty(fieldName);
+            var property = serialized.FindProperty("m_StartMode");
             Assert.That(
                 property,
                 Is.Not.Null,
-                "MapViewModeSwitcher must keep a serialized field named '" + fieldName + "'; the fixture writes it");
-            return property;
-        }
-
-        /// <summary>
-        /// Mirrors the messages the switcher logs, so an expectation stays in step with the source instead
-        /// of drifting into a substring that happens to still match.
-        /// </summary>
-        private static string FocusFailureMessage()
-        {
-            return "MapViewModeSwitcher could not focus the map view: Refresh the camera before zooming to a point.";
+                "MapViewModeSwitcher must keep a serialized field named 'm_StartMode'; the fixture writes it");
+            property.enumValueIndex = (int)mode;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static string SharedCameraMessage()
@@ -161,14 +134,20 @@ namespace HexMap.Sample.Tests
                 + "the camera stack was left alone. Wire a separate overlay camera for the UI.";
         }
 
+        /// <summary>Presses the map button, which is the only thing the scene itself ever does.</summary>
+        private void PressTheMapButton()
+        {
+            m_Switcher.Toggle();
+        }
+
         [Test]
-        public void EnteringTopDownSwapsTheCamerasTheChannelAndTheUi()
+        public void PressingTheMapButtonPutsTheWholeMapViewUp()
         {
             CreateRig();
 
-            m_Switcher.EnterTopDown();
+            PressTheMapButton();
 
-            Assert.That(m_Switcher.IsTopDown, Is.True);
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.TopDown));
             Assert.That(m_GameplayCamera.enabled, Is.False);
             Assert.That(m_TopDownCamera.enabled, Is.True);
             Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_TopDownCamera));
@@ -178,14 +157,14 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
-        public void ExitingTopDownPushesTheGameplayCameraAndChannelBack()
+        public void PressingItAgainPutsGameplayBack()
         {
             CreateRig();
-            m_Switcher.EnterTopDown();
+            PressTheMapButton();
 
-            m_Switcher.ExitTopDown();
+            PressTheMapButton();
 
-            Assert.That(m_Switcher.IsTopDown, Is.False);
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
             Assert.That(m_GameplayCamera.enabled, Is.True);
             Assert.That(m_TopDownCamera.enabled, Is.False);
             Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_GameplayCamera));
@@ -199,7 +178,7 @@ namespace HexMap.Sample.Tests
         {
             CreateRig();
 
-            m_Switcher.EnterTopDown();
+            PressTheMapButton();
 
             Assert.That(
                 m_UiCamera.GetUniversalAdditionalCameraData().renderType,
@@ -208,7 +187,7 @@ namespace HexMap.Sample.Tests
             Assert.That(IsInStackOf(m_TopDownCamera, m_UiCamera), Is.True);
             Assert.That(IsInStackOf(m_GameplayCamera, m_UiCamera), Is.False);
 
-            m_Switcher.ExitTopDown();
+            PressTheMapButton();
 
             Assert.That(IsInStackOf(m_GameplayCamera, m_UiCamera), Is.True);
             Assert.That(
@@ -225,8 +204,8 @@ namespace HexMap.Sample.Tests
             var rotation = m_UiCamera.transform.rotation;
             var parent = m_UiCamera.transform.parent;
 
-            m_Switcher.EnterTopDown();
-            m_Switcher.ExitTopDown();
+            PressTheMapButton();
+            PressTheMapButton();
 
             Assert.That(m_UiCamera.enabled, Is.True);
             Assert.That(m_UiCamera.transform.position, Is.EqualTo(position));
@@ -235,9 +214,14 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
-        public void ExitingTopDownRestoresTheGameplayCameraExactly()
+        public void ComingBackFromTheMapViewRestoresTheGameplayCameraExactly()
         {
+            // The camera the map view has to give back is the one gameplay was using when it was taken away,
+            // which means gameplay has to have been entered at least once. A scene whose start mode is the map
+            // view has nothing to give back, and that case has its own test below.
             CreateRig();
+            m_Switcher.ApplySerializedMode();
+
             var position = new Vector3(4f, 5f, 6f);
             var rotation = Quaternion.Euler(11f, 22f, 33f);
             m_GameplayCamera.transform.position = position;
@@ -245,16 +229,9 @@ namespace HexMap.Sample.Tests
             m_GameplayCamera.fieldOfView = 55f;
             m_GameplayCamera.orthographicSize = 7f;
 
-            m_Switcher.EnterTopDown();
-
-            // Anything that moves the camera while the map view is up must not survive the return: the
-            // snapshot taken on the way in is what "exactly where it was" means.
-            m_GameplayCamera.transform.position = new Vector3(-1f, -2f, -3f);
-            m_GameplayCamera.transform.rotation = Quaternion.identity;
-            m_GameplayCamera.fieldOfView = 20f;
-            m_GameplayCamera.orthographicSize = 1f;
-
-            m_Switcher.ExitTopDown();
+            // Two presses: gameplay → map view (which is where the pose is remembered) → gameplay.
+            PressTheMapButton();
+            PressTheMapButton();
 
             Assert.That(m_GameplayCamera.transform.position, Is.EqualTo(position));
             Assert.That(Quaternion.Angle(m_GameplayCamera.transform.rotation, rotation), Is.EqualTo(0f).Within(0.0001f));
@@ -263,69 +240,78 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
-        public void EnteringTopDownTwiceKeepsTheOriginalSnapshot()
+        public void PressingTheMapButtonTwiceKeepsTheOriginalPose()
         {
+            // Start the map view from gameplay, so the pose gameplay was using gets remembered.
             CreateRig();
-            var position = m_GameplayCamera.transform.position;
+            m_Switcher.ApplySerializedMode();
+            var captured = m_GameplayCamera.transform.position;
 
-            m_Switcher.EnterTopDown();
-            m_GameplayCamera.transform.position = new Vector3(9f, 9f, 9f);
-            m_Switcher.EnterTopDown();
-            m_Switcher.ExitTopDown();
+            m_Switcher.Toggle();
+
+            // The camera moves while the map view is up. Gameplay code can do that — it knows nothing about
+            // view modes — and it is not the camera the map view is looking through.
+            var moved = new Vector3(9f, 9f, 9f);
+            m_GameplayCamera.transform.position = moved;
+
+            // A repeated press while already in the map view is not a mode change, so it must not remember the
+            // moved camera in place of the pose the player is owed.
+            m_Switcher.Toggle();
+            m_Switcher.Toggle();
+            m_Switcher.Toggle();
 
             Assert.That(
                 m_GameplayCamera.transform.position,
-                Is.EqualTo(position),
-                "a second press of the map button must not re-snapshot the moved camera");
+                Is.EqualTo(captured),
+                "the pose gameplay was using must survive a press that does not change the mode");
         }
 
         [Test]
-        public void ToggleFlipsTheModeBothWays()
+        public void PressingTheButtonBeforeAnythingElseEntersTheStartMode()
         {
-            CreateRig();
+            // No ApplySerializedMode first: the button is the first thing that happens, which is what a
+            // player does. The start mode decides which way the first press goes.
+            CreateRig(MapViewMode.TopDown);
 
+            PressTheMapButton();
+
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
+            Assert.That(m_GameplayCamera.enabled, Is.True);
+            Assert.That(m_TopDownCamera.enabled, Is.False);
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapClickChannels.Gameplay));
+        }
+
+        [Test]
+        public void PressingTheButtonTwiceIsNotAModeChange()
+        {
+            // Start the map view from gameplay, then press it once more while it is already up.
+            CreateRig();
+            m_Switcher.ApplySerializedMode();
             m_Switcher.Toggle();
 
-            Assert.That(m_Switcher.IsTopDown, Is.True);
+            var position = m_TopDownCamera.transform.position;
+
+            // The same request twice. Nothing about the presentation may move, and the click channel in
+            // particular must not be re-pushed.
+            m_Switcher.Toggle();
+            m_Switcher.Toggle();
+
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.TopDown));
             Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapClickChannels.TopDown));
-
-            m_Switcher.Toggle();
-
-            Assert.That(m_Switcher.IsTopDown, Is.False);
-            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapClickChannels.Gameplay));
-        }
-
-        [Test]
-        public void RepeatedSwitchesLeaveNoDriftBehind()
-        {
-            CreateRig();
-            var position = m_GameplayCamera.transform.position;
-            var rotation = m_GameplayCamera.transform.rotation;
-
-            for (var i = 0; i < 5; i++)
-            {
-                m_Switcher.Toggle();
-                m_Switcher.Toggle();
-            }
-
-            Assert.That(m_Switcher.IsTopDown, Is.False);
-            Assert.That(m_GameplayCamera.transform.position, Is.EqualTo(position));
-            Assert.That(Quaternion.Angle(m_GameplayCamera.transform.rotation, rotation), Is.EqualTo(0f).Within(0.0001f));
-            Assert.That(IsInStackOf(m_GameplayCamera, m_UiCamera), Is.True);
-            Assert.That(IsInStackOf(m_TopDownCamera, m_UiCamera), Is.False);
-            Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_GameplayCamera));
-            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapClickChannels.Gameplay));
+            Assert.That(m_TopDownUiRoot.activeSelf, Is.True);
+            Assert.That(m_GameplayUiRoot.activeSelf, Is.False);
+            Assert.That(m_TopDownCamera.transform.position, Is.EqualTo(position));
         }
 
         [Test]
         public void ASceneThatStartsInTopDownModeIsAppliedWithoutSwitching()
         {
             CreateRig();
-            SetSerializedTopDown(m_Switcher, true);
+            SetSerializedStartMode(m_Switcher, MapViewMode.TopDown);
 
             m_Switcher.ApplySerializedMode();
 
-            Assert.That(m_Switcher.IsTopDown, Is.True);
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.TopDown));
             Assert.That(m_TopDownCamera.enabled, Is.True);
             Assert.That(m_GameplayCamera.enabled, Is.False);
             Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_TopDownCamera));
@@ -338,103 +324,62 @@ namespace HexMap.Sample.Tests
         [Test]
         public void LeavingAMapViewThatWasNeverEnteredLeavesTheGameplayCameraWhereItIs()
         {
-            CreateRig();
-            SetSerializedTopDown(m_Switcher, true);
+            // The scene is authored to start in the map view, so nothing ever captured a gameplay pose.
+            // Returning to gameplay has nothing to restore and must not invent one.
+            CreateRig(MapViewMode.TopDown);
             m_Switcher.ApplySerializedMode();
             var position = new Vector3(7f, 8f, 9f);
             m_GameplayCamera.transform.position = position;
 
-            m_Switcher.ExitTopDown();
+            PressTheMapButton();
 
-            Assert.That(m_Switcher.IsTopDown, Is.False);
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
             Assert.That(m_GameplayCamera.enabled, Is.True);
             Assert.That(m_TopDownCamera.enabled, Is.False);
             Assert.That(
                 m_GameplayCamera.transform.position,
                 Is.EqualTo(position),
-                "a scene that started toggled on has no snapshot, so there is nothing to restore");
+                "a scene that started toggled on has no capture, so there is nothing to restore");
         }
 
         [Test]
-        public void EnteringTopDownAimsTheMapCameraAtTheFocusTargetAndZoomsIn()
+        public void RepeatedSwitchesLeaveNoDriftBehind()
         {
+            CreateRig();
+            var position = m_GameplayCamera.transform.position;
+            var rotation = m_GameplayCamera.transform.rotation;
+
+            for (var i = 0; i < 5; i++)
+            {
+                PressTheMapButton();
+                PressTheMapButton();
+            }
+
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
+            Assert.That(m_GameplayCamera.transform.position, Is.EqualTo(position));
+            Assert.That(Quaternion.Angle(m_GameplayCamera.transform.rotation, rotation), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(IsInStackOf(m_GameplayCamera, m_UiCamera), Is.True);
+            Assert.That(IsInStackOf(m_TopDownCamera, m_UiCamera), Is.False);
+            Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_GameplayCamera));
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapClickChannels.Gameplay));
+        }
+
+        [Test]
+        public void TheMapCameraAndTheGesturesFollowTheModeWithoutTheSwitcherOwningThem()
+        {
+            // The switcher no longer knows the gestures exist: the map camera's own enabled flag is the only
+            // thing that decides whether a gesture can act (the gesture components check it themselves).
+            // What is pinned here is that the mode still decides when that camera is alive.
             CreateRig();
             var mapCamera = CreateMapCamera();
-            SetSerializedFocusZoom(m_Switcher, 4f);
-            var target = CreateObject("Focus Target");
-            target.transform.position = new Vector3(2f, 0f, 1f);
-            m_Switcher.MapCamera = mapCamera;
-            m_Switcher.FocusTarget = target.transform;
-
-            m_Switcher.EnterTopDown();
-
-            // The aim is checked through the center rather than through any remembered request: the
-            // camera keeps no focus state, so where it looks is the whole answer.
-            Assert.That(mapCamera.Center, Is.EqualTo(new Vector2(2f, 1f)), "the XZ plane reads x and z");
-            Assert.That(mapCamera.Zoom, Is.EqualTo(4f).Within(0.0001f));
-        }
-
-        [Test]
-        public void WithoutAFocusTargetTheMapViewOpensTheWayThePlayerLeftIt()
-        {
-            CreateRig();
-            var mapCamera = CreateMapCamera();
-            mapCamera.Zoom = 2f;
-            m_Switcher.MapCamera = mapCamera;
-
-            m_Switcher.EnterTopDown();
-
-            Assert.That(mapCamera.Center, Is.EqualTo(Vector2.zero));
-            Assert.That(mapCamera.Zoom, Is.EqualTo(2f).Within(0.0001f));
-        }
-
-        [Test]
-        public void AFocusTargetThatCannotBeFocusedWarnsAndStillSwitches()
-        {
-            CreateRig();
-
-            // A map camera that was never refreshed cannot focus. This is the "the map view is up but the
-            // camera never moved" case, which has to be reported instead of passing as a normal switch.
-            var mapCamera = m_TopDownCamera.gameObject.AddComponent<OrthographicMapCamera>();
-            var target = CreateObject("Focus Target");
-            m_Switcher.MapCamera = mapCamera;
-            m_Switcher.FocusTarget = target.transform;
-
-            LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape(FocusFailureMessage())));
-
-            m_Switcher.EnterTopDown();
-
-            Assert.That(m_Switcher.IsTopDown, Is.True, "a failed focus must not leave the mode half switched");
-            Assert.That(m_TopDownCamera.enabled, Is.True);
-            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapClickChannels.TopDown));
-            Assert.That(m_TopDownUiRoot.activeSelf, Is.True);
-        }
-
-        [Test]
-        public void TheMapGesturesAreOnlyLiveInTopDownMode()
-        {
-            CreateRig();
-            var drag = CreateObject("Map Drag Input").AddComponent<OrthographicMapDragInput>();
-            var zoom = CreateObject("Map Zoom Input").AddComponent<OrthographicMapZoomInput>();
-            m_Switcher.MapDragInput = drag;
-            m_Switcher.MapZoomInput = zoom;
 
             m_Switcher.ApplySerializedMode();
 
-            // The gestures drive the map camera, which gameplay has just disabled: left live, a gameplay
-            // drag would move the view the player is given back on the way out.
-            Assert.That(drag.IsEnabled, Is.False);
-            Assert.That(zoom.IsEnabled, Is.False);
+            Assert.That(mapCamera.Camera.enabled, Is.False, "gameplay puts the map camera away");
 
-            m_Switcher.EnterTopDown();
+            PressTheMapButton();
 
-            Assert.That(drag.IsEnabled, Is.True);
-            Assert.That(zoom.IsEnabled, Is.True);
-
-            m_Switcher.ExitTopDown();
-
-            Assert.That(drag.IsEnabled, Is.False);
-            Assert.That(zoom.IsEnabled, Is.False);
+            Assert.That(mapCamera.Camera.enabled, Is.True, "the map view brings it back");
         }
 
         [Test]
@@ -446,27 +391,54 @@ namespace HexMap.Sample.Tests
             Assert.DoesNotThrow(() => m_Switcher.Toggle());
             Assert.DoesNotThrow(() => m_Switcher.ApplySerializedMode());
 
-            Assert.That(m_Switcher.IsTopDown, Is.False);
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
         }
 
         [Test]
         public void WiringTheUiCameraAsABaseCameraTooIsReportedOnceAndLeavesTheStackAlone()
         {
             CreateRig();
-            m_Switcher.UiCamera = m_TopDownCamera;
+            m_Switcher.Configure(new MapViewModeWiring(
+                m_GameplayCamera,
+                m_TopDownCamera,
+                m_TopDownCamera,
+                m_GameplayUiRoot,
+                m_TopDownUiRoot,
+                m_Dispatcher,
+                MapViewMode.Gameplay));
 
             // One report for two switches: the mistake is in the scene, not in the switch, so repeating it
             // on every toggle would only bury the console. An extra report would fail this test.
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(SharedCameraMessage())));
 
-            Assert.DoesNotThrow(() => m_Switcher.Toggle());
-            Assert.DoesNotThrow(() => m_Switcher.Toggle());
+            Assert.DoesNotThrow(() => PressTheMapButton());
+            Assert.DoesNotThrow(() => PressTheMapButton());
 
-            Assert.That(m_Switcher.IsTopDown, Is.False);
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
             Assert.That(
                 m_TopDownCamera.GetUniversalAdditionalCameraData().renderType,
                 Is.EqualTo(CameraRenderType.Base),
                 "a camera wired into two roles must not be talked into being an overlay");
+        }
+
+        /// <summary>
+        /// A built map, which the map camera needs before it can frame anything. Only the camera's own
+        /// enabled flag is of interest here; the switcher no longer takes a map camera at all.
+        /// </summary>
+        private OrthographicMapCamera CreateMapCamera()
+        {
+            var mapView = CreateObject("Hex Map View").AddComponent<HexMapView>();
+            mapView.Radius = 3;
+            mapView.Orientation = HexOrientation.Pointy;
+            mapView.Build();
+
+            var mapCamera = m_TopDownCamera.gameObject.AddComponent<OrthographicMapCamera>();
+            mapCamera.HexMapView = mapView;
+            mapCamera.Camera = m_TopDownCamera;
+
+            string error;
+            Assert.That(mapCamera.TryRefresh(out error), Is.True, error);
+            return mapCamera;
         }
     }
 }
