@@ -13,7 +13,7 @@
 - [ ] 队伍位置点：一个 `Image`，位置由 01 的 `TryGetLocalPoint(部队世界位置)` 得出；`local` 越界时**隐藏**（不夹取）
 - [ ] `event Action<Vector3> Clicked`：实现 `IPointerClickHandler` → 局部点 → `TryGetWorldPoint` → 抛事件。**事件里不含 PlotId / HexCoord**，只给世界点
 - [ ] **不引用** `MapClickDispatcher`、`GvgMapRuntimeController`、`GvgMapRuntimeController.Select`
-- [ ] `MapViewModeSwitcher` 增加"小地图相机"槽：进俯视时 `enabled = false`，回 gameplay 时恢复（与现有 drag / zoom 槽同形）
+- [ ] 小地图相机在**非 gameplay 模式**下必须 `enabled = false`（否则白烤一张没人看的图）。落法按重构后的结构（见 `.scratch/map-view-mode-state-machine/spec.md` 第 2 节）：小地图相机**登记进 gameplay 状态的"可关呈现"清单**，于是驱动器的归零动作自动覆盖它 —— **不要再找 `MapViewModeSwitcher` 上的"相机槽"**，那个属性面已经在重构里删掉了；drag / zoom 那两个槽也一并没了（手势改为输入组件自守）
 - [ ] 小地图相机与 `OrthographicMapLayerSettings` 都用**独立实例**；mask 必须包含 `HexMapView.CellLayer`，否则 `TryValidate(cellLayer, out error)` 会报错
 
 ## 验收

@@ -182,25 +182,29 @@ if (!baseData.cameraStack.Contains(m_UiCamera)) baseData.cameraStack.Add(m_UiCam
                                       CurrentMode 会回落成起始模式，拿它比会把"起始模式就是
                                       要进入的模式"误判成重复请求，于是整个进入被跳过
     当前状态.Exit(context)          ← 冷启动时没有当前状态，跳过
+                                      gameplay 退出时在这里记下自己相机的位姿（见下）
     ResetPresentation()   → 分派器推 (null, None)；逐个关掉每个状态声明的相机与 UI 根
     m_CurrentState = 目标状态
-    目标状态.Enter(上一个模式, context)：   ← 上一个模式由驱动器在改变状态前读出，冷启动为 null
-      [俯视] 若上一个模式是 gameplay 且尚未记过 ⇒ 记下 gameplay 相机的位姿
+    目标状态.Enter(context)：
+      [gameplay] 若记过位姿 ⇒ 先把自己的相机还原回去
       context.Enter(自己的相机, 自己的通道)      ← 相机 enabled 与通道推送在同一句里
       context.ShowOwnView(自己的 UI 根)
       context.EnterOwnUiStack(自己的相机)
-      [俯视] 离开时（Exit）把记下的位姿还回去
 ```
 
 **归零是"恰好一个模式在呈现"这条性质的唯一来源，所以冷启动也要跑**：进入模式只打开自己的东西，关掉别人的只有归零。少了它，"开局即俯视"的场景会让两台相机同时开着（gameplay 相机不会被关）。旧实现从不依赖场景里相机的作者状态，进入任一模式都会把两台相机设成确定值，这里保持一致。
 
-**gameplay 相机的位姿由俯视模式自己持有**（数据、守卫、记与还都在它一个类里），但"该不该记"要看**上一个模式是不是 gameplay**：只有从 gameplay 切进俯视，那台相机才刚停止被使用，它当时的位姿才是玩家应得的那一份。这一项不能省 —— 场景**开局就在俯视**时从未进入过 gameplay，若照样记，第一次退回就会把一台玩家从未用过的相机"还原"成默认位置。记**一次就不再覆盖**，所以连按按钮不会把被移动过的相机当成原状态存下来。
+**gameplay 相机的位姿由 gameplay 状态自己记、自己还**（`Exit` 记、`Enter` 还），俯视状态与驱动器都不知道这件事。三条约束因此同时成立：
 
-**为什么驱动器要传"上一个模式"而不是让状态去问**：状态之间互不认识；而冷启动时根本没有"上一个状态"可问 —— 拿驱动器当前的模式去推断，会把"开场就在俯视"误判成"刚从 gameplay 过来"。
+- **开局即俯视**：`Gameplay.Exit` 从未执行 ⇒ 没有记忆 ⇒ 首次进入 gameplay 时**不还原**，相机停在场景给它的位置；
+- **真切换**：`Exit` 发生在相机仍是玩家那台的最后一刻，所以记下的就是"玩家离开时的视图"；
+- **俯视期间相机被移动过**：`Exit` **每次离开都覆盖**记忆，所以下一次回来是"最近一次离开 gameplay 时的位置"，与旧实现（每次 `EnterTopDown` 都重新快照）一致。
+
+**不要改成"只记一次"**：那会把"俯视里被移动过的相机"永久当成应还的位姿。而"开局即俯视不该记"这件事，本来就由"`Exit` 没被调用过"表达，不需要额外条件 —— 更不需要驱动器把"上一个模式是谁"传给状态。
 
 **`SetActiveCamera` 与 `enabled` 切换必须在同一帧内完成**。若隔一帧，那一帧的点击会拿着上一模式的相机去拾取（画面已换、拾取还旧），表现为"第一次点击响应错面板"。现在这条不是靠纪律维持的：`SetMode` 是一个同步方法，退出／归零／进入之间没有协程、没有第二个入口，`context.Enter(camera, channel)` 也把"相机与通道同时换"写进了签名。
 
-**为什么要快照而不是重算**：退出时重算常规相机的位置需要复制玩法相机的跟随逻辑，两份实现必然漂移。快照是"完全复原"的唯一可靠方式。（复原写的是常规相机自己的 `position` / `rotation` / `fieldOfView` / `orthographicSize`，与 `OrthographicMapCamera` 无关。）快照**捕获一次就不再覆盖**，所以连按按钮不会把"被移动过的相机"当成原状态存下来。
+**为什么要记住而不是重算**：退出时重算常规相机的位置需要复制玩法相机的跟随逻辑，两份实现必然漂移。记住并原样写回是"完全复原"的唯一可靠方式。（复原写的是常规相机自己的 `position` / `rotation` / `fieldOfView` / `orthographicSize`，与 `OrthographicMapCamera` 无关。）**每次离开 gameplay 都覆盖这份记忆**，所以它代表的始终是"最近一次离开 gameplay 时的视图"。
 
 `Start()` 里按序列化的 `m_StartMode` 应用一次初始模式（**不退出、但照常归零**），这样**第一次点击就能找到正确的相机与通道**，即使场景被留在"开局即俯视"的状态。这段逻辑在 `ApplySerializedMode()` 里，`Start()` 只是调它：EditMode 测试没有 start 回调，留一个可调用的入口才能验证它。
 
@@ -227,7 +231,7 @@ HexMap.UnityRuntime   GvgMapRuntimeController.PickPlotAtScreenPosition
 | `SampleMapClickChannels` | 应用层的通道常量：`Gameplay = 1`、`TopDown = 2`，取值由 `MapViewMode` 派生（`For(mode)`）。**运行时库里没有这些名字**。通道与模式仍是两套词汇：合并等于宣布"以后每加一个模式就必须加一个通道" |
 | `MapViewMode` | 模式的词汇表：`Gameplay = 0`、`TopDown = 1`。序列化的起始模式按名字写进场景 |
 | `IMapViewModeState` | 一个模式的全部行为：`Mode` / `Enter` / `Exit` / `Presentations`。状态之间互不认识 |
-| `MapGameplayViewState` / `MapTopDownViewState` | 两个模式各自开自己的相机与 UI 根、推自己的通道；俯视模式还**自己持有** gameplay 相机的位姿（进入时记、离开时还），记不记由驱动器传入的"上一个模式"决定 |
+| `MapGameplayViewState` / `MapTopDownViewState` | 两个模式各自开自己的相机与 UI 根、推自己的通道；gameplay 模式还**自己记、自己还**自己相机的位姿（离开时记、进入时还），俯视模式对此一无所知 |
 | `MapViewPresentation` | 一个可被"归零"的东西（相机或 UI 根）。驱动器只对它做一件事：关掉 |
 | `MapViewModeContext` | 状态改世界的唯一通道：进模式（相机+通道）、搬自己的 UI 栈、显隐自己的 UI 根、捕获/还原 gameplay 相机。它自己不持有状态 |
 | `MapClickTapInput` | **唯一认识指针的组件**：判断一次按下是"点在图上"还是"拖拽/点在 UI 上"，是则调 `MapClickDispatcher.OnMapClicked(屏幕坐标)`。换 Input System 或 EasyTouch 只需替换它 |

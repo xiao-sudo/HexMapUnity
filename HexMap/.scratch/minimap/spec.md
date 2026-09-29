@@ -94,7 +94,7 @@ baseSize      = mapHalfDepth × margin = 17.5 × 1.1 = 19.2500
 | 重烤机制 | **把相机 `enabled` 打开一帧 → 帧末 RT 填好 → 关掉**。本版本没有即时渲染 API（第 1 节），所以 `RequestRefresh()` 的语义是「**下一帧生效**」 |
 | 省钱 | 小地图相机的 URP 数据关掉后处理 / HDR / MSAA；`targetTexture` 常驻 ⇒ 它永远不会画到屏幕上 |
 | 每次烤的量 | 16,384 px = 1080×1920 主帧的 **1/127**；`sw.unity` 是 `MeshRenderer` 策略，视锥剔除后约 **35–42 个 cell** 的绘制（若改成 `DrawMeshInstanced` 则降到 1–2 个 draw call） |
-| 模式 | **只在 gameplay 模式显示**：控件挂在 `m_GameplayUiRoot` 下随根节点隐藏；相机也要跟着 `enabled = false`（否则白烤一张没人看的图）—— 交给 `MapViewModeSwitcher` 再加一个槽 |
+| 模式 | **只在 gameplay 模式显示**：控件挂在 `m_GameplayUiRoot` 下随根节点隐藏；相机也要跟着 `enabled = false`（否则白烤一张没人看的图）—— 登记进 gameplay 状态的"可关呈现"清单即可。⚠️ **本文件写作时 `MapViewModeSwitcher` 还是"一堆槽"的结构，此后它已被重构为视图模式状态机**（见 `.scratch/map-view-mode-state-machine/spec.md`）：凡是本文件说"给切换器加一个槽"的地方（第 97 行、`issues/02:16`、`issues/03:11`），一律按新结构理解 —— 模式自己的组件由模式自己的状态登记，切换器不再有公开的相机 / 手势槽 |
 
 ### 2.5 标记与点击：转调相机，不自己算投影
 

@@ -47,7 +47,7 @@
 | 归零的归属 | 驱动器在 `Exit` 之后、`Enter` 之前做一次 `ResetPresentation()`：关掉**所有**登记的呈现（相机 `enabled = false`、UI 根 `activeSelf = false`）并把点击通道推成"无模式" |
 | 呈现在哪里登记 | 每个状态通过 `Presentation` 自注册自己**可能打开**的组件；驱动器在构造状态后展开成一张**扁平清单**。新增模式 = 新状态类自己登记，驱动器一行不改 |
 | `Enter` 的承诺 | **不承诺重复调用安全**。防重入只由驱动器负责 |
-| 快照 | **由俯视状态自己持有**（数据 + 守卫 + 捕获/还原都在 `MapTopDownViewState` 里）：`Enter` 在**"上一个模式是 gameplay"且尚未记过**时捕获，"离开俯视"时还原。驱动器只负责把 `previousMode` 传进来 —— 见第 10.5 节 |
+| 快照 | **由 gameplay 状态自己持有**：`Exit` 记下自己相机当时的位姿（**每次离开都覆盖**），`Enter` 还原。俯视状态完全不知道这件事，驱动器与 context 都不参与 —— 见第 10.9 节 |
 | 当前模式的真相 | 只有 `m_CurrentState` 一个字段；`CurrentMode` 由它派生，冷启动时回落到序列化的起始模式 |
 | no-op 判 | 只在驱动器层，而且**必须拿当前状态比**：`m_CurrentState != null && m_CurrentState.Mode == target → return`。**不能拿 `CurrentMode` 比** —— 冷启动时 `CurrentMode` 回落成起始模式，会把"起始模式恰好就是目标模式"误判成重复请求（见第 10.1 节：这就是"开局即俯视"失败的真正原因） |
 | 冷启动 | `m_CurrentState == null` 时**不 `Exit`**（没有前一个状态）、但**照常归零**，然后 `Enter` 起始模式；且**没有**第二个"apply"路径 —— `Start` 与每次切换走同一个 `Enter`。**归零必须在第一次进入时也跑**：它是"恰好一个模式在呈现"这条性质的唯一来源，而进入模式只负责打开自己的东西 |
@@ -154,7 +154,7 @@ SetMode(target)
 
 - `Enter`：开自己的相机 → 推 `(自己的相机, 自己的通道)` → 开自己的 UI 根 → 把 UI 相机搬进自己的 stack。
 - `Exit`：关自己的 UI 根。**不关别人的**（别人的关是驱动器的活）。
-- 俯视状态额外持有 **gameplay 相机引用 + 自己的快照**：`Enter` 在 `previousMode == Gameplay` 且尚未记过时捕获，"离开俯视"时还原。`previousMode` 由驱动器传入（冷启动为 `null`）—— 它区分"真从 gameplay 切过来"与"场景开局就在俯视"，后者不该记任何位姿（见第 10.6 节）。
+- gameplay 状态自己持有相机位姿：`Exit` 记下（每次离开都覆盖），`Enter` 还原。俯视状态与驱动器都不参与（见第 10.9 节）。
 - 搬 UI 相机入栈这段逻辑（render type + 栈成员 + 「接线错误只报一次」）是驱动器上的 `internal` 助手，两个状态各调一次。UI 相机引用各存一份不产生第二个主人，因为真相只有一份（场景里唯一那台）。
 
 ### 6.4 文档
@@ -327,6 +327,35 @@ MapTopDownViewState
 | `PressingTheMapButtonTwiceKeepsTheOriginalPose` | 1 次按压 + 2 次 `Toggle()` = **3 次（奇数）**，末态是 TopDown，与"相机回到最初位姿"互相排斥。修法：进入 gameplay 记下 `captured` ⇒ `Toggle()` 进俯视 ⇒ 相机移到 `(9,9,9)` ⇒ 两次 `Toggle()` |
 
 **教训**：改完夹具后应当把"按压次数 → 末态"推一遍再跑；三条矛盾都能靠这一步发现。前几轮我把注意力全放在实现上，反而没做这件最便宜的自查。
+
+### 10.9 最终形态：位姿由 gameplay 状态自己记、自己还（`previousMode` 被删除）
+
+10.6 的修法把 `previousMode` 加进了 `Enter` 的签名，由驱动器在切换前读出上一个模式传给状态。**提出者否决了这个设计，并且是对的**：一个状态的行为不该取决于"另一个状态当时是否存在"。如果某个模式有状态要保存，那应该是**它自己在 `Exit` 时保存、在 `Enter` 时恢复**。
+
+**最终形态**（`IMapViewModeState.Enter` 回到单参数）：
+
+```
+MapGameplayViewState                      // 记忆与还原都在这里
+  private GameplayCameraState m_RememberedCameraState;
+  private bool m_HasRememberedCameraState;
+  Enter: if (m_HasRememberedCameraState) { m_RememberedCameraState.Restore(m_Camera); }  ... 照常呈现
+  Exit:  m_RememberedCameraState = GameplayCameraState.Capture(m_Camera);  m_HasRememberedCameraState = true;
+
+MapTopDownViewState                       // 只开自己的视图，不知道 gameplay 相机存在
+  Enter / Exit: 只做自己的呈现
+```
+
+于是：驱动器里的 `previousMode` 变量、接口上的 `previousMode` 参数、俯视状态对 gameplay 相机的引用**全部删除**。
+
+**为什么它同时满足三条约束**：
+
+| 约束 | 为什么成立 |
+| --- | --- |
+| 开局即俯视时不许动相机 | `Gameplay.Exit` 从未执行 ⇒ `m_HasRememberedCameraState` 仍为 `false` ⇒ 首次进入 gameplay 时**不还原** |
+| 真切换要精确还回 | `Exit` 在**相机仍是玩家那台**的最后一刻记下位姿，`Enter` 原样写回 |
+| 俯视期间相机被移动过也要还对 | `Exit` **每次离开都覆盖**记忆。这正是 10.2 里我那条"只记一次"守卫的错处 —— 它会把"俯视里被移动过的相机"永久当成应还的位姿；而"开局即俯视"那件事本来就该由"`Exit` 没被调用过"来挡，状态自己知道，不需要额外条件 |
+
+**教训（比这个 bug 本身更重要）**：我给接口加 `previousMode` 时，是在**把"别的状态的存在性"编码进契约** —— 那是设计层面的坏味道，而不是实现细节。提出者一句"有保存需求就该自己的 `Exit` 存、自己的 `Enter` 恢复"就把整个参数消掉了。**当发现自己要往接口上加参数来传递"上一个/下一个是谁"时，先问：这件事是不是本来就该由那个对象自己在它自己的生命周期里做？**
 
 **验证状态**：未编译、未跑测试（本会话 `pwsh` 不可用）。已做的静态核对如下，其余待办见 `issues/03-editor-acceptance.md`。
 
