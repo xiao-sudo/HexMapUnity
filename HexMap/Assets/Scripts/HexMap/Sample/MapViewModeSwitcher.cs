@@ -160,13 +160,11 @@ namespace HexMap.Sample
                 return;
             }
 
-            // What is being left, read before the current state changes. Null means this is the first entry,
-            // which is the only case where there is no earlier mode to hand over anything — and the case a
-            // mode that remembers camera poses has to be able to tell apart from a real switch.
-            var previousMode = m_CurrentState != null ? m_CurrentState.Mode : (MapViewMode?)null;
-
             if (m_CurrentState != null)
             {
+                // The first entry has no previous mode to leave, which is the only difference between
+                // starting a scene in a mode and switching into one. Whatever has to be put back on a return
+                // is remembered by the mode being left, inside its own Exit.
                 m_CurrentState.Exit(m_Context);
             }
 
@@ -181,7 +179,7 @@ namespace HexMap.Sample
             // it only partly presented, which is deliberate: the alternative is a switcher that reports the
             // old mode while the new one is half up.
             m_CurrentState = GetState(target);
-            m_CurrentState.Enter(previousMode, m_Context);
+            m_CurrentState.Enter(m_Context);
         }
 
         private void EnsureStates()
@@ -200,10 +198,9 @@ namespace HexMap.Sample
             // Both states are handed the same UI camera: each has to move it into its own stack on the way
             // in, and neither owns it — which stacks it may belong to is still decided in one place.
             //
-            // The map view also gets the gameplay camera, because it is the mode that takes that camera out
-            // of service and therefore the mode that owes its pose back. Keeping the pose there rather than
-            // here is what makes "the view the player left" a property of one object instead of a fact spread
-            // across the driver and a state.
+            // Nothing is handed across: the gameplay state keeps the pose it has to give back, because it is
+            // the mode that knows when its camera stops and starts being used. The map view is given only
+            // what it needs to show itself.
             m_GameplayState = new MapGameplayViewState(
                 m_GameplayCamera,
                 m_UiCamera,
@@ -213,7 +210,6 @@ namespace HexMap.Sample
             m_TopDownState = new MapTopDownViewState(
                 m_TopDownCamera,
                 m_UiCamera,
-                m_GameplayCamera,
                 m_TopDownUiRoot,
                 SampleMapClickChannels.For(MapViewMode.TopDown));
         }
