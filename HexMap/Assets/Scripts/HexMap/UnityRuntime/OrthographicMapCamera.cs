@@ -147,7 +147,9 @@ namespace HexMap.UnityRuntime
         {
             get { return m_HexMapView; }
             set { m_HexMapView = value; }
-        }        public float ViewportAspect
+        }        
+        
+        public float ViewportAspect
         {
             get { return m_ViewportAspect; }
             set { m_ViewportAspect = value; }
