@@ -83,10 +83,9 @@ namespace HexMap.UnityRuntime
         public const float DefaultMaxZoom = 12f;
 
         [SerializeField]
-        private HexMapView m_HexMapView;
-
-        [SerializeField]
-        private Camera m_Camera;
+        private HexMapView m_HexMapView;        [SerializeField]
+        [Tooltip("Viewport aspect used to calculate the whole-map frame.")]
+        private float m_ViewportAspect = 1f;
 
         [SerializeField]
         [Tooltip("Optional. When set, its culling mask is copied onto the camera during refresh.")]
@@ -142,17 +141,24 @@ namespace HexMap.UnityRuntime
         private float m_AppliedAspect;
         private int m_AppliedCullingMask = -1;
         private bool m_HasFraming;
+        private OrthographicMapCameraFrame m_Frame;
 
         public HexMapView HexMapView
         {
             get { return m_HexMapView; }
             set { m_HexMapView = value; }
+        }        public float ViewportAspect
+        {
+            get { return m_ViewportAspect; }
+            set { m_ViewportAspect = value; }
         }
 
-        public Camera Camera
+        public event Action<OrthographicMapCameraFrame> FrameChanged;
+
+        public bool TryGetFrame(out OrthographicMapCameraFrame frame)
         {
-            get { return m_Camera; }
-            set { m_Camera = value; }
+            frame = m_Frame;
+            return m_HasFraming;
         }
 
         public OrthographicMapLayerSettings LayerSettings
@@ -356,12 +362,6 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            if (m_Camera == null)
-            {
-                error = "A Camera reference is required.";
-                return false;
-            }
-
             if (!m_HexMapView.HasMap)
             {
                 // Without this the layout is default and the envelope maths fails with a message about the
@@ -377,13 +377,7 @@ namespace HexMap.UnityRuntime
             }
 
             var layout = m_HexMapView.Layout;
-            var aspect = m_Camera.aspect;
-
-            if (!m_Camera.orthographic)
-            {
-                error = "The camera must be orthographic. Orthographic is a scene setting, not a runtime one; tick it in the inspector.";
-                return false;
-            }
+            var aspect = m_ViewportAspect;
 
             if (!IsFinitePositive(m_Near) || !IsFinitePositive(m_Far) || m_Far <= m_Near)
             {
@@ -480,11 +474,6 @@ namespace HexMap.UnityRuntime
         /// </summary>
         public bool TryRefreshIfStale(out string error)
         {
-            if (m_Camera == null)
-            {
-                error = "A Camera reference is required.";
-                return false;
-            }
 
             if (m_HexMapView == null)
             {
@@ -529,11 +518,6 @@ namespace HexMap.UnityRuntime
 
             // The camera is only read for its aspect, but it is required all the same: reading through a
             // missing reference would throw where every other refusal in this class reports.
-            if (m_Camera == null)
-            {
-                error = "A Camera reference is required.";
-                return false;
-            }
 
             if (!m_HexMapView.HasMap)
             {
@@ -565,7 +549,7 @@ namespace HexMap.UnityRuntime
                 layout,
                 m_HexMapView.Radius,
                 m_ViewMargin,
-                m_Camera.aspect,
+                m_ViewportAspect,
                 m_Zoom,
                 out framing,
                 out error);
@@ -845,7 +829,7 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            if (m_Camera == null || !m_Camera.orthographic)
+            if (!IsFinitePositive(m_ViewportAspect))
             {
                 return false;
             }
@@ -856,7 +840,7 @@ namespace HexMap.UnityRuntime
             // unchanged, which is the cheaper and visually identical choice for a rebuild this small.
             return Mathf.Approximately(m_AppliedRadius, m_HexMapView.Radius)
                 && Mathf.Approximately(m_AppliedViewMargin, m_ViewMargin)
-                && Mathf.Approximately(m_AppliedAspect, m_Camera.aspect)
+                && Mathf.Approximately(m_AppliedAspect, m_ViewportAspect)
                 && m_AppliedLayout.Equals(m_HexMapView.Layout);
         }
 
@@ -992,34 +976,31 @@ namespace HexMap.UnityRuntime
 
         private void ApplyToCamera()
         {
-            if (!m_HasFraming || m_AppliedTransform == null || m_Camera == null)
+            if (!m_HasFraming || m_AppliedTransform == null)
             {
                 return;
             }
 
-            // Screen right is the map's local +X because the camera's up comes from the plane's local +Z.
             var right = m_AppliedTransform.TransformDirection(Vector3.right).normalized;
             var upLocal = m_AppliedLayout.Plane == HexPlane.XY ? Vector3.up : Vector3.forward;
             var up = m_AppliedTransform.TransformDirection(upLocal).normalized;
             var forward = Vector3.Cross(right, up);
-
-            // forward points from the plane towards the camera's look direction, so the camera has to
-            // retreat along -forward to sit above the map.
             var position = m_AppliedTransform.TransformPoint(m_Framing.Origin)
                 + right * (m_DesiredCenter.x * m_AppliedScale)
                 + up * (m_DesiredCenter.y * m_AppliedScale)
                 - forward * (m_Height * m_AppliedScale);
 
-            m_Camera.orthographicSize = m_Framing.OrthographicSize * m_AppliedScale;
-            m_Camera.nearClipPlane = m_Near * m_AppliedScale;
-            m_Camera.farClipPlane = m_Far * m_AppliedScale;
-            if (m_AppliedCullingMask >= 0)
+            m_Frame = new OrthographicMapCameraFrame(
+                position,
+                Quaternion.LookRotation(forward, up),
+                m_Framing.OrthographicSize * m_AppliedScale,
+                m_Near * m_AppliedScale,
+                m_Far * m_AppliedScale,
+                m_AppliedCullingMask);
+            if (FrameChanged != null)
             {
-                m_Camera.cullingMask = m_AppliedCullingMask;
+                FrameChanged(m_Frame);
             }
-
-            m_Camera.transform.position = position;
-            m_Camera.transform.rotation = Quaternion.LookRotation(forward, up);
         }
 
         private static bool IsFinitePositive(float value)
@@ -1035,19 +1016,6 @@ namespace HexMap.UnityRuntime
         private static bool IsFinite(Vector3 value)
         {
             return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
-        }
-
-        private void Start()
-        {
-            // Frame once on load so the scene shows the intended view without any caller.
-            // Start runs after every Awake, which matters because HexMapView builds its map in Awake.
-            // A viewport change afterwards is picked up by whoever calls TryRefreshIfStale, and by a
-            // caller that knows something changed through TryRefresh; nothing here watches for either.
-            string error;
-            if (!TryRefresh(out error))
-            {
-                Debug.LogError("OrthographicMapCamera could not frame the map: " + error, this);
-            }
         }
     }
 }

@@ -90,7 +90,7 @@ namespace HexMap.Sample.Tests
 
             m_MapCamera = m_Camera.gameObject.AddComponent<OrthographicMapCamera>();
             m_MapCamera.HexMapView = mapView;
-            m_MapCamera.Camera = m_Camera;
+            m_MapCamera.ViewportAspect = m_Camera.aspect;
 
             string error;
             Assert.That(m_MapCamera.TryRefresh(out error), Is.True, error);

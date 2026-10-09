@@ -56,7 +56,7 @@ namespace HexMap.Sample.Editor
 
             // The map camera is found by component now: the switcher no longer holds one, because the only
             // thing that ever used it there was the focus request, which is gone.
-            var mapCamera = FindSingle<OrthographicMapCamera>();
+            var mapCamera = wiring.MapCamera != null ? wiring.MapCamera : FindSingle<OrthographicMapCamera>();
 
             // The click entry point: without one nothing calls OnMapClicked, so the whole chain is dead.
             var tap = EnsureComponent<MapClickTapInput>(dispatcher.gameObject, changes);
@@ -88,12 +88,28 @@ namespace HexMap.Sample.Editor
                     changes.Add("pointed OrthographicMapDragInput at '" + mapCamera.gameObject.name + "'");
                 }
 
+                if (drag.ModeSwitcher != switcher)
+                {
+                    Undo.RecordObject(drag, ChangeLabel);
+                    drag.ModeSwitcher = switcher;
+                    EditorUtility.SetDirty(drag);
+                    changes.Add("pointed OrthographicMapDragInput at the mode switcher");
+                }
+
                 if (zoom.MapCamera != mapCamera)
                 {
                     Undo.RecordObject(zoom, ChangeLabel);
                     zoom.MapCamera = mapCamera;
                     EditorUtility.SetDirty(zoom);
                     changes.Add("pointed OrthographicMapZoomInput at '" + mapCamera.gameObject.name + "'");
+                }
+
+                if (zoom.ModeSwitcher != switcher)
+                {
+                    Undo.RecordObject(zoom, ChangeLabel);
+                    zoom.ModeSwitcher = switcher;
+                    EditorUtility.SetDirty(zoom);
+                    changes.Add("pointed OrthographicMapZoomInput at the mode switcher");
                 }
             }
 
@@ -152,8 +168,7 @@ namespace HexMap.Sample.Editor
                 // switcher and handed straight back, so this only replaces the dispatcher.
                 switcher.Configure(new MapViewModeWiring(
                     wiring.GameplayCamera,
-                    wiring.TopDownCamera,
-                    wiring.UiCamera,
+                    wiring.MapCamera,
                     wiring.GameplayUiRoot,
                     wiring.TopDownUiRoot,
                     dispatcher,

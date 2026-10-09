@@ -66,8 +66,24 @@ namespace HexMap.UnityRuntime.Tests
         {
             var controller = m_CameraObject.AddComponent<OrthographicMapCamera>();
             controller.HexMapView = mapView;
-            controller.Camera = camera;
+            controller.ViewportAspect = camera.aspect;
+            controller.FrameChanged += frame => ApplyFrame(camera, frame);
             return controller;
+        }
+
+        // Production deliberately keeps this adapter in MapTopDownViewState. The test fixture applies
+        // frames here only so its existing frustum assertions remain tests of the calculated frame.
+        private static void ApplyFrame(Camera camera, OrthographicMapCameraFrame frame)
+        {
+            camera.orthographic = true;
+            camera.transform.SetPositionAndRotation(frame.Position, frame.Rotation);
+            camera.orthographicSize = frame.OrthographicSize;
+            camera.nearClipPlane = frame.NearClipPlane;
+            camera.farClipPlane = frame.FarClipPlane;
+            if (frame.HasCullingMask)
+            {
+                camera.cullingMask = frame.CullingMask;
+            }
         }
 
         [Test]
@@ -239,7 +255,7 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void RefreshingIfStaleCatchesAViewportChangeThatNoCallerReported()
+        public void RefreshingIfStaleCatchesAnExplicitViewportAspectChange()
         {
             var mapView = CreateMap(radius: 11, secondaryScale: 0.9f);
             var camera = CreateCamera(PortraitAspect);
@@ -248,10 +264,9 @@ namespace HexMap.UnityRuntime.Tests
             string error;
             Assert.That(controller.TryRefresh(out error), Is.True, error);
 
-            // This is what a window resize or a device rotation does: the engine changes the camera's
-            // aspect with no callback and no setter of ours behind it, so nothing but this check can
-            // notice it. Vertical panning is unaffected, which is why only the horizontal range moves.
-            camera.aspect = LandscapeAspect;
+            // The owner of the rendering camera reports a window resize or device rotation through the
+            // framing input. The pure framer deliberately never reads a Unity Camera on its own.
+            controller.ViewportAspect = LandscapeAspect;
             var staleMaxX = controller.MaxOffset.x;
 
             Assert.That(controller.TryRefreshIfStale(out error), Is.True, error);
@@ -284,22 +299,20 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void CreatingAFramingWithoutACameraIsReportedInsteadOfThrowing()
+        public void CreatingAFramingWithAnInvalidViewportAspectIsReportedInsteadOfThrowing()
         {
-            // The camera comes first because CreateMap reassigns m_CameraObject; CreateCamera is what
-            // creates the GameObject, and the controller below goes on it.
+            // Keep the host in a local: CreateMap replaces the fixture's camera-object field.
             var camera = CreateCamera(PortraitAspect);
             var mapView = CreateMap();
             var controller = camera.gameObject.AddComponent<OrthographicMapCamera>();
             controller.HexMapView = mapView;
+            controller.ViewportAspect = 0f;
 
             OrthographicMapFraming framing;
             string error;
 
-            // The camera is only read for its aspect, so the null check is easy to forget and the
-            // failure would otherwise be a NullReferenceException rather than a reported refusal.
             Assert.That(controller.TryCreateFraming(out framing, out error), Is.False);
-            Assert.That(error, Does.Contain("Camera"));
+            Assert.That(error, Does.Contain("aspect"));
         }
 
         [Test]
@@ -807,7 +820,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(controller.Center.x, Is.EqualTo(controller.MaxOffset.x).Within(0.00001f));
 
             // A landscape viewport swallows the map, so the offset is clamped back to the center.
-            camera.aspect = LandscapeAspect;
+            controller.ViewportAspect = LandscapeAspect;
             Assert.That(controller.TryRefresh(out error), Is.True, error);
 
             OrthographicMapFraming landscape;
@@ -845,7 +858,7 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void PerspectiveCameraIsReportedAsAMisconfiguration()
+        public void PerspectiveCameraDoesNotAffectPureFraming()
         {
             var mapView = CreateMap();
             var camera = CreateCamera(PortraitAspect);
@@ -853,9 +866,8 @@ namespace HexMap.UnityRuntime.Tests
             var controller = CreateController(mapView, camera);
 
             string error;
-            Assert.That(controller.TryRefresh(out error), Is.False);
-            Assert.That(error, Does.Contain("orthographic"));
-            Assert.That(controller.HasFraming, Is.False);
+            Assert.That(controller.TryRefresh(out error), Is.True, error);
+            Assert.That(controller.HasFraming, Is.True);
         }
 
         [Test]
@@ -883,10 +895,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(error, Does.Contain("HexMapView"));
 
             controller.HexMapView = mapView;
-            Assert.That(controller.TryRefresh(out error), Is.False);
-            Assert.That(error, Does.Contain("Camera"));
-
-            controller.Camera = camera;
+            controller.ViewportAspect = camera.aspect;
             Assert.That(controller.TryRefresh(out error), Is.True, error);
 
             controller.ViewMargin = 0.5f;
@@ -973,7 +982,7 @@ namespace HexMap.UnityRuntime.Tests
 
             var camera = CreateCamera(PortraitAspect);
             var controller = m_CameraObject.AddComponent<OrthographicMapCamera>();
-            controller.Camera = camera;
+            controller.ViewportAspect = camera.aspect;
             controller.LayerSettings = settings;
 
             string error;

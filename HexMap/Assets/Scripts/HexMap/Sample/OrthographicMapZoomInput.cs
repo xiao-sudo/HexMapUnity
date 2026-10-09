@@ -28,6 +28,9 @@ namespace HexMap.Sample
         private OrthographicMapCamera m_MapCamera;
 
         [SerializeField]
+        private MapViewModeSwitcher m_ModeSwitcher;
+
+        [SerializeField]
         [Tooltip("Whether the mouse wheel also zooms. Touch pinch always works.")]
         private bool m_UseMouseWheel = true;
 
@@ -49,6 +52,12 @@ namespace HexMap.Sample
         {
             get { return m_UseMouseWheel; }
             set { m_UseMouseWheel = value; }
+        }
+
+        public MapViewModeSwitcher ModeSwitcher
+        {
+            get { return m_ModeSwitcher; }
+            set { m_ModeSwitcher = value; }
         }
 
         public bool IsEnabled
@@ -101,7 +110,9 @@ namespace HexMap.Sample
         /// </summary>
         private bool IsCameraLive()
         {
-            return m_MapCamera != null && m_MapCamera.Camera != null && m_MapCamera.Camera.enabled;
+            return m_ModeSwitcher != null
+                && m_ModeSwitcher.CurrentMode == MapViewMode.TopDown
+                && m_MapCamera != null;
         }
 
         private void Update()
@@ -188,6 +199,7 @@ namespace HexMap.Sample
         /// </summary>
         private void RefreshFramingIfStale()
         {
+            m_MapCamera.ViewportAspect = m_ModeSwitcher.ActiveCameraAspect;
             string error;
             if (!m_MapCamera.TryRefreshIfStale(out error))
             {
