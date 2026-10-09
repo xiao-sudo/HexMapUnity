@@ -100,8 +100,12 @@ namespace HexMap.Sample
             {
                 m_CurrentState.Exit();
             }
+            else
+            {
+                InitializeUiRoots();
+            }
 
-            ResetPresentation();
+            ClearActiveInput();
             m_CurrentState = target == MapViewMode.TopDown ? m_TopDownState : m_GameplayState;
             m_CurrentState.Enter(this);
         }
@@ -124,24 +128,18 @@ namespace HexMap.Sample
                 SampleMapClickChannels.For(MapViewMode.TopDown));
         }
 
-        private void ResetPresentation()
+        private void InitializeUiRoots()
+        {
+            MapViewModeUi.SetRootActive(m_GameplayUiRoot, false);
+            MapViewModeUi.SetRootActive(m_TopDownUiRoot, false);
+        }
+
+        private void ClearActiveInput()
         {
             if (m_Dispatcher != null)
             {
                 m_Dispatcher.SetActiveCamera(null);
                 m_Dispatcher.SetActiveChannel(MapClickChannels.None);
-            }
-
-            HideAll(m_GameplayState);
-            HideAll(m_TopDownState);
-        }
-
-        private static void HideAll(IMapViewModeState state)
-        {
-            var presentations = state.Presentations;
-            for (var i = 0; i < presentations.Length; i++)
-            {
-                presentations[i].Hide();
             }
         }
 
@@ -159,12 +157,5 @@ namespace HexMap.Sample
             }
         }
 
-        internal void SetUiRootActive(GameObject root, bool active)
-        {
-            if (root != null && root.activeSelf != active)
-            {
-                root.SetActive(active);
-            }
-        }
     }
 }

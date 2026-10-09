@@ -7,8 +7,6 @@ namespace HexMap.Sample
     {
         MapViewMode Mode { get; }
 
-        MapViewPresentation[] Presentations { get; }
-
         void Enter(MapViewModeSwitcher switcher);
 
         void Exit();
@@ -20,14 +18,12 @@ namespace HexMap.Sample
         private readonly Camera m_Camera;
         private readonly GameObject m_UiRoot;
         private readonly int m_Channel;
-        private readonly MapViewPresentation[] m_Presentations;
 
         public MapGameplayViewState(Camera camera, GameObject uiRoot, int channel)
         {
             m_Camera = camera;
             m_UiRoot = uiRoot;
             m_Channel = channel;
-            m_Presentations = new[] { MapViewPresentation.OfUiRoot(m_UiRoot) };
         }
 
         public MapViewMode Mode
@@ -35,19 +31,15 @@ namespace HexMap.Sample
             get { return MapViewMode.Gameplay; }
         }
 
-        public MapViewPresentation[] Presentations
-        {
-            get { return m_Presentations; }
-        }
-
         public void Enter(MapViewModeSwitcher switcher)
         {
             switcher.EnterMode(m_Camera, m_Channel);
-            switcher.SetUiRootActive(m_UiRoot, true);
+            MapViewModeUi.SetRootActive(m_UiRoot, true);
         }
 
         public void Exit()
         {
+            MapViewModeUi.SetRootActive(m_UiRoot, false);
         }
     }
 
@@ -61,7 +53,6 @@ namespace HexMap.Sample
         private readonly OrthographicMapCamera m_MapCamera;
         private readonly GameObject m_UiRoot;
         private readonly int m_Channel;
-        private readonly MapViewPresentation[] m_Presentations;
 
         private CameraViewState m_RememberedCameraState;
         private bool m_HasRememberedCameraState;
@@ -76,17 +67,11 @@ namespace HexMap.Sample
             m_MapCamera = mapCamera;
             m_UiRoot = uiRoot;
             m_Channel = channel;
-            m_Presentations = new[] { MapViewPresentation.OfUiRoot(m_UiRoot) };
         }
 
         public MapViewMode Mode
         {
             get { return MapViewMode.TopDown; }
-        }
-
-        public MapViewPresentation[] Presentations
-        {
-            get { return m_Presentations; }
         }
 
         public void Enter(MapViewModeSwitcher switcher)
@@ -115,11 +100,13 @@ namespace HexMap.Sample
             }
 
             switcher.EnterMode(m_Camera, m_Channel);
-            switcher.SetUiRootActive(m_UiRoot, true);
+            MapViewModeUi.SetRootActive(m_UiRoot, true);
         }
 
         public void Exit()
         {
+            MapViewModeUi.SetRootActive(m_UiRoot, false);
+
             if (m_MapCamera != null)
             {
                 m_MapCamera.FrameChanged -= ApplyFrame;
@@ -133,6 +120,7 @@ namespace HexMap.Sample
             m_RememberedCameraState.Restore(m_Camera);
             m_HasRememberedCameraState = false;
         }
+
         private void ApplyFrame(OrthographicMapCameraFrame frame)
         {
             if (m_Camera == null)
@@ -150,7 +138,20 @@ namespace HexMap.Sample
                 m_Camera.cullingMask = frame.CullingMask;
             }
         }
-    }    /// <summary>A camera view that can be restored without leaking map-view details to gameplay.</summary>
+    }
+
+    internal static class MapViewModeUi
+    {
+        public static void SetRootActive(GameObject root, bool active)
+        {
+            if (root != null && root.activeSelf != active)
+            {
+                root.SetActive(active);
+            }
+        }
+    }
+
+    /// <summary>A camera view that can be restored without leaking map-view details to gameplay.</summary>
     internal readonly struct CameraViewState
     {
         private CameraViewState(
