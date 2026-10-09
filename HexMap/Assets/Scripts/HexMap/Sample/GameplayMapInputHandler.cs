@@ -77,6 +77,11 @@ namespace HexMap.Sample
             return false;
         }
 
+        public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
+        {
+            return false;
+        }
+
         private void RegisterIfPossible()
         {
             if (m_Dispatcher == null)

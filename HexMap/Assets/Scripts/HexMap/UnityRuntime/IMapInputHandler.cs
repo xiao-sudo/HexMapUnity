@@ -23,5 +23,11 @@ namespace HexMap.UnityRuntime
         /// </summary>
         /// <returns>True when the handler consumed the drag.</returns>
         bool OnMapDragged(Vector2 screenDelta);
+
+        /// <summary>
+        /// Handles one device-independent request to move the map camera nearer or farther away.
+        /// </summary>
+        /// <returns>True when the handler consumed the camera-distance intent.</returns>
+        bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context);
     }
 }

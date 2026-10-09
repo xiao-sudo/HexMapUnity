@@ -9,8 +9,9 @@ namespace HexMap.UnityRuntime
     /// <para>
     /// The outer input layer owns everything that is about the pointer: telling a tap from a drag,
     /// ignoring clicks that land on UI, and reading whichever input backend the project uses. It calls
-    /// <see cref="OnMapClicked"/> for clicks and <see cref="OnMapDragged"/> for drags. Picking and context
-    /// building happen only for clicks, so no caller has to know which camera is active or what a miss means.
+    /// <see cref="OnMapClicked"/> for clicks, <see cref="OnMapDragged"/> for drags, and
+    /// <see cref="OnMapCameraDistanceChanged"/> for camera-distance changes. Picking and context building
+    /// happen only for clicks, so no caller has to know which camera is active or what a miss means.
     /// </para>
     /// <para>
     /// Handlers register against a channel id. This assembly has no idea what those channels mean: the
@@ -228,6 +229,37 @@ namespace HexMap.UnityRuntime
             }
 
             return handler.OnMapDragged(screenDelta);
+        }
+
+        /// <summary>
+        /// Routes a device-independent camera-distance intent to the active channel. Like drags, camera
+        /// distance changes do not need map picking dependencies: the active handler owns their camera
+        /// meaning and reports whether it consumed them.
+        /// </summary>
+        /// <returns>True when the active handler consumed the camera-distance intent.</returns>
+        public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
+        {
+            if (m_ActiveChannel == MapInputChannels.None)
+            {
+                return false;
+            }
+
+            IMapInputHandler handler;
+            if (!m_Handlers.TryGetValue(m_ActiveChannel, out handler))
+            {
+                return false;
+            }
+
+            if (!IsAlive(handler))
+            {
+                ReportProblem(
+                    "dead-handler-" + m_ActiveChannel,
+                    "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
+                        + "; unregister it in OnDisable.");
+                return false;
+            }
+
+            return handler.OnMapCameraDistanceChanged(context);
         }
 
         private static bool IsAlive(IMapInputHandler handler)

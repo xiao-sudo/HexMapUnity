@@ -57,5 +57,10 @@ namespace HexMap.Sample
         {
             return false;
         }
+
+        public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
+        {
+            return false;
+        }
     }
 }

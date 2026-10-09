@@ -486,6 +486,59 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(dispatcher.OnMapDragged(new Vector2(1f, 1f)), Is.False);
         }
 
+        [Test]
+        public void CameraDistanceIntentIsRoutedToTheHandlerForTheActiveChannelWithoutPicking()
+        {
+            var dispatcher = CreateDispatcher(null, null, GameplayChannel);
+            var gameplay = new RecordingHandler();
+            var topDown = new RecordingHandler();
+            Assert.That(dispatcher.Register(GameplayChannel, gameplay), Is.True);
+            Assert.That(dispatcher.Register(TopDownChannel, topDown), Is.True);
+            var context = new MapCameraDistanceContext(new Vector2(735f, 428f), 0.125f);
+
+            Assert.That(dispatcher.OnMapCameraDistanceChanged(context), Is.True);
+            Assert.That(gameplay.CameraDistanceCallCount, Is.EqualTo(1));
+            Assert.That(gameplay.LastCameraDistanceContext.ScreenAnchor, Is.EqualTo(new Vector2(735f, 428f)));
+            Assert.That(gameplay.LastCameraDistanceContext.NormalizedDistanceDelta, Is.EqualTo(0.125f));
+            Assert.That(topDown.CameraDistanceCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void CameraDistanceIntentReturnsTheActiveHandlersConsumptionResult()
+        {
+            var dispatcher = CreateDispatcher(null, null, GameplayChannel);
+            var handler = new RecordingHandler { Consume = false };
+            Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
+
+            Assert.That(
+                dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(Vector2.zero, -0.05f)),
+                Is.False);
+            Assert.That(handler.CameraDistanceCallCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void CameraDistanceIntentWithoutAnActiveChannelIsDroppedSilently()
+        {
+            var dispatcher = CreateDispatcher(null, null, MapInputChannels.None);
+            var handler = new RecordingHandler();
+            Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
+
+            Assert.That(
+                dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(Vector2.one, 0.1f)),
+                Is.False);
+            Assert.That(handler.CameraDistanceCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void CameraDistanceIntentWithoutAHandlerForTheActiveChannelIsDroppedSilently()
+        {
+            var dispatcher = CreateDispatcher(null, null, TopDownChannel);
+
+            Assert.That(
+                dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(Vector2.one, 0.1f)),
+                Is.False);
+        }
+
         /// <summary>
         /// Where a world point appears on screen, which is also the screen position a click has to use
         /// to land on that world point. Aiming through this keeps a test stating the map location it
@@ -542,6 +595,10 @@ namespace HexMap.UnityRuntime.Tests
 
             public Vector2 LastDragDelta { get; private set; }
 
+            public int CameraDistanceCallCount { get; private set; }
+
+            public MapCameraDistanceContext LastCameraDistanceContext { get; private set; }
+
             public bool Consume { get; set; } = true;
 
             public bool OnMapClicked(in MapClickContext context)
@@ -555,6 +612,13 @@ namespace HexMap.UnityRuntime.Tests
             {
                 DragCallCount++;
                 LastDragDelta = screenDelta;
+                return Consume;
+            }
+
+            public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
+            {
+                CameraDistanceCallCount++;
+                LastCameraDistanceContext = context;
                 return Consume;
             }
         }
@@ -571,6 +635,11 @@ namespace HexMap.UnityRuntime.Tests
             }
 
             public bool OnMapDragged(Vector2 screenDelta)
+            {
+                return true;
+            }
+
+            public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
             {
                 return true;
             }
