@@ -1,10 +1,12 @@
+using UnityEngine;
+
 namespace HexMap.UnityRuntime
 {
     /// <summary>
-    /// Responds to map clicks for one channel. Register an implementation with a
-    /// <see cref="MapClickDispatcher"/> under the channel that should receive the clicks.
+    /// Responds to map input for one channel. Register an implementation with a
+    /// <see cref="MapInputDispatcher"/> under the channel that should receive the input.
     /// </summary>
-    public interface IMapClickHandler
+    public interface IMapInputHandler
     {
         /// <summary>
         /// Handles one map click.
@@ -15,5 +17,11 @@ namespace HexMap.UnityRuntime
         /// </param>
         /// <returns>True when the handler consumed the click.</returns>
         bool OnMapClicked(in MapClickContext context);
+
+        /// <summary>
+        /// Handles one map drag in screen pixels. Drag routing deliberately does not perform map picking.
+        /// </summary>
+        /// <returns>True when the handler consumed the drag.</returns>
+        bool OnMapDragged(Vector2 screenDelta);
     }
 }

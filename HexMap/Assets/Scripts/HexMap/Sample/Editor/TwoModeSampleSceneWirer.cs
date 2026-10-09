@@ -47,10 +47,10 @@ namespace HexMap.Sample.Editor
 
             var dispatcher = wiring.Dispatcher != null
                 ? wiring.Dispatcher
-                : FindSingle<MapClickDispatcher>();
+                : FindSingle<MapInputDispatcher>();
             if (dispatcher == null)
             {
-                Debug.LogError("Wire Two-Mode Scene: the open scene has no MapClickDispatcher.");
+                Debug.LogError("Wire Two-Mode Scene: the open scene has no MapInputDispatcher.");
                 return;
             }
 
@@ -121,14 +121,14 @@ namespace HexMap.Sample.Editor
 
             WirePanel(
                 wiring.GameplayUiRoot,
-                FindSingle<GameplayMapClickHandler>(),
+                FindSingle<GameplayMapInputHandler>(),
                 "Gameplay",
                 "gameplay",
                 changes,
                 notes);
             WirePanel(
                 wiring.TopDownUiRoot,
-                FindSingle<TopDownMapClickHandler>(),
+                FindSingle<TopDownMapInputHandler>(),
                 "Map view",
                 "top-down",
                 changes,
@@ -156,7 +156,7 @@ namespace HexMap.Sample.Editor
 
         private static void WireSwitcher(
             MapViewModeSwitcher switcher,
-            MapClickDispatcher dispatcher,
+            MapInputDispatcher dispatcher,
             List<string> changes)
         {
             Undo.RecordObject(switcher, ChangeLabel);

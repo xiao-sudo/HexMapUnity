@@ -28,8 +28,8 @@ namespace HexMap.Sample
         private GameObject m_TopDownUiRoot;
 
         [SerializeField]
-        [Tooltip("Receives the active camera and click channel whenever the mode changes.")]
-        private MapClickDispatcher m_Dispatcher;
+        [Tooltip("Receives the active camera and input channel whenever the mode changes.")]
+        private MapInputDispatcher m_Dispatcher;
 
         [SerializeField]
         [Tooltip("Which mode the scene starts in.")]
@@ -120,12 +120,12 @@ namespace HexMap.Sample
             m_GameplayState = new MapGameplayViewState(
                 m_GameplayCamera,
                 m_GameplayUiRoot,
-                SampleMapClickChannels.For(MapViewMode.Gameplay));
+                SampleMapInputChannels.For(MapViewMode.Gameplay));
             m_TopDownState = new MapTopDownViewState(
                 m_GameplayCamera,
                 m_MapCamera,
                 m_TopDownUiRoot,
-                SampleMapClickChannels.For(MapViewMode.TopDown));
+                SampleMapInputChannels.For(MapViewMode.TopDown));
         }
 
         private void InitializeUiRoots()
@@ -139,7 +139,7 @@ namespace HexMap.Sample
             if (m_Dispatcher != null)
             {
                 m_Dispatcher.SetActiveCamera(null);
-                m_Dispatcher.SetActiveChannel(MapClickChannels.None);
+                m_Dispatcher.SetActiveChannel(MapInputChannels.None);
             }
         }
 

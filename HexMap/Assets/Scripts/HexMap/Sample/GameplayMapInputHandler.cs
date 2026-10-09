@@ -13,10 +13,10 @@ namespace HexMap.Sample
     /// the other mode answer the same click with entirely different UI.
     /// </para>
     /// </summary>
-    public sealed class GameplayMapClickHandler : MonoBehaviour, IMapClickHandler, IMapPlotClickSource
+    public sealed class GameplayMapInputHandler : MonoBehaviour, IMapInputHandler, IMapPlotClickSource
     {
         [SerializeField]
-        private MapClickDispatcher m_Dispatcher;
+        private MapInputDispatcher m_Dispatcher;
 
         [SerializeField]
         private GvgMapRuntimeController m_Controller;
@@ -27,7 +27,7 @@ namespace HexMap.Sample
         /// </summary>
         public event Action<int> PlotClicked;
 
-        public MapClickDispatcher Dispatcher
+        public MapInputDispatcher Dispatcher
         {
             get { return m_Dispatcher; }
             set { m_Dispatcher = value; }
@@ -49,7 +49,7 @@ namespace HexMap.Sample
             // Unregistering is idempotent on the dispatcher, so this is safe even if OnEnable never ran.
             if (m_Dispatcher != null)
             {
-                m_Dispatcher.Unregister(SampleMapClickChannels.Gameplay, this);
+                m_Dispatcher.Unregister(SampleMapInputChannels.Gameplay, this);
             }
         }
 
@@ -72,15 +72,20 @@ namespace HexMap.Sample
             return true;
         }
 
+        public bool OnMapDragged(Vector2 screenDelta)
+        {
+            return false;
+        }
+
         private void RegisterIfPossible()
         {
             if (m_Dispatcher == null)
             {
-                Debug.LogError("GameplayMapClickHandler has no MapClickDispatcher reference.", this);
+                Debug.LogError("GameplayMapInputHandler has no MapInputDispatcher reference.", this);
                 return;
             }
 
-            if (!m_Dispatcher.Register(SampleMapClickChannels.Gameplay, this))
+            if (!m_Dispatcher.Register(SampleMapInputChannels.Gameplay, this))
             {
                 // The dispatcher already logged why; nothing useful to add here.
                 return;

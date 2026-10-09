@@ -6,13 +6,13 @@ namespace HexMap.Sample
 {
     /// <summary>
     /// The pointer-to-click adapter: it decides whether a press was a tap on the map and, if so, hands the
-    /// screen position to the <see cref="MapClickDispatcher"/>.
+    /// screen position to the <see cref="MapInputDispatcher"/>.
     /// <para>
     /// This is deliberately the only component that knows about pointers. Telling a tap from a drag,
     /// staying out of the UI's way and reading whichever input backend the project uses all belong here,
     /// so nothing downstream has to know which camera is live or which mode is up. A project that swaps
     /// this for the new Input System or for EasyTouch only has to keep calling
-    /// <see cref="MapClickDispatcher.OnMapClicked"/> with a screen position.
+    /// <see cref="MapInputDispatcher.OnMapClicked"/> with a screen position.
     /// </para>
     /// <para>
     /// The mouse path is also the touch path: Unity maps the primary touch to mouse button 0, so one
@@ -31,13 +31,13 @@ namespace HexMap.Sample
         private float m_TapSlop = 20f;
 
         [SerializeField]
-        private MapClickDispatcher m_Dispatcher;
+        private MapInputDispatcher m_Dispatcher;
 
         private Vector2 m_PressPosition;
         private bool m_IsPressed;
         private bool m_HasReportedMissingDispatcher;
 
-        public MapClickDispatcher Dispatcher
+        public MapInputDispatcher Dispatcher
         {
             get { return m_Dispatcher; }
             set { m_Dispatcher = value; }
@@ -119,7 +119,7 @@ namespace HexMap.Sample
 
             m_HasReportedMissingDispatcher = true;
             Debug.LogError(
-                "MapClickTapInput has no MapClickDispatcher reference, so taps reach nothing.",
+                "MapClickTapInput has no MapInputDispatcher reference, so taps reach nothing.",
                 this);
         }
     }

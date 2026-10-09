@@ -13,7 +13,7 @@ namespace HexMap.Sample.Tests
 
         private MapViewModeSwitcher m_Switcher;
         private Camera m_GameplayCamera;
-        private MapClickDispatcher m_Dispatcher;
+        private MapInputDispatcher m_Dispatcher;
         private GameObject m_GameplayUiRoot;
         private GameObject m_TopDownUiRoot;
 
@@ -43,7 +43,7 @@ namespace HexMap.Sample.Tests
             Assert.That(m_GameplayCamera.enabled, Is.True);
             Assert.That(m_GameplayCamera.orthographic, Is.True);
             Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_GameplayCamera));
-            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapClickChannels.TopDown));
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapInputChannels.TopDown));
             Assert.That(m_GameplayUiRoot.activeSelf, Is.False);
             Assert.That(m_TopDownUiRoot.activeSelf, Is.True);
         }
@@ -77,7 +77,7 @@ namespace HexMap.Sample.Tests
             Assert.That(m_GameplayCamera.nearClipPlane, Is.EqualTo(0.5f).Within(0.0001f));
             Assert.That(m_GameplayCamera.farClipPlane, Is.EqualTo(444f).Within(0.0001f));
             Assert.That(m_GameplayCamera.cullingMask, Is.EqualTo(1 << 9));
-            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapClickChannels.Gameplay));
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapInputChannels.Gameplay));
         }
 
         [Test]
@@ -140,7 +140,7 @@ namespace HexMap.Sample.Tests
             mapCamera.HexMapView = mapView;
             mapCamera.ViewportAspect = m_GameplayCamera.aspect;
 
-            m_Dispatcher = CreateObject("Map Click Dispatcher").AddComponent<MapClickDispatcher>();
+            m_Dispatcher = CreateObject("Map Input Dispatcher").AddComponent<MapInputDispatcher>();
             m_GameplayUiRoot = CreateObject("Gameplay UI");
             m_TopDownUiRoot = CreateObject("Top Down UI");
             m_Switcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();

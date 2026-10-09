@@ -4,13 +4,13 @@ using UnityEngine;
 namespace HexMap.UnityRuntime
 {
     /// <summary>
-    /// The single entry point for map clicks, and the single place that maps the current mode to the
+    /// The single entry point for map input, and the single place that maps the current mode to the
     /// code that reacts to it.
     /// <para>
     /// The outer input layer owns everything that is about the pointer: telling a tap from a drag,
     /// ignoring clicks that land on UI, and reading whichever input backend the project uses. It calls
-    /// <see cref="OnMapClicked"/> with a screen position and nothing else. Picking, context building and
-    /// dispatch all happen here, so no caller has to know which camera is active or what a miss means.
+    /// <see cref="OnMapClicked"/> for clicks and <see cref="OnMapDragged"/> for drags. Picking and context
+    /// building happen only for clicks, so no caller has to know which camera is active or what a miss means.
     /// </para>
     /// <para>
     /// Handlers register against a channel id. This assembly has no idea what those channels mean: the
@@ -19,16 +19,16 @@ namespace HexMap.UnityRuntime
     /// </para>
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class MapClickDispatcher : MonoBehaviour
+    public sealed class MapInputDispatcher : MonoBehaviour
     {
         [SerializeField]
         private GvgMapRuntimeController m_Controller;
 
-        private readonly Dictionary<int, IMapClickHandler> m_Handlers = new Dictionary<int, IMapClickHandler>();
+        private readonly Dictionary<int, IMapInputHandler> m_Handlers = new Dictionary<int, IMapInputHandler>();
         private readonly HashSet<string> m_ReportedProblems = new HashSet<string>();
 
         private Camera m_ActiveCamera;
-        private int m_ActiveChannel = MapClickChannels.None;
+        private int m_ActiveChannel = MapInputChannels.None;
         private MapClickContext m_LastContext;
         private bool m_HasLastContext;
 
@@ -39,8 +39,8 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// The channel clicks are currently routed to. <see cref="MapClickChannels.None"/> while a mode
-        /// does not react to clicks.
+        /// The channel map input is currently routed to. <see cref="MapInputChannels.None"/> while a mode
+        /// does not react to input.
         /// </summary>
         public int ActiveChannel
         {
@@ -96,26 +96,26 @@ namespace HexMap.UnityRuntime
         /// Registers the handler for a channel. Fails when the channel already has a handler, because two
         /// handlers for one channel would silently steal clicks from each other.
         /// </summary>
-        public bool Register(int channelId, IMapClickHandler handler)
+        public bool Register(int channelId, IMapInputHandler handler)
         {
             if (handler == null)
             {
-                ReportProblem("register-null", "MapClickDispatcher.Register was given a null handler.");
+                ReportProblem("register-null", "MapInputDispatcher.Register was given a null handler.");
                 return false;
             }
 
-            if (channelId == MapClickChannels.None)
+            if (channelId == MapInputChannels.None)
             {
-                ReportProblem("register-none", "MapClickDispatcher.Register was given the None channel; pick an application channel.");
+                ReportProblem("register-none", "MapInputDispatcher.Register was given the None channel; pick an application channel.");
                 return false;
             }
 
-            IMapClickHandler existing;
+            IMapInputHandler existing;
             if (m_Handlers.TryGetValue(channelId, out existing))
             {
                 ReportProblem(
                     "register-duplicate-" + channelId,
-                    "MapClickDispatcher already has a handler for channel " + channelId
+                    "MapInputDispatcher already has a handler for channel " + channelId
                         + "; unregister the previous one first. The new handler was ignored.");
                 return false;
             }
@@ -128,14 +128,14 @@ namespace HexMap.UnityRuntime
         /// Removes the handler for a channel. Unregistering a channel that holds a different handler, or
         /// none at all, changes nothing and reports nothing, so it is safe from OnDisable.
         /// </summary>
-        public bool Unregister(int channelId, IMapClickHandler handler)
+        public bool Unregister(int channelId, IMapInputHandler handler)
         {
             if (handler == null)
             {
                 return false;
             }
 
-            IMapClickHandler existing;
+            IMapInputHandler existing;
             if (!m_Handlers.TryGetValue(channelId, out existing))
             {
                 return false;
@@ -159,30 +159,26 @@ namespace HexMap.UnityRuntime
             m_LastContext = default(MapClickContext);
             m_HasLastContext = false;
 
+            if (m_ActiveChannel == MapInputChannels.None)
+            {
+                return false;
+            }
+
+            IMapInputHandler handler;
+            if (!m_Handlers.TryGetValue(m_ActiveChannel, out handler))
+            {
+                return false;
+            }
+
             if (m_Controller == null)
             {
-                ReportProblem("no-controller", "MapClickDispatcher has no GvgMapRuntimeController, so clicks cannot be resolved.");
+                ReportProblem("no-controller", "MapInputDispatcher has no GvgMapRuntimeController, so clicks cannot be resolved.");
                 return false;
             }
 
             if (m_ActiveCamera == null)
             {
-                ReportProblem("no-camera", "MapClickDispatcher has no active camera; the mode owner must call SetActiveCamera before clicks arrive.");
-                return false;
-            }
-
-            if (m_ActiveChannel == MapClickChannels.None)
-            {
-                return false;
-            }
-
-            IMapClickHandler handler;
-            if (!m_Handlers.TryGetValue(m_ActiveChannel, out handler))
-            {
-                ReportProblem(
-                    "no-handler-" + m_ActiveChannel,
-                    "MapClickDispatcher has no handler registered for channel " + m_ActiveChannel
-                        + "; the click was dropped.");
+                ReportProblem("no-camera", "MapInputDispatcher has no active camera; the mode owner must call SetActiveCamera before clicks arrive.");
                 return false;
             }
 
@@ -196,7 +192,7 @@ namespace HexMap.UnityRuntime
             {
                 ReportProblem(
                     "dead-handler-" + m_ActiveChannel,
-                    "MapClickDispatcher still has a destroyed handler for channel " + m_ActiveChannel
+                    "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
                         + "; unregister it in OnDisable.");
                 return false;
             }
@@ -204,7 +200,37 @@ namespace HexMap.UnityRuntime
             return handler.OnMapClicked(m_LastContext);
         }
 
-        private static bool IsAlive(IMapClickHandler handler)
+        /// <summary>
+        /// Routes a screen-space drag delta to the active channel. Drags carry no map-picking semantics:
+        /// the handler decides what a delta means for its mode, such as panning a camera.
+        /// </summary>
+        /// <returns>True when the active handler consumed the drag.</returns>
+        public bool OnMapDragged(Vector2 screenDelta)
+        {
+            if (m_ActiveChannel == MapInputChannels.None)
+            {
+                return false;
+            }
+
+            IMapInputHandler handler;
+            if (!m_Handlers.TryGetValue(m_ActiveChannel, out handler))
+            {
+                return false;
+            }
+
+            if (!IsAlive(handler))
+            {
+                ReportProblem(
+                    "dead-handler-" + m_ActiveChannel,
+                    "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
+                        + "; unregister it in OnDisable.");
+                return false;
+            }
+
+            return handler.OnMapDragged(screenDelta);
+        }
+
+        private static bool IsAlive(IMapInputHandler handler)
         {
             // The interface itself can be a genuine null.
             if (handler == null)

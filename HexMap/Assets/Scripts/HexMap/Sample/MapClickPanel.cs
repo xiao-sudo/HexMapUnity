@@ -112,7 +112,7 @@ namespace HexMap.Sample
             if (source == null)
             {
                 Debug.LogError(
-                    "MapClickPanel's source does not announce plot clicks. Wire a mode handler such as GameplayMapClickHandler or TopDownMapClickHandler.",
+                    "MapClickPanel's source does not announce plot clicks. Wire a mode handler such as GameplayMapInputHandler or TopDownMapInputHandler.",
                     this);
             }
 

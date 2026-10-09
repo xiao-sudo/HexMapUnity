@@ -3,7 +3,7 @@ using UnityEngine;
 namespace HexMap.UnityRuntime
 {
     /// <summary>
-    /// What one map click resolved to, handed to whichever <see cref="IMapClickHandler"/> owns the
+    /// What one map click resolved to, handed to whichever <see cref="IMapInputHandler"/> owns the
     /// active channel.
     /// <para>
     /// A click that hit nothing is still delivered, with <see cref="HasPlot"/> false. Handlers need that

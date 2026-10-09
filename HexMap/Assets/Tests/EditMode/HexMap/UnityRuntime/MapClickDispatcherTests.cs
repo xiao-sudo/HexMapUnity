@@ -9,7 +9,7 @@ using UnityEngine.TestTools;
 namespace HexMap.UnityRuntime.Tests
 {
     [TestFixture]
-    public sealed class MapClickDispatcherTests
+    public sealed class MapInputDispatcherTests
     {
         /// <summary>
         /// The channel the application would declare for its gameplay mode. The dispatcher itself has no
@@ -73,11 +73,11 @@ namespace HexMap.UnityRuntime.Tests
             return controller;
         }
 
-        private MapClickDispatcher CreateDispatcher(GvgMapRuntimeController controller, Camera camera, int channel)
+        private MapInputDispatcher CreateDispatcher(GvgMapRuntimeController controller, Camera camera, int channel)
         {
             m_DispatcherObject = new GameObject("Map Click Dispatcher");
             m_DispatcherObject.SetActive(false);
-            var dispatcher = m_DispatcherObject.AddComponent<MapClickDispatcher>();
+            var dispatcher = m_DispatcherObject.AddComponent<MapInputDispatcher>();
             dispatcher.Controller = controller;
             m_DispatcherObject.SetActive(true);
             dispatcher.SetActiveCamera(camera);
@@ -99,7 +99,7 @@ namespace HexMap.UnityRuntime.Tests
             return rows;
         }
 
-        private MapClickDispatcher CreateReadyDispatcher(
+        private MapInputDispatcher CreateReadyDispatcher(
             out GvgMapRuntimeController controller,
             out Camera camera,
             out RecordingHandler handler)
@@ -150,19 +150,13 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
-        public void AClickOnAnUnregisteredChannelIsReportedOnceAndDropped()
+        public void AClickOnAnUnregisteredChannelIsDroppedSilently()
         {
             GvgMapRuntimeController controller;
             Camera camera;
             RecordingHandler gameplay;
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out gameplay);
             dispatcher.SetActiveChannel(TopDownChannel);
-
-            // The drop is deliberately logged, so the framework has to be told to expect it. Repeated
-            // clicks report once, which is the second half of what this test pins.
-            LogAssert.Expect(
-                LogType.Error,
-                new Regex(Regex.Escape(NoHandlerMessage(TopDownChannel))));
 
             Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
@@ -176,7 +170,7 @@ namespace HexMap.UnityRuntime.Tests
             Camera camera;
             RecordingHandler handler;
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
-            dispatcher.SetActiveChannel(MapClickChannels.None);
+            dispatcher.SetActiveChannel(MapInputChannels.None);
 
             Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
@@ -328,14 +322,14 @@ namespace HexMap.UnityRuntime.Tests
         public void RegisteringOnTheNoneChannelOrWithANullHandlerIsRefused()
         {
             var camera = CreateCamera();
-            var dispatcher = CreateDispatcher(null, camera, MapClickChannels.None);
+            var dispatcher = CreateDispatcher(null, camera, MapInputChannels.None);
 
             // Both refusals are reported, in the order the two calls make them. The declaration order
             // here has to follow the call order, because each message is a distinct report.
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NoneChannelMessage())));
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NullHandlerMessage())));
 
-            Assert.That(dispatcher.Register(MapClickChannels.None, new RecordingHandler()), Is.False);
+            Assert.That(dispatcher.Register(MapInputChannels.None, new RecordingHandler()), Is.False);
             Assert.That(dispatcher.Register(GameplayChannel, null), Is.False);
             Assert.That(dispatcher.HandlerCount, Is.EqualTo(0));
         }
@@ -358,12 +352,8 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(dispatcher.Unregister(GameplayChannel, handler), Is.False, "a second unregister is a no-op");
             Assert.That(dispatcher.HandlerCount, Is.EqualTo(0));
 
-            // Clicking is how this proves the handler stopped receiving clicks, and an empty channel is
-            // reported by contract: "no mode reacts to clicks" is expressed with MapClickChannels.None,
-            // so a channel nobody holds means the wiring is wrong. Hence the declared error, which is
-            // the whole reason this assertion is worth making rather than trusting HandlerCount alone.
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(NoHandlerMessage(GameplayChannel))));
-
+            // Clicking proves the handler stopped receiving input. A channel can deliberately omit either
+            // input gesture, so an unregistered channel is a normal no-op rather than a wiring error.
             Assert.That(dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero)), Is.False);
             Assert.That(handler.CallCount, Is.EqualTo(0));
         }
@@ -428,7 +418,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(dispatcher.TryGetLastContext(out context), Is.True);
             Assert.That(context.HasPlot, Is.True);
 
-            dispatcher.SetActiveChannel(MapClickChannels.None);
+            dispatcher.SetActiveChannel(MapInputChannels.None);
             dispatcher.OnMapClicked(ScreenPointOf(camera, Vector3.zero));
             Assert.That(
                 dispatcher.TryGetLastContext(out context),
@@ -452,6 +442,50 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(handler.LastContext.PickStatus, Is.EqualTo(PlotScreenPickStatus.MapNotInitialized));
         }
 
+        [Test]
+        public void ADragIsRoutedWithoutNeedingMapPickingDependencies()
+        {
+            var dispatcher = CreateDispatcher(null, null, GameplayChannel);
+            var handler = new RecordingHandler();
+            Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
+
+            var delta = new Vector2(18f, -7f);
+
+            Assert.That(dispatcher.OnMapDragged(delta), Is.True);
+            Assert.That(handler.DragCallCount, Is.EqualTo(1));
+            Assert.That(handler.LastDragDelta, Is.EqualTo(delta));
+        }
+
+        [Test]
+        public void ADragDoesNotReplaceTheMostRecentClickContext()
+        {
+            GvgMapRuntimeController controller;
+            Camera camera;
+            RecordingHandler handler;
+            var dispatcher = CreateReadyDispatcher(out controller, out camera, out handler);
+            var clickPosition = ScreenPointOf(camera, Vector3.zero);
+            dispatcher.OnMapClicked(clickPosition);
+
+            MapClickContext beforeDrag;
+            Assert.That(dispatcher.TryGetLastContext(out beforeDrag), Is.True);
+
+            dispatcher.OnMapDragged(new Vector2(3f, 5f));
+
+            MapClickContext afterDrag;
+            Assert.That(dispatcher.TryGetLastContext(out afterDrag), Is.True);
+            Assert.That(afterDrag.ScreenPosition, Is.EqualTo(beforeDrag.ScreenPosition));
+            Assert.That(afterDrag.PlotId, Is.EqualTo(beforeDrag.PlotId));
+            Assert.That(afterDrag.PickStatus, Is.EqualTo(beforeDrag.PickStatus));
+        }
+
+        [Test]
+        public void ADragOnAnUnregisteredChannelIsDroppedSilently()
+        {
+            var dispatcher = CreateDispatcher(null, null, TopDownChannel);
+
+            Assert.That(dispatcher.OnMapDragged(new Vector2(1f, 1f)), Is.False);
+        }
+
         /// <summary>
         /// Where a world point appears on screen, which is also the screen position a click has to use
         /// to land on that world point. Aiming through this keeps a test stating the map location it
@@ -466,49 +500,47 @@ namespace HexMap.UnityRuntime.Tests
         /// Mirrors the messages the dispatcher logs, so an expectation stays in step with the source
         /// instead of drifting into a substring that happens to still match.
         /// </summary>
-        private static string NoHandlerMessage(int channel)
-        {
-            return "MapClickDispatcher has no handler registered for channel " + channel
-                + "; the click was dropped.";
-        }
-
         private static string DeadHandlerMessage(int channel)
         {
-            return "MapClickDispatcher still has a destroyed handler for channel " + channel
+            return "MapInputDispatcher still has a destroyed handler for channel " + channel
                 + "; unregister it in OnDisable.";
         }
 
         private static string NoCameraMessage()
         {
-            return "MapClickDispatcher has no active camera; the mode owner must call SetActiveCamera before clicks arrive.";
+            return "MapInputDispatcher has no active camera; the mode owner must call SetActiveCamera before clicks arrive.";
         }
 
         private static string NoControllerMessage()
         {
-            return "MapClickDispatcher has no GvgMapRuntimeController, so clicks cannot be resolved.";
+            return "MapInputDispatcher has no GvgMapRuntimeController, so clicks cannot be resolved.";
         }
 
         private static string DuplicateHandlerMessage(int channel)
         {
-            return "MapClickDispatcher already has a handler for channel " + channel
+            return "MapInputDispatcher already has a handler for channel " + channel
                 + "; unregister the previous one first. The new handler was ignored.";
         }
 
         private static string NoneChannelMessage()
         {
-            return "MapClickDispatcher.Register was given the None channel; pick an application channel.";
+            return "MapInputDispatcher.Register was given the None channel; pick an application channel.";
         }
 
         private static string NullHandlerMessage()
         {
-            return "MapClickDispatcher.Register was given a null handler.";
+            return "MapInputDispatcher.Register was given a null handler.";
         }
 
-        private sealed class RecordingHandler : IMapClickHandler
+        private sealed class RecordingHandler : IMapInputHandler
         {
             public int CallCount { get; private set; }
 
+            public int DragCallCount { get; private set; }
+
             public MapClickContext LastContext { get; private set; }
+
+            public Vector2 LastDragDelta { get; private set; }
 
             public bool Consume { get; set; } = true;
 
@@ -518,15 +550,27 @@ namespace HexMap.UnityRuntime.Tests
                 LastContext = context;
                 return Consume;
             }
+
+            public bool OnMapDragged(Vector2 screenDelta)
+            {
+                DragCallCount++;
+                LastDragDelta = screenDelta;
+                return Consume;
+            }
         }
 
         /// <summary>
         /// A handler that is also a Unity object, so destroying it is observable the way a real
         /// MonoBehaviour handler would be.
         /// </summary>
-        private sealed class UnityHandler : MonoBehaviour, IMapClickHandler
+        private sealed class UnityHandler : MonoBehaviour, IMapInputHandler
         {
             public bool OnMapClicked(in MapClickContext context)
+            {
+                return true;
+            }
+
+            public bool OnMapDragged(Vector2 screenDelta)
             {
                 return true;
             }
