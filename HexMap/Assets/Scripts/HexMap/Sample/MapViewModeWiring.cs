@@ -11,15 +11,13 @@ namespace HexMap.Sample
             OrthographicMapCamera mapCamera,
             GameObject gameplayUiRoot,
             GameObject topDownUiRoot,
-            MapInputDispatcher dispatcher,
-            MapViewMode startMode)
+            MapInputDispatcher dispatcher)
         {
             GameplayCamera = gameplayCamera;
             MapCamera = mapCamera;
             GameplayUiRoot = gameplayUiRoot;
             TopDownUiRoot = topDownUiRoot;
             Dispatcher = dispatcher;
-            StartMode = startMode;
         }
 
         /// <summary>The single base camera used by both view modes.</summary>
@@ -37,7 +35,5 @@ namespace HexMap.Sample
         /// <summary>Receives the active camera and input channel whenever the mode changes.</summary>
         public MapInputDispatcher Dispatcher { get; }
 
-        /// <summary>The mode the scene starts in.</summary>
-        public MapViewMode StartMode { get; }
     }
 }

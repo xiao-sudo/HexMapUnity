@@ -37,7 +37,7 @@ namespace HexMap.Sample.Tests
         {
             CreateRig();
 
-            m_Switcher.ApplySerializedMode();
+            m_Switcher.SetMode(MapViewMode.Gameplay);
             m_Switcher.Toggle();
 
             Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.TopDown));
@@ -53,7 +53,7 @@ namespace HexMap.Sample.Tests
         public void LeavingTopDownRestoresTheCompleteGameplayView()
         {
             CreateRig();
-            m_Switcher.ApplySerializedMode();
+            m_Switcher.SetMode(MapViewMode.Gameplay);
 
             var position = new Vector3(4f, 5f, 6f);
             var rotation = Quaternion.Euler(11f, 22f, 33f);
@@ -84,11 +84,11 @@ namespace HexMap.Sample.Tests
         [Test]
         public void StartingInTopDownStillRestoresTheAuthoredGameplayView()
         {
-            CreateRig(MapViewMode.TopDown);
+            CreateRig();
             var authoredPosition = m_GameplayCamera.transform.position;
             var authoredRotation = m_GameplayCamera.transform.rotation;
 
-            m_Switcher.ApplySerializedMode();
+            m_Switcher.SetMode(MapViewMode.TopDown);
             m_Switcher.Toggle();
 
             Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
@@ -101,7 +101,7 @@ namespace HexMap.Sample.Tests
         public void RepeatedSwitchesLeaveTheBaseCameraEnabledAndTheGameplayViewUndrifted()
         {
             CreateRig();
-            m_Switcher.ApplySerializedMode();
+            m_Switcher.SetMode(MapViewMode.Gameplay);
             var position = m_GameplayCamera.transform.position;
             var rotation = m_GameplayCamera.transform.rotation;
 
@@ -121,9 +121,31 @@ namespace HexMap.Sample.Tests
         public void AHalfWiredSwitcherDoesNotThrow()
         {
             m_Switcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();
+            m_Switcher.Configure(new MapViewModeWiring(null, null, null, null, null));
 
-            Assert.DoesNotThrow(() => m_Switcher.ApplySerializedMode());
+            Assert.DoesNotThrow(() => m_Switcher.SetMode(MapViewMode.Gameplay));
             Assert.DoesNotThrow(() => m_Switcher.Toggle());
+        }
+
+        [Test]
+        public void SetModeRequiresBusinessConfiguration()
+        {
+            m_Switcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();
+
+            Assert.That(
+                () => m_Switcher.SetMode(MapViewMode.Gameplay),
+                Throws.TypeOf<InvalidOperationException>());
+        }
+
+        [Test]
+        public void ConfigureCannotReplaceWiringAfterAModeIsActive()
+        {
+            CreateRig();
+            m_Switcher.SetMode(MapViewMode.Gameplay);
+
+            Assert.That(
+                () => m_Switcher.Configure(new MapViewModeWiring(null, null, null, null, null)),
+                Throws.TypeOf<InvalidOperationException>());
         }
 
         [Test]
@@ -159,7 +181,7 @@ namespace HexMap.Sample.Tests
                 Throws.TypeOf<ArgumentOutOfRangeException>());
         }
 
-        private void CreateRig(MapViewMode startMode = MapViewMode.Gameplay)
+        private void CreateRig()
         {
             m_GameplayCamera = CreateObject("Gameplay Camera").AddComponent<Camera>();
             m_GameplayCamera.orthographic = false;
@@ -183,8 +205,7 @@ namespace HexMap.Sample.Tests
                 mapCamera,
                 m_GameplayUiRoot,
                 m_TopDownUiRoot,
-                m_Dispatcher,
-                startMode));
+                m_Dispatcher));
         }
 
         private GameObject CreateObject(string name)

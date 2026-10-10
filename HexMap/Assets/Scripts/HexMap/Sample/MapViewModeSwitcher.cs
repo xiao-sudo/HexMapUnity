@@ -32,17 +32,22 @@ namespace HexMap.Sample
         [Tooltip("Receives the active camera and input channel whenever the mode changes.")]
         private MapInputDispatcher m_Dispatcher;
 
-        [SerializeField]
-        [Tooltip("Which mode the scene starts in.")]
-        private MapViewMode m_StartMode;
-
         private IMapViewModeState m_GameplayState;
         private IMapViewModeState m_TopDownState;
         private IMapViewModeState m_CurrentState;
+        private bool m_IsConfigured;
 
         public MapViewMode CurrentMode
         {
-            get { return m_CurrentState != null ? m_CurrentState.Mode : m_StartMode; }
+            get
+            {
+                if (m_CurrentState == null)
+                {
+                    throw new InvalidOperationException("MapViewModeSwitcher has no active mode. Configure it and call SetMode first.");
+                }
+
+                return m_CurrentState.Mode;
+            }
         }
 
         public float ActiveCameraAspect
@@ -58,29 +63,23 @@ namespace HexMap.Sample
                     m_MapCamera,
                     m_GameplayUiRoot,
                     m_TopDownUiRoot,
-                    m_Dispatcher,
-                    m_StartMode);
+                    m_Dispatcher);
             }
-        }
-
-        private void Start()
-        {
-            ApplySerializedMode();
         }
 
         public void Configure(in MapViewModeWiring wiring)
         {
+            if (m_CurrentState != null)
+            {
+                throw new InvalidOperationException("MapViewModeSwitcher cannot replace its wiring after a mode is active.");
+            }
+
             m_GameplayCamera = wiring.GameplayCamera;
             m_MapCamera = wiring.MapCamera;
             m_GameplayUiRoot = wiring.GameplayUiRoot;
             m_TopDownUiRoot = wiring.TopDownUiRoot;
             m_Dispatcher = wiring.Dispatcher;
-            m_StartMode = wiring.StartMode;
-        }
-
-        public void ApplySerializedMode()
-        {
-            SetMode(m_StartMode);
+            m_IsConfigured = true;
         }
 
         public void Toggle()
@@ -89,9 +88,8 @@ namespace HexMap.Sample
         }
 
         /// <summary>
-        /// Switches to the requested view mode. This is safe before <see cref="ApplySerializedMode"/>
-        /// because it constructs the mode states on demand, and it is a no-op when the requested mode is
-        /// already active.
+        /// Switches to the requested view mode after business code has supplied its wiring through
+        /// <see cref="Configure"/>. It is a no-op when the requested mode is already active.
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="target"/> is not a declared mode.</exception>
         public void SetMode(MapViewMode target)
@@ -99,6 +97,11 @@ namespace HexMap.Sample
             if (target != MapViewMode.Gameplay && target != MapViewMode.TopDown)
             {
                 throw new ArgumentOutOfRangeException(nameof(target), target, "The requested map view mode is not defined.");
+            }
+
+            if (!m_IsConfigured)
+            {
+                throw new InvalidOperationException("MapViewModeSwitcher must be configured before SetMode is called.");
             }
 
             EnsureStates();

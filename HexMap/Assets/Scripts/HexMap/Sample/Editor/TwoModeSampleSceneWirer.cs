@@ -78,7 +78,6 @@ namespace HexMap.Sample.Editor
             }
 
             WireSwitcher(switcher, dispatcher, changes);
-            StartInGameplayMode(switcher, changes);
 
             WireModeButton(switcher, wiring.GameplayUiRoot, "gameplay", changes, notes);
             WireModeButton(switcher, wiring.TopDownUiRoot, "top-down", changes, notes);
@@ -135,38 +134,11 @@ namespace HexMap.Sample.Editor
                     wiring.MapCamera,
                     wiring.GameplayUiRoot,
                     wiring.TopDownUiRoot,
-                    dispatcher,
-                    wiring.StartMode));
+                    dispatcher));
                 changes.Add("pointed the switcher at '" + dispatcher.name + "'");
             }
 
             EditorUtility.SetDirty(switcher);
-        }
-
-        /// <summary>
-        /// Leaves the scene starting in gameplay mode. Starting in the map view applies the mode without
-        /// taking a capture of the gameplay camera, so the first return has nothing to restore and the
-        /// camera stays wherever the scene left it, which looks like a broken restore the first time it is
-        /// tried.
-        /// </summary>
-        private static void StartInGameplayMode(MapViewModeSwitcher switcher, List<string> changes)
-        {
-            var serialized = new SerializedObject(switcher);
-            var property = serialized.FindProperty("m_StartMode");
-            if (property == null)
-            {
-                changes.Add("could not find the starting mode field; check the start mode by hand");
-                return;
-            }
-
-            if (property.intValue == (int)MapViewMode.Gameplay)
-            {
-                return;
-            }
-
-            property.intValue = (int)MapViewMode.Gameplay;
-            serialized.ApplyModifiedProperties();
-            changes.Add("start in gameplay mode, so the first switch has a camera pose to restore");
         }
 
         private static void WireModeButton(
