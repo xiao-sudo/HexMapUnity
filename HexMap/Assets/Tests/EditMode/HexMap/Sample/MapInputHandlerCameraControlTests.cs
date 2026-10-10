@@ -15,6 +15,7 @@ namespace HexMap.Sample.Tests
         private MapInputDispatcher m_Dispatcher;
         private GameplayMapInputHandler m_Gameplay;
         private TopDownMapInputHandler m_TopDown;
+        private MapViewModeSwitcher m_ModeSwitcher;
 
         [TearDown]
         public void TearDown()
@@ -79,6 +80,19 @@ namespace HexMap.Sample.Tests
             Assert.That(m_MapCamera.Zoom, Is.EqualTo(m_MapCamera.MaxZoom));
         }
 
+        [Test]
+        public void CameraControlRefreshesUsingTheActiveCameraAspect()
+        {
+            CreateReadyInputHandlers();
+            var control = m_Gameplay.CameraInputController;
+            var activeCamera = m_ModeSwitcher.Wiring.GameplayCamera;
+            activeCamera.aspect = 2f;
+            m_Dispatcher.SetActiveChannel(SampleMapInputChannels.Gameplay);
+
+            Assert.That(m_Dispatcher.OnMapDragged(new Vector2(10f, 0f)), Is.True);
+            Assert.That(m_MapCamera.ViewportAspect, Is.EqualTo(2f));
+        }
+
         private void CreateReadyInputHandlers()
         {
             var mapView = CreateObject("Hex Map View").AddComponent<HexMapView>();
@@ -100,6 +114,15 @@ namespace HexMap.Sample.Tests
             cameraControl.MapCamera = m_MapCamera;
 
             m_Dispatcher = CreateObject("Map Input Dispatcher").AddComponent<MapInputDispatcher>();
+            m_ModeSwitcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();
+            m_ModeSwitcher.Configure(new MapViewModeWiring(
+                camera,
+                m_MapCamera,
+                null,
+                null,
+                m_Dispatcher,
+                MapViewMode.Gameplay));
+            cameraControl.ModeSwitcher = m_ModeSwitcher;
             m_Gameplay = CreateHandler<GameplayMapInputHandler>("Gameplay Input Handler", cameraControl);
             m_TopDown = CreateHandler<TopDownMapInputHandler>("Top Down Input Handler", cameraControl);
         }

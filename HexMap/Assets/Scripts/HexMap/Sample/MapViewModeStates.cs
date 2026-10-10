@@ -16,12 +16,14 @@ namespace HexMap.Sample
     internal sealed class MapGameplayViewState : IMapViewModeState
     {
         private readonly Camera m_Camera;
+        private readonly OrthographicMapCamera m_MapCamera;
         private readonly GameObject m_UiRoot;
         private readonly int m_Channel;
 
-        public MapGameplayViewState(Camera camera, GameObject uiRoot, int channel)
+        public MapGameplayViewState(Camera camera, OrthographicMapCamera mapCamera, GameObject uiRoot, int channel)
         {
             m_Camera = camera;
+            m_MapCamera = mapCamera;
             m_UiRoot = uiRoot;
             m_Channel = channel;
         }
@@ -33,6 +35,11 @@ namespace HexMap.Sample
 
         public void Enter(MapViewModeSwitcher switcher)
         {
+            if (m_MapCamera != null)
+            {
+                m_MapCamera.FrameChanged += ApplyFrame;
+            }
+
             switcher.EnterMode(m_Camera, m_Channel);
             MapViewModeUi.SetRootActive(m_UiRoot, true);
         }
@@ -40,6 +47,16 @@ namespace HexMap.Sample
         public void Exit()
         {
             MapViewModeUi.SetRootActive(m_UiRoot, false);
+
+            if (m_MapCamera != null)
+            {
+                m_MapCamera.FrameChanged -= ApplyFrame;
+            }
+        }
+
+        private void ApplyFrame(OrthographicMapCameraFrame frame)
+        {
+            MapCameraFrameApplier.Apply(m_Camera, frame);
         }
     }
 
@@ -123,19 +140,27 @@ namespace HexMap.Sample
 
         private void ApplyFrame(OrthographicMapCameraFrame frame)
         {
-            if (m_Camera == null)
+            MapCameraFrameApplier.Apply(m_Camera, frame);
+        }
+    }
+
+    internal static class MapCameraFrameApplier
+    {
+        public static void Apply(Camera camera, OrthographicMapCameraFrame frame)
+        {
+            if (camera == null)
             {
                 return;
             }
 
-            m_Camera.orthographic = true;
-            m_Camera.transform.SetPositionAndRotation(frame.Position, frame.Rotation);
-            m_Camera.orthographicSize = frame.OrthographicSize;
-            m_Camera.nearClipPlane = frame.NearClipPlane;
-            m_Camera.farClipPlane = frame.FarClipPlane;
+            camera.orthographic = true;
+            camera.transform.SetPositionAndRotation(frame.Position, frame.Rotation);
+            camera.orthographicSize = frame.OrthographicSize;
+            camera.nearClipPlane = frame.NearClipPlane;
+            camera.farClipPlane = frame.FarClipPlane;
             if (frame.HasCullingMask)
             {
-                m_Camera.cullingMask = frame.CullingMask;
+                camera.cullingMask = frame.CullingMask;
             }
         }
     }

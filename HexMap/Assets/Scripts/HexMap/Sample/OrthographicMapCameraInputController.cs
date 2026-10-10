@@ -18,6 +18,9 @@ namespace HexMap.Sample
         private OrthographicMapCamera m_MapCamera;
 
         [SerializeField]
+        private MapViewModeSwitcher m_ModeSwitcher;
+
+        [SerializeField]
         [Tooltip("Multiplier applied to normalized camera-distance input before exponential zooming.")]
         private float m_PinchZoomSensitivity = 1f;
 
@@ -31,6 +34,12 @@ namespace HexMap.Sample
         {
             get { return m_PinchZoomSensitivity; }
             set { m_PinchZoomSensitivity = value; }
+        }
+
+        public MapViewModeSwitcher ModeSwitcher
+        {
+            get { return m_ModeSwitcher; }
+            set { m_ModeSwitcher = value; }
         }
 
         /// <summary>
@@ -134,6 +143,11 @@ namespace HexMap.Sample
             if (m_MapCamera == null)
             {
                 return false;
+            }
+
+            if (m_ModeSwitcher != null)
+            {
+                m_MapCamera.ViewportAspect = m_ModeSwitcher.ActiveCameraAspect;
             }
 
             string error;

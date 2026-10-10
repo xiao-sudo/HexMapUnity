@@ -119,6 +119,7 @@ namespace HexMap.Sample
 
             m_GameplayState = new MapGameplayViewState(
                 m_GameplayCamera,
+                m_MapCamera,
                 m_GameplayUiRoot,
                 SampleMapInputChannels.For(MapViewMode.Gameplay));
             m_TopDownState = new MapTopDownViewState(

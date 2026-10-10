@@ -14,6 +14,7 @@ namespace HexMap.Sample.Tests
         private MapViewModeSwitcher m_Switcher;
         private Camera m_GameplayCamera;
         private MapInputDispatcher m_Dispatcher;
+        private OrthographicMapCamera m_MapCamera;
         private GameObject m_GameplayUiRoot;
         private GameObject m_TopDownUiRoot;
 
@@ -117,6 +118,19 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
+        public void GameplayAppliesMapCameraFramesWhenItsInputHandlerChangesTheMapCamera()
+        {
+            CreateRig();
+            m_Switcher.ApplySerializedMode();
+
+            string error;
+            Assert.That(m_MapCamera.TryRefresh(out error), Is.True, error);
+
+            Assert.That(m_GameplayCamera.orthographic, Is.True);
+            Assert.That(m_GameplayCamera.orthographicSize, Is.GreaterThan(0f));
+        }
+
+        [Test]
         public void AHalfWiredSwitcherDoesNotThrow()
         {
             m_Switcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();
@@ -136,9 +150,9 @@ namespace HexMap.Sample.Tests
             mapView.Orientation = HexOrientation.Pointy;
             mapView.Build();
 
-            var mapCamera = m_GameplayCamera.gameObject.AddComponent<OrthographicMapCamera>();
-            mapCamera.HexMapView = mapView;
-            mapCamera.ViewportAspect = m_GameplayCamera.aspect;
+            m_MapCamera = m_GameplayCamera.gameObject.AddComponent<OrthographicMapCamera>();
+            m_MapCamera.HexMapView = mapView;
+            m_MapCamera.ViewportAspect = m_GameplayCamera.aspect;
 
             m_Dispatcher = CreateObject("Map Input Dispatcher").AddComponent<MapInputDispatcher>();
             m_GameplayUiRoot = CreateObject("Gameplay UI");
@@ -146,7 +160,7 @@ namespace HexMap.Sample.Tests
             m_Switcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();
             m_Switcher.Configure(new MapViewModeWiring(
                 m_GameplayCamera,
-                mapCamera,
+                m_MapCamera,
                 m_GameplayUiRoot,
                 m_TopDownUiRoot,
                 m_Dispatcher,
