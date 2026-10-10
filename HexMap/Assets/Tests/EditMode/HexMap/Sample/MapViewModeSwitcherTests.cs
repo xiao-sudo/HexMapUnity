@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using HexMap.Core;
 using HexMap.UnityRuntime;
@@ -123,6 +124,39 @@ namespace HexMap.Sample.Tests
 
             Assert.DoesNotThrow(() => m_Switcher.ApplySerializedMode());
             Assert.DoesNotThrow(() => m_Switcher.Toggle());
+        }
+
+        [Test]
+        public void SetModeCanEnterTopDownBeforeSerializedModeIsApplied()
+        {
+            CreateRig();
+
+            m_Switcher.SetMode(MapViewMode.TopDown);
+
+            Assert.That(m_Switcher.CurrentMode, Is.EqualTo(MapViewMode.TopDown));
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapInputChannels.TopDown));
+        }
+
+        [Test]
+        public void SetModeDoesNotRepeatAnAlreadyActiveTransition()
+        {
+            CreateRig();
+            m_Switcher.SetMode(MapViewMode.TopDown);
+            var routeRevision = m_Dispatcher.InputRouteRevision;
+
+            m_Switcher.SetMode(MapViewMode.TopDown);
+
+            Assert.That(m_Dispatcher.InputRouteRevision, Is.EqualTo(routeRevision));
+        }
+
+        [Test]
+        public void SetModeRejectsAnUndefinedMode()
+        {
+            CreateRig();
+
+            Assert.That(
+                () => m_Switcher.SetMode((MapViewMode)99),
+                Throws.TypeOf<ArgumentOutOfRangeException>());
         }
 
         private void CreateRig(MapViewMode startMode = MapViewMode.Gameplay)

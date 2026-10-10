@@ -1,3 +1,4 @@
+using System;
 using HexMap.UnityRuntime;
 using UnityEngine;
 
@@ -79,18 +80,28 @@ namespace HexMap.Sample
 
         public void ApplySerializedMode()
         {
-            EnsureStates();
             SetMode(m_StartMode);
         }
 
         public void Toggle()
         {
-            EnsureStates();
             SetMode(CurrentMode == MapViewMode.Gameplay ? MapViewMode.TopDown : MapViewMode.Gameplay);
         }
 
-        private void SetMode(MapViewMode target)
+        /// <summary>
+        /// Switches to the requested view mode. This is safe before <see cref="ApplySerializedMode"/>
+        /// because it constructs the mode states on demand, and it is a no-op when the requested mode is
+        /// already active.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="target"/> is not a declared mode.</exception>
+        public void SetMode(MapViewMode target)
         {
+            if (target != MapViewMode.Gameplay && target != MapViewMode.TopDown)
+            {
+                throw new ArgumentOutOfRangeException(nameof(target), target, "The requested map view mode is not defined.");
+            }
+
+            EnsureStates();
             if (m_CurrentState != null && m_CurrentState.Mode == target)
             {
                 return;
