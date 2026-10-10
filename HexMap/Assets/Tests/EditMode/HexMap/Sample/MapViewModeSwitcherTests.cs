@@ -25,7 +25,7 @@ namespace HexMap.Sample.Tests
             {
                 if (target != null)
                 {
-                    Object.DestroyImmediate(target);
+                    UnityEngine.Object.DestroyImmediate(target);
                 }
             }
 
