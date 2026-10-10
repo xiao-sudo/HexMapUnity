@@ -64,12 +64,30 @@ namespace HexMap.Sample
 
         public bool OnMapDragged(Vector2 screenDelta)
         {
-            return m_CameraInputController != null && m_CameraInputController.HandleMapDragged(screenDelta);
+            float viewportAspect;
+            return m_CameraInputController != null
+                && TryGetActiveCameraAspect(out viewportAspect)
+                && m_CameraInputController.HandleMapDragged(screenDelta, viewportAspect);
         }
 
         public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
         {
-            return m_CameraInputController != null && m_CameraInputController.HandleCameraDistanceChanged(context);
+            float viewportAspect;
+            return m_CameraInputController != null
+                && TryGetActiveCameraAspect(out viewportAspect)
+                && m_CameraInputController.HandleCameraDistanceChanged(context, viewportAspect);
+        }
+
+        private bool TryGetActiveCameraAspect(out float viewportAspect)
+        {
+            viewportAspect = 0f;
+            if (m_Dispatcher == null || m_Dispatcher.ActiveCamera == null)
+            {
+                return false;
+            }
+
+            viewportAspect = m_Dispatcher.ActiveCamera.aspect;
+            return true;
         }
     }
 }

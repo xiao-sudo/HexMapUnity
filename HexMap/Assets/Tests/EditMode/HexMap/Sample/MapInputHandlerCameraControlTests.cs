@@ -12,10 +12,10 @@ namespace HexMap.Sample.Tests
         private readonly List<GameObject> m_Objects = new List<GameObject>();
 
         private OrthographicMapCamera m_MapCamera;
+        private Camera m_RenderCamera;
         private MapInputDispatcher m_Dispatcher;
         private GameplayMapInputHandler m_Gameplay;
         private TopDownMapInputHandler m_TopDown;
-        private MapViewModeSwitcher m_ModeSwitcher;
 
         [TearDown]
         public void TearDown()
@@ -87,8 +87,7 @@ namespace HexMap.Sample.Tests
         public void CameraControlRefreshesUsingTheActiveCameraAspect()
         {
             CreateReadyInputHandlers();
-            var activeCamera = m_ModeSwitcher.Wiring.GameplayCamera;
-            activeCamera.aspect = 2f;
+            m_RenderCamera.aspect = 2f;
             m_Dispatcher.SetActiveChannel(SampleMapInputChannels.TopDown);
 
             Assert.That(m_Dispatcher.OnMapDragged(new Vector2(10f, 0f)), Is.True);
@@ -102,12 +101,12 @@ namespace HexMap.Sample.Tests
             mapView.Orientation = HexOrientation.Pointy;
             mapView.Build();
 
-            var camera = CreateObject("Map Camera").AddComponent<Camera>();
-            camera.orthographic = true;
-            camera.aspect = 9f / 16f;
-            m_MapCamera = camera.gameObject.AddComponent<OrthographicMapCamera>();
+            m_RenderCamera = CreateObject("Map Camera").AddComponent<Camera>();
+            m_RenderCamera.orthographic = true;
+            m_RenderCamera.aspect = 9f / 16f;
+            m_MapCamera = m_RenderCamera.gameObject.AddComponent<OrthographicMapCamera>();
             m_MapCamera.HexMapView = mapView;
-            m_MapCamera.ViewportAspect = camera.aspect;
+            m_MapCamera.ViewportAspect = m_RenderCamera.aspect;
             string error;
             Assert.That(m_MapCamera.TryRefresh(out error), Is.True, error);
 
@@ -116,15 +115,7 @@ namespace HexMap.Sample.Tests
             cameraControl.MapCamera = m_MapCamera;
 
             m_Dispatcher = CreateObject("Map Input Dispatcher").AddComponent<MapInputDispatcher>();
-            m_ModeSwitcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();
-            m_ModeSwitcher.Configure(new MapViewModeWiring(
-                camera,
-                m_MapCamera,
-                null,
-                null,
-                m_Dispatcher,
-                MapViewMode.Gameplay));
-            cameraControl.ModeSwitcher = m_ModeSwitcher;
+            m_Dispatcher.SetActiveCamera(m_RenderCamera);
             m_Gameplay = CreateHandler<GameplayMapInputHandler>("Gameplay Input Handler", cameraControl);
             m_TopDown = CreateHandler<TopDownMapInputHandler>("Top Down Input Handler", cameraControl);
         }

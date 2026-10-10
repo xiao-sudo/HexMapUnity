@@ -17,9 +17,6 @@ namespace HexMap.Sample
         private OrthographicMapCamera m_MapCamera;
 
         [SerializeField]
-        private MapViewModeSwitcher m_ModeSwitcher;
-
-        [SerializeField]
         [Tooltip("Multiplier applied to normalized camera-distance input before exponential zooming.")]
         private float m_PinchZoomSensitivity = 1f;
 
@@ -35,18 +32,12 @@ namespace HexMap.Sample
             set { m_PinchZoomSensitivity = value; }
         }
 
-        public MapViewModeSwitcher ModeSwitcher
-        {
-            get { return m_ModeSwitcher; }
-            set { m_ModeSwitcher = value; }
-        }
-
         /// <summary>
         /// Applies a screen-space Map drag while preserving the current frame's visible-size mapping.
         /// </summary>
-        public bool HandleMapDragged(Vector2 screenDelta)
+        public bool HandleMapDragged(Vector2 screenDelta, float viewportAspect)
         {
-            if (!TryRefreshFraming())
+            if (!TryRefreshFraming(viewportAspect))
             {
                 return false;
             }
@@ -81,9 +72,9 @@ namespace HexMap.Sample
         /// <summary>
         /// Applies a device-independent camera-distance change around its screen-pixel anchor.
         /// </summary>
-        public bool HandleCameraDistanceChanged(in MapCameraDistanceContext context)
+        public bool HandleCameraDistanceChanged(in MapCameraDistanceContext context, float viewportAspect)
         {
-            if (!TryRefreshFraming())
+            if (!TryRefreshFraming(viewportAspect))
             {
                 return false;
             }
@@ -137,17 +128,19 @@ namespace HexMap.Sample
                 screenDelta.y / screenHeight * visibleHeight * DragDirection);
         }
 
-        private bool TryRefreshFraming()
+        private bool TryRefreshFraming(float viewportAspect)
         {
             if (m_MapCamera == null)
             {
                 return false;
             }
 
-            if (m_ModeSwitcher != null)
+            if (viewportAspect <= 0f || float.IsNaN(viewportAspect) || float.IsInfinity(viewportAspect))
             {
-                m_MapCamera.ViewportAspect = m_ModeSwitcher.ActiveCameraAspect;
+                return false;
             }
+
+            m_MapCamera.ViewportAspect = viewportAspect;
 
             string error;
             if (m_MapCamera.TryRefreshIfStale(out error))
