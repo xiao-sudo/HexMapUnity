@@ -17,6 +17,9 @@ namespace HexMap.Sample
         [SerializeField]
         private MapInputDispatcher m_Dispatcher;
 
+        [SerializeField]
+        private OrthographicMapCameraInputController m_CameraInputController;
+
         /// <summary>
         /// Raised for every delivered click. PlotId is -1 when the click hit nothing.
         /// </summary>
@@ -26,6 +29,12 @@ namespace HexMap.Sample
         {
             get { return m_Dispatcher; }
             set { m_Dispatcher = value; }
+        }
+
+        public OrthographicMapCameraInputController CameraInputController
+        {
+            get { return m_CameraInputController; }
+            set { m_CameraInputController = value; }
         }
 
         private void OnEnable()
@@ -55,12 +64,12 @@ namespace HexMap.Sample
 
         public bool OnMapDragged(Vector2 screenDelta)
         {
-            return false;
+            return m_CameraInputController != null && m_CameraInputController.HandleMapDragged(screenDelta);
         }
 
         public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
         {
-            return false;
+            return m_CameraInputController != null && m_CameraInputController.HandleCameraDistanceChanged(context);
         }
     }
 }
