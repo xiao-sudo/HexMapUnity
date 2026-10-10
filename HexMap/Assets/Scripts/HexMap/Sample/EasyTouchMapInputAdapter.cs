@@ -123,6 +123,14 @@ namespace HexMap.Sample
 
             // 第一根手指取得候选单指序列；之后的手指由下方双指开始事件处理，并永久取消本次
             // Map 输入资格。
+            // EasyTouch 在同一帧识别双指时，仍会随后为每根手指补发 On_TouchStart。它们不是新的
+            // 单指候选手势；若在这里重置多指标记，随后补发的单指 Swipe 就会错误地平移 Map。
+            if (gesture.touchCount != 1)
+            {
+                m_HasBecomeMultiTouch = true;
+                return;
+            }
+
             if (m_PrimaryFingerIndex >= 0)
             {
                 return;
@@ -184,12 +192,12 @@ namespace HexMap.Sample
 
         private void OnTouchStart2Fingers(Gesture gesture)
         {
-            // 第二指到来会永久取消先前单指，确保松开 Pinch 时不会选择 Map Cell。
-            if (m_PrimaryFingerIndex >= 0)
-            {
-                m_HasBecomeMultiTouch = true;
-            }
+            // Simulator 和真机都可能在 adapter 收到第一根手指的 On_TouchStart 前先发双指开始。
+            // 因此不能依赖 m_PrimaryFingerIndex 是否已建立；只要双指开始，这个物理序列就永远
+            // 不能再作为 Map 单指 Swipe 或 Tap 处理。
+            m_HasBecomeMultiTouch = true;
 
+            // 第二指到来会永久取消先前单指，确保松开 Pinch 时不会选择 Map Cell。
             ClearPinch();
             if (gesture == null || DidAnyPinchFingerStartOnUi(gesture))
             {
@@ -335,7 +343,11 @@ namespace HexMap.Sample
         {
             dispatcher = null;
             // 只有同一根、从 Map 开始且从未变为多指的手指，才可能继续向下游路由。
-            if (gesture == null || gesture.fingerIndex != m_PrimaryFingerIndex || m_StartedOnUi || m_HasBecomeMultiTouch)
+            if (gesture == null
+                || gesture.touchCount != 1
+                || gesture.fingerIndex != m_PrimaryFingerIndex
+                || m_StartedOnUi
+                || m_HasBecomeMultiTouch)
             {
                 return false;
             }
