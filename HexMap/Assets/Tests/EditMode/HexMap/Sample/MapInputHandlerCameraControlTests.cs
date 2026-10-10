@@ -118,6 +118,8 @@ namespace HexMap.Sample.Tests
             m_Dispatcher.SetActiveCamera(m_RenderCamera);
             m_Gameplay = CreateHandler<GameplayMapInputHandler>("Gameplay Input Handler", cameraControl);
             m_TopDown = CreateHandler<TopDownMapInputHandler>("Top Down Input Handler", cameraControl);
+            Assert.That(m_Dispatcher.Register(SampleMapInputChannels.Gameplay, m_Gameplay), Is.True);
+            Assert.That(m_Dispatcher.Register(SampleMapInputChannels.TopDown, m_TopDown), Is.True);
         }
 
         private T CreateHandler<T>(string name, OrthographicMapCameraInputController cameraControl)
@@ -136,7 +138,6 @@ namespace HexMap.Sample.Tests
                 topDown.CameraInputController = cameraControl;
             }
 
-            target.SetActive(true);
             return handler;
         }
 
