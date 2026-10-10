@@ -14,13 +14,16 @@ namespace HexMap.Sample
     [DisallowMultipleComponent]
     public sealed class EasyTouchMapInputAdapter : MonoBehaviour
     {
+#if UNITY_EDITOR
+        // 鼠标滚轮仅用于 Editor 中验证地图缩放手感。
         private const float WheelZoomStepMultiplier = 1.15f;
+#endif
 
         [SerializeField]
         private MapInputDispatcher m_Dispatcher;
 
         [SerializeField]
-        [Tooltip("Normalized pinch changes smaller than this value are ignored after the pinch start marker.")]
+        [Tooltip("Pinch 起始标记之后，小于此归一化值的距离变化会被忽略。")]
         private float m_PinchDeadZoneNormalized = 0.003f;
 
         // 当前候选单指手势的主手指。-1 表示没有正在跟踪的手势。
@@ -68,7 +71,7 @@ namespace HexMap.Sample
         }
 
         /// <summary>
-        /// The smallest normalized pinch change that reaches the Map input route after the start marker.
+        /// Pinch 起始标记之后，能够进入 Map 输入路由的最小归一化距离变化。
         /// </summary>
         public float PinchDeadZoneNormalized
         {
@@ -76,10 +79,12 @@ namespace HexMap.Sample
             set { m_PinchDeadZoneNormalized = Mathf.Max(0f, value); }
         }
 
+#if UNITY_EDITOR
         private void Update()
         {
             RouteMouseWheel();
         }
+#endif
 
         private void OnEnable()
         {
@@ -201,8 +206,8 @@ namespace HexMap.Sample
             m_PinchRouteRevisionAtStart = dispatcher.InputRouteRevision;
             m_PinchScreenAnchor = gesture.startPosition;
 
-            // The zero marker is the entire begin contract. It lets a handler reset any future gesture
-            // state without exposing a backend-specific start/end callback through Map input.
+            // 零增量标记就是完整的开始契约：Handler 若将来需要维护手势状态，可在这里重置，
+            // 而不必通过 Map 输入暴露后端特有的开始/结束回调。
             dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(m_PinchScreenAnchor, 0f));
         }
 
@@ -254,6 +259,7 @@ namespace HexMap.Sample
             ClearGesture();
         }
 
+#if UNITY_EDITOR
         private void RouteMouseWheel()
         {
             var scrollSteps = Input.mouseScrollDelta.y;
@@ -269,21 +275,20 @@ namespace HexMap.Sample
             }
 
             var screenAnchor = (Vector2)Input.mousePosition;
-            // Each wheel input is an independent distance gesture, following the same zero-marker
-            // convention as Pinch.
+            // 每次滚轮输入都是独立的距离手势，遵循与 Pinch 相同的零增量标记约定。
             dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(screenAnchor, 0f));
             dispatcher.OnMapCameraDistanceChanged(
                 new MapCameraDistanceContext(
                     screenAnchor,
                     scrollSteps * Mathf.Log(WheelZoomStepMultiplier)));
         }
+#endif
 
         private static bool DidAnyPinchFingerStartOnUi(Gesture gesture)
         {
-            // EasyTouch's two-finger UI flag can require both fingers to hit the same UI element. Map
-            // ownership is stricter: either finger claiming UI rejects the entire pinch. Native touches
-            // expose the individual start positions, while desktop Second Finger Simulation falls back to
-            // EasyTouch's own UI result because it has no Input.touches entries.
+            // EasyTouch 的双指 UI 标记可能要求两指都命中同一个 UI。Map 的归属规则更严格：
+            // 任一手指属于 UI 就拒绝整次 Pinch。原生触点能提供各自的起始位置；桌面端的
+            // Second Finger Simulation 没有 Input.touches 条目，因此退回使用 EasyTouch 的 UI 结果。
             var touches = Input.touches;
             if (touches.Length > 2)
             {
@@ -315,8 +320,8 @@ namespace HexMap.Sample
             eventSystem.RaycastAll(eventData, raycastResults);
             for (var index = 0; index < raycastResults.Count; index++)
             {
-                // Physics raycasters may also be registered with the EventSystem. They are Map world
-                // hits rather than UI ownership and must not suppress camera input.
+                // Physics Raycaster 也可能注册到 EventSystem；它们命中的是 Map 世界对象而不是 UI，
+                // 不能因此抑制相机输入。
                 if (raycastResults[index].module is GraphicRaycaster)
                 {
                     return true;
