@@ -1,6 +1,8 @@
 using HedgehogTeam.EasyTouch;
 using HexMap.UnityRuntime;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace HexMap.Sample
 {
@@ -12,8 +14,14 @@ namespace HexMap.Sample
     [DisallowMultipleComponent]
     public sealed class EasyTouchMapInputAdapter : MonoBehaviour
     {
+        private const float WheelZoomStepMultiplier = 1.15f;
+
         [SerializeField]
         private MapInputDispatcher m_Dispatcher;
+
+        [SerializeField]
+        [Tooltip("Normalized pinch changes smaller than this value are ignored after the pinch start marker.")]
+        private float m_PinchDeadZoneNormalized = 0.003f;
 
         // 当前候选单指手势的主手指。-1 表示没有正在跟踪的手势。
         private int m_PrimaryFingerIndex = -1;
@@ -32,6 +40,11 @@ namespace HexMap.Sample
 
         // EasyTouch 越过静止容差才开始发出 Swipe；首次需要使用完整位移。
         private bool m_HasRoutedSwipe;
+
+        // Pinch 的锚点在第二指落下时固定，后续双指中点移动不会让地图漂移。
+        private bool m_IsPinchActive;
+        private int m_PinchRouteRevisionAtStart;
+        private Vector2 m_PinchScreenAnchor;
 
         // 缺少 Dispatcher 是接线错误，只报告一次，避免每次手势重复刷屏。
         private bool m_HasReportedMissingDispatcher;
@@ -54,6 +67,20 @@ namespace HexMap.Sample
             }
         }
 
+        /// <summary>
+        /// The smallest normalized pinch change that reaches the Map input route after the start marker.
+        /// </summary>
+        public float PinchDeadZoneNormalized
+        {
+            get { return m_PinchDeadZoneNormalized; }
+            set { m_PinchDeadZoneNormalized = Mathf.Max(0f, value); }
+        }
+
+        private void Update()
+        {
+            RouteMouseWheel();
+        }
+
         private void OnEnable()
         {
             // EasyTouch 使用静态事件；启用和停用必须成对订阅与解除，避免失效对象被继续回调。
@@ -62,6 +89,8 @@ namespace HexMap.Sample
             EasyTouch.On_SwipeEnd += OnSwipeEnd;
             EasyTouch.On_SimpleTap += OnSimpleTap;
             EasyTouch.On_TouchStart2Fingers += OnTouchStart2Fingers;
+            EasyTouch.On_Pinch += OnPinch;
+            EasyTouch.On_PinchEnd += OnPinchEnd;
             EasyTouch.On_Cancel += OnCancel;
             EasyTouch.On_Cancel2Fingers += OnCancel2Fingers;
         }
@@ -73,6 +102,8 @@ namespace HexMap.Sample
             EasyTouch.On_SwipeEnd -= OnSwipeEnd;
             EasyTouch.On_SimpleTap -= OnSimpleTap;
             EasyTouch.On_TouchStart2Fingers -= OnTouchStart2Fingers;
+            EasyTouch.On_Pinch -= OnPinch;
+            EasyTouch.On_PinchEnd -= OnPinchEnd;
             EasyTouch.On_Cancel -= OnCancel;
             EasyTouch.On_Cancel2Fingers -= OnCancel2Fingers;
             ClearGesture();
@@ -148,12 +179,66 @@ namespace HexMap.Sample
 
         private void OnTouchStart2Fingers(Gesture gesture)
         {
-            // 本票不路由 Pinch；但第二指到来必须永久取消先前单指，确保松开 Pinch 时不会选择
-            // Map Cell。
+            // 第二指到来会永久取消先前单指，确保松开 Pinch 时不会选择 Map Cell。
             if (m_PrimaryFingerIndex >= 0)
             {
                 m_HasBecomeMultiTouch = true;
             }
+
+            ClearPinch();
+            if (gesture == null || DidAnyPinchFingerStartOnUi(gesture))
+            {
+                return;
+            }
+
+            MapInputDispatcher dispatcher;
+            if (!TryGetDispatcher(out dispatcher))
+            {
+                return;
+            }
+
+            m_IsPinchActive = true;
+            m_PinchRouteRevisionAtStart = dispatcher.InputRouteRevision;
+            m_PinchScreenAnchor = gesture.startPosition;
+
+            // The zero marker is the entire begin contract. It lets a handler reset any future gesture
+            // state without exposing a backend-specific start/end callback through Map input.
+            dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(m_PinchScreenAnchor, 0f));
+        }
+
+        private void OnPinch(Gesture gesture)
+        {
+            if (!m_IsPinchActive || gesture == null)
+            {
+                return;
+            }
+
+            MapInputDispatcher dispatcher;
+            if (!TryGetDispatcher(out dispatcher) || dispatcher.InputRouteRevision != m_PinchRouteRevisionAtStart)
+            {
+                ClearPinch();
+                return;
+            }
+
+            var shorterScreenDimension = Mathf.Min(Screen.width, Screen.height);
+            if (shorterScreenDimension <= 0f)
+            {
+                return;
+            }
+
+            var normalizedDelta = gesture.deltaPinch / shorterScreenDimension;
+            if (Mathf.Abs(normalizedDelta) < m_PinchDeadZoneNormalized)
+            {
+                return;
+            }
+
+            dispatcher.OnMapCameraDistanceChanged(
+                new MapCameraDistanceContext(m_PinchScreenAnchor, normalizedDelta));
+        }
+
+        private void OnPinchEnd(Gesture gesture)
+        {
+            ClearPinch();
         }
 
         private void OnCancel(Gesture gesture)
@@ -167,6 +252,78 @@ namespace HexMap.Sample
         private void OnCancel2Fingers(Gesture gesture)
         {
             ClearGesture();
+        }
+
+        private void RouteMouseWheel()
+        {
+            var scrollSteps = Input.mouseScrollDelta.y;
+            if (Mathf.Approximately(scrollSteps, 0f) || IsScreenPositionOverUi(Input.mousePosition))
+            {
+                return;
+            }
+
+            MapInputDispatcher dispatcher;
+            if (!TryGetDispatcher(out dispatcher))
+            {
+                return;
+            }
+
+            var screenAnchor = (Vector2)Input.mousePosition;
+            // Each wheel input is an independent distance gesture, following the same zero-marker
+            // convention as Pinch.
+            dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(screenAnchor, 0f));
+            dispatcher.OnMapCameraDistanceChanged(
+                new MapCameraDistanceContext(
+                    screenAnchor,
+                    scrollSteps * Mathf.Log(WheelZoomStepMultiplier)));
+        }
+
+        private static bool DidAnyPinchFingerStartOnUi(Gesture gesture)
+        {
+            // EasyTouch's two-finger UI flag can require both fingers to hit the same UI element. Map
+            // ownership is stricter: either finger claiming UI rejects the entire pinch. Native touches
+            // expose the individual start positions, while desktop Second Finger Simulation falls back to
+            // EasyTouch's own UI result because it has no Input.touches entries.
+            var touches = Input.touches;
+            if (touches.Length > 2)
+            {
+                return true;
+            }
+
+            if (touches.Length == 2)
+            {
+                return IsScreenPositionOverUi(touches[0].position)
+                    || IsScreenPositionOverUi(touches[1].position);
+            }
+
+            return gesture.IsOverUIElement() || IsScreenPositionOverUi(gesture.startPosition);
+        }
+
+        private static bool IsScreenPositionOverUi(Vector2 screenPosition)
+        {
+            var eventSystem = EventSystem.current;
+            if (eventSystem == null)
+            {
+                return false;
+            }
+
+            var eventData = new PointerEventData(eventSystem)
+            {
+                position = screenPosition
+            };
+            var raycastResults = new System.Collections.Generic.List<RaycastResult>();
+            eventSystem.RaycastAll(eventData, raycastResults);
+            for (var index = 0; index < raycastResults.Count; index++)
+            {
+                // Physics raycasters may also be registered with the EventSystem. They are Map world
+                // hits rather than UI ownership and must not suppress camera input.
+                if (raycastResults[index].module is GraphicRaycaster)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private bool IsEligiblePrimaryGesture(Gesture gesture, out MapInputDispatcher dispatcher)
@@ -222,6 +379,14 @@ namespace HexMap.Sample
             m_StartedOnUi = false;
             m_HasBecomeMultiTouch = false;
             m_HasRoutedSwipe = false;
+            ClearPinch();
+        }
+
+        private void ClearPinch()
+        {
+            m_IsPinchActive = false;
+            m_PinchRouteRevisionAtStart = 0;
+            m_PinchScreenAnchor = Vector2.zero;
         }
     }
 }

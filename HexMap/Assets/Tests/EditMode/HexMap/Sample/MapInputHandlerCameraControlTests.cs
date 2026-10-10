@@ -42,6 +42,19 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
+        public void TopDownAppliesOneMouseWheelStepAsAOnePointFifteenZoomMultiplier()
+        {
+            CreateReadyInputHandlers();
+            m_MapCamera.Zoom = 2f;
+            var oneWheelStep = new MapCameraDistanceContext(Vector2.zero, Mathf.Log(1.15f));
+
+            m_Dispatcher.SetActiveChannel(SampleMapInputChannels.TopDown);
+            Assert.That(m_Dispatcher.OnMapCameraDistanceChanged(oneWheelStep), Is.True);
+
+            Assert.That(m_MapCamera.Zoom, Is.EqualTo(2.3f).Within(0.0001f));
+        }
+
+        [Test]
         public void TopDownConsumesScreenDragThroughTheDispatcher()
         {
             CreateReadyInputHandlers();
