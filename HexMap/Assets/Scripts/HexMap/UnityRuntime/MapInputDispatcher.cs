@@ -49,6 +49,13 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
+        /// Changes whenever the active Map input route changes. An outer input adapter captures this when a
+        /// physical gesture starts, so a gesture that spans a mode or camera switch cannot act on the new
+        /// route.
+        /// </summary>
+        public int InputRouteRevision { get; private set; }
+
+        /// <summary>
         /// The camera used to turn a screen position into a map position. Pushed by whoever owns the mode,
         /// so it always matches the camera that is currently rendering.
         /// </summary>
@@ -81,7 +88,13 @@ namespace HexMap.UnityRuntime
         /// </summary>
         public void SetActiveChannel(int channelId)
         {
+            if (m_ActiveChannel == channelId)
+            {
+                return;
+            }
+
             m_ActiveChannel = channelId;
+            InputRouteRevision++;
         }
 
         /// <summary>
@@ -90,7 +103,13 @@ namespace HexMap.UnityRuntime
         /// </summary>
         public void SetActiveCamera(Camera camera)
         {
+            if (ReferenceEquals(m_ActiveCamera, camera))
+            {
+                return;
+            }
+
             m_ActiveCamera = camera;
+            InputRouteRevision++;
         }
 
         /// <summary>

@@ -58,59 +58,23 @@ namespace HexMap.Sample.Editor
             // thing that ever used it there was the focus request, which is gone.
             var mapCamera = wiring.MapCamera != null ? wiring.MapCamera : FindSingle<OrthographicMapCamera>();
 
-            // The click entry point: without one nothing calls OnMapClicked, so the whole chain is dead.
-            var tap = EnsureComponent<MapClickTapInput>(dispatcher.gameObject, changes);
-            if (tap.Dispatcher != dispatcher)
+            // The only device-input entry point: it translates EasyTouch tap and swipe events into the
+            // dispatcher vocabulary without knowing a mode or camera implementation.
+            var input = EnsureComponent<EasyTouchMapInputAdapter>(dispatcher.gameObject, changes);
+            if (input.Dispatcher != dispatcher)
             {
-                Undo.RecordObject(tap, ChangeLabel);
-                tap.Dispatcher = dispatcher;
-                EditorUtility.SetDirty(tap);
-                changes.Add("pointed MapClickTapInput at '" + dispatcher.name + "'");
+                Undo.RecordObject(input, ChangeLabel);
+                input.Dispatcher = dispatcher;
+                EditorUtility.SetDirty(input);
+                changes.Add("pointed EasyTouchMapInputAdapter at '" + dispatcher.name + "'");
             }
 
-            // The gestures belong on the camera they drive. The switcher does not take them any more: a
-            // gesture refuses to act while its camera is off, which is the only thing the mode change was
-            // ever providing.
+            // Camera input is routed by the dispatcher and consumed only by the active TopDown handler.
+            // The scene still needs a camera for mode wiring, but no longer needs direct Unity Input
+            // adapters on that camera.
             if (mapCamera == null)
             {
-                notes.Add("no OrthographicMapCamera in the scene, so panning and zooming were not wired");
-            }
-            else
-            {
-                var drag = EnsureComponent<OrthographicMapDragInput>(mapCamera.gameObject, changes);
-                var zoom = EnsureComponent<OrthographicMapZoomInput>(mapCamera.gameObject, changes);
-
-                if (drag.MapCamera != mapCamera)
-                {
-                    Undo.RecordObject(drag, ChangeLabel);
-                    drag.MapCamera = mapCamera;
-                    EditorUtility.SetDirty(drag);
-                    changes.Add("pointed OrthographicMapDragInput at '" + mapCamera.gameObject.name + "'");
-                }
-
-                if (drag.ModeSwitcher != switcher)
-                {
-                    Undo.RecordObject(drag, ChangeLabel);
-                    drag.ModeSwitcher = switcher;
-                    EditorUtility.SetDirty(drag);
-                    changes.Add("pointed OrthographicMapDragInput at the mode switcher");
-                }
-
-                if (zoom.MapCamera != mapCamera)
-                {
-                    Undo.RecordObject(zoom, ChangeLabel);
-                    zoom.MapCamera = mapCamera;
-                    EditorUtility.SetDirty(zoom);
-                    changes.Add("pointed OrthographicMapZoomInput at '" + mapCamera.gameObject.name + "'");
-                }
-
-                if (zoom.ModeSwitcher != switcher)
-                {
-                    Undo.RecordObject(zoom, ChangeLabel);
-                    zoom.ModeSwitcher = switcher;
-                    EditorUtility.SetDirty(zoom);
-                    changes.Add("pointed OrthographicMapZoomInput at the mode switcher");
-                }
+                notes.Add("no OrthographicMapCamera in the scene, so TopDown camera input cannot be consumed");
             }
 
             WireSwitcher(switcher, dispatcher, changes);

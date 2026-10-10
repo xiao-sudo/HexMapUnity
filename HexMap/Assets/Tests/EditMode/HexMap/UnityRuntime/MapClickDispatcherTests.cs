@@ -487,6 +487,34 @@ namespace HexMap.UnityRuntime.Tests
         }
 
         [Test]
+        public void ChangingTheActiveInputRouteAdvancesItsRevision()
+        {
+            var dispatcher = CreateDispatcher(null, null, GameplayChannel);
+            var initialRevision = dispatcher.InputRouteRevision;
+            var camera = CreateCamera();
+
+            dispatcher.SetActiveChannel(TopDownChannel);
+            var afterChannelChange = dispatcher.InputRouteRevision;
+            dispatcher.SetActiveCamera(camera);
+
+            Assert.That(afterChannelChange, Is.EqualTo(initialRevision + 1));
+            Assert.That(dispatcher.InputRouteRevision, Is.EqualTo(afterChannelChange + 1));
+        }
+
+        [Test]
+        public void SettingTheExistingInputRouteDoesNotAdvanceItsRevision()
+        {
+            var camera = CreateCamera();
+            var dispatcher = CreateDispatcher(null, camera, GameplayChannel);
+            var initialRevision = dispatcher.InputRouteRevision;
+
+            dispatcher.SetActiveChannel(GameplayChannel);
+            dispatcher.SetActiveCamera(camera);
+
+            Assert.That(dispatcher.InputRouteRevision, Is.EqualTo(initialRevision));
+        }
+
+        [Test]
         public void CameraDistanceIntentIsRoutedToTheHandlerForTheActiveChannelWithoutPicking()
         {
             var dispatcher = CreateDispatcher(null, null, GameplayChannel);

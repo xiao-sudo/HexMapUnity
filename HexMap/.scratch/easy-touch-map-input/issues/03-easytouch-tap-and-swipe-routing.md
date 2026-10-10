@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — 让模式 Handler 控制正交相机.
 
-**Status:** ready-for-agent
+**Status:** ready-for-review
 
 - [ ] EasyTouch Tap 使用按下位置交给 Dispatcher 解析 Map 点击，且保留 20 像素的 Tap 容差。
 - [ ] EasyTouch Swipe 的连续屏幕增量经 Dispatcher 路由，驱动活动模式的 Map 相机平移。

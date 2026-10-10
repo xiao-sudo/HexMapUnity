@@ -9,7 +9,8 @@
         "HexMap.Core",
         "Unity.RenderPipelines.Universal.Runtime",
         "UnityEngine.UI",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "EasyTouch"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
