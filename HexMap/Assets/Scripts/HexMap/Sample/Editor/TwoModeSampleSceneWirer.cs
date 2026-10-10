@@ -69,6 +69,8 @@ namespace HexMap.Sample.Editor
                 changes.Add("pointed EasyTouchMapInputAdapter at '" + dispatcher.name + "'");
             }
 
+            var bootstrapper = EnsureComponent<SampleMapViewBootstrapper>(switcher.gameObject, changes);
+
             // Camera input is routed by the dispatcher and consumed only by the active TopDown handler.
             // The scene still needs a camera for mode wiring, but no longer needs direct Unity Input
             // adapters on that camera.
@@ -78,6 +80,7 @@ namespace HexMap.Sample.Editor
             }
 
             WireSwitcher(switcher, dispatcher, changes);
+            WireBootstrapper(bootstrapper, switcher, mapCamera, dispatcher, changes);
 
             WireModeButton(switcher, wiring.GameplayUiRoot, "gameplay", changes, notes);
             WireModeButton(switcher, wiring.TopDownUiRoot, "top-down", changes, notes);
@@ -139,6 +142,35 @@ namespace HexMap.Sample.Editor
             }
 
             EditorUtility.SetDirty(switcher);
+        }
+
+        private static void WireBootstrapper(
+            SampleMapViewBootstrapper bootstrapper,
+            MapViewModeSwitcher switcher,
+            OrthographicMapCamera mapCamera,
+            MapInputDispatcher dispatcher,
+            List<string> changes)
+        {
+            var wiring = switcher.Wiring;
+            if (bootstrapper.Switcher == switcher
+                && bootstrapper.GameplayCamera == wiring.GameplayCamera
+                && bootstrapper.MapCamera == mapCamera
+                && bootstrapper.GameplayUiRoot == wiring.GameplayUiRoot
+                && bootstrapper.TopDownUiRoot == wiring.TopDownUiRoot
+                && bootstrapper.Dispatcher == dispatcher)
+            {
+                return;
+            }
+
+            Undo.RecordObject(bootstrapper, ChangeLabel);
+            bootstrapper.Switcher = switcher;
+            bootstrapper.GameplayCamera = wiring.GameplayCamera;
+            bootstrapper.MapCamera = mapCamera;
+            bootstrapper.GameplayUiRoot = wiring.GameplayUiRoot;
+            bootstrapper.TopDownUiRoot = wiring.TopDownUiRoot;
+            bootstrapper.Dispatcher = dispatcher;
+            EditorUtility.SetDirty(bootstrapper);
+            changes.Add("wired SampleMapViewBootstrapper on '" + switcher.name + "'");
         }
 
         private static void WireModeButton(

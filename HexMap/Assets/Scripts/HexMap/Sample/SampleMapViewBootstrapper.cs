@@ -1,0 +1,107 @@
+using HexMap.UnityRuntime;
+using UnityEngine;
+
+namespace HexMap.Sample
+{
+    /// <summary>
+    /// 场景中的 Map 视图组合根：在运行时将场景引用交给 <see cref="MapViewModeSwitcher"/>，
+    /// 并明确请求初始模式。
+    /// <para>
+    /// 本类不拥有模式切换逻辑、相机数学、Map 数据或 UI 行为；这些职责分别保留在 Switcher、
+    /// 相机控制器、运行时 Map 控制器和各模式 Handler 中。
+    /// </para>
+    /// </summary>
+    [DisallowMultipleComponent]
+    public sealed class SampleMapViewBootstrapper : MonoBehaviour
+    {
+        [SerializeField]
+        private MapViewModeSwitcher m_Switcher;
+
+        [SerializeField]
+        private Camera m_GameplayCamera;
+
+        [SerializeField]
+        private OrthographicMapCamera m_MapCamera;
+
+        [SerializeField]
+        private GameObject m_GameplayUiRoot;
+
+        [SerializeField]
+        private GameObject m_TopDownUiRoot;
+
+        [SerializeField]
+        private MapInputDispatcher m_Dispatcher;
+
+        [SerializeField]
+        private MapViewMode m_InitialMode = MapViewMode.Gameplay;
+
+        public MapViewModeSwitcher Switcher
+        {
+            get { return m_Switcher; }
+            set { m_Switcher = value; }
+        }
+
+        public Camera GameplayCamera
+        {
+            get { return m_GameplayCamera; }
+            set { m_GameplayCamera = value; }
+        }
+
+        public OrthographicMapCamera MapCamera
+        {
+            get { return m_MapCamera; }
+            set { m_MapCamera = value; }
+        }
+
+        public GameObject GameplayUiRoot
+        {
+            get { return m_GameplayUiRoot; }
+            set { m_GameplayUiRoot = value; }
+        }
+
+        public GameObject TopDownUiRoot
+        {
+            get { return m_TopDownUiRoot; }
+            set { m_TopDownUiRoot = value; }
+        }
+
+        public MapInputDispatcher Dispatcher
+        {
+            get { return m_Dispatcher; }
+            set { m_Dispatcher = value; }
+        }
+
+        public MapViewMode InitialMode
+        {
+            get { return m_InitialMode; }
+            set { m_InitialMode = value; }
+        }
+
+        private void Awake()
+        {
+            if (m_Switcher == null)
+            {
+                Debug.LogError("SampleMapViewBootstrapper has no MapViewModeSwitcher reference.", this);
+                enabled = false;
+                return;
+            }
+
+            m_Switcher.Configure(new MapViewModeWiring(
+                m_GameplayCamera,
+                m_MapCamera,
+                m_GameplayUiRoot,
+                m_TopDownUiRoot,
+                m_Dispatcher));
+        }
+
+        private void Start()
+        {
+            if (!enabled)
+            {
+                return;
+            }
+
+            m_Switcher.SetMode(m_InitialMode);
+        }
+    }
+}
