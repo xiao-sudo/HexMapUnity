@@ -5,9 +5,8 @@ using UnityEngine;
 namespace HexMap.Sample
 {
     /// <summary>
-    /// Applies Map input intents to one orthographic Map camera. Map-mode handlers share this component so
-    /// they expose identical pan and camera-distance behaviour while the dispatcher remains their only
-    /// input route.
+    /// Applies TopDown Map input intents to one orthographic Map camera. The TopDown handler delegates to
+    /// this component while the dispatcher remains its only input route.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class OrthographicMapCameraInputController : MonoBehaviour

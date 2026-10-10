@@ -29,26 +29,20 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
-        public void BothModesConsumeTheSameCameraDistanceIntentThroughTheDispatcher()
+        public void TopDownConsumesCameraDistanceIntentThroughTheDispatcher()
         {
             CreateReadyInputHandlers();
             var context = new MapCameraDistanceContext(Vector2.zero, 0.25f);
 
             m_Dispatcher.SetActiveChannel(SampleMapInputChannels.TopDown);
-            var topDownBefore = m_MapCamera.Zoom;
-            Assert.That(m_Dispatcher.OnMapCameraDistanceChanged(context), Is.True);
-            var topDownAfter = m_MapCamera.Zoom;
-
-            m_MapCamera.Zoom = topDownBefore;
-            m_Dispatcher.SetActiveChannel(SampleMapInputChannels.Gameplay);
+            var before = m_MapCamera.Zoom;
             Assert.That(m_Dispatcher.OnMapCameraDistanceChanged(context), Is.True);
 
-            Assert.That(topDownAfter, Is.GreaterThan(topDownBefore));
-            Assert.That(m_MapCamera.Zoom, Is.EqualTo(topDownAfter).Within(0.00001f));
+            Assert.That(m_MapCamera.Zoom, Is.GreaterThan(before));
         }
 
         [Test]
-        public void BothModesConsumeTheSameScreenDragThroughTheDispatcher()
+        public void TopDownConsumesScreenDragThroughTheDispatcher()
         {
             CreateReadyInputHandlers();
             m_MapCamera.Zoom = 3f;
@@ -56,15 +50,24 @@ namespace HexMap.Sample.Tests
 
             m_Dispatcher.SetActiveChannel(SampleMapInputChannels.TopDown);
             Assert.That(m_Dispatcher.OnMapDragged(delta), Is.True);
-            var topDownCenter = m_MapCamera.Center;
 
-            string error;
-            Assert.That(m_MapCamera.TrySetOffset(Vector2.zero, out error), Is.True, error);
+            Assert.That(m_MapCamera.Center, Is.Not.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void GameplayDoesNotConsumeOrthographicCameraInput()
+        {
+            CreateReadyInputHandlers();
+            var initialZoom = m_MapCamera.Zoom;
+            var initialCenter = m_MapCamera.Center;
             m_Dispatcher.SetActiveChannel(SampleMapInputChannels.Gameplay);
-            Assert.That(m_Dispatcher.OnMapDragged(delta), Is.True);
 
-            Assert.That(topDownCenter, Is.Not.EqualTo(Vector2.zero));
-            Assert.That(m_MapCamera.Center, Is.EqualTo(topDownCenter));
+            Assert.That(m_Dispatcher.OnMapDragged(new Vector2(100f, -40f)), Is.False);
+            Assert.That(
+                m_Dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(Vector2.zero, 0.25f)),
+                Is.False);
+            Assert.That(m_MapCamera.Zoom, Is.EqualTo(initialZoom));
+            Assert.That(m_MapCamera.Center, Is.EqualTo(initialCenter));
         }
 
         [Test]
@@ -84,10 +87,9 @@ namespace HexMap.Sample.Tests
         public void CameraControlRefreshesUsingTheActiveCameraAspect()
         {
             CreateReadyInputHandlers();
-            var control = m_Gameplay.CameraInputController;
             var activeCamera = m_ModeSwitcher.Wiring.GameplayCamera;
             activeCamera.aspect = 2f;
-            m_Dispatcher.SetActiveChannel(SampleMapInputChannels.Gameplay);
+            m_Dispatcher.SetActiveChannel(SampleMapInputChannels.TopDown);
 
             Assert.That(m_Dispatcher.OnMapDragged(new Vector2(10f, 0f)), Is.True);
             Assert.That(m_MapCamera.ViewportAspect, Is.EqualTo(2f));
@@ -136,7 +138,6 @@ namespace HexMap.Sample.Tests
             if (handler is GameplayMapInputHandler gameplay)
             {
                 gameplay.Dispatcher = m_Dispatcher;
-                gameplay.CameraInputController = cameraControl;
             }
             else if (handler is TopDownMapInputHandler topDown)
             {
