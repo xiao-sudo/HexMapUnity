@@ -4,19 +4,16 @@ using UnityEngine;
 namespace HexMap.Sample
 {
     /// <summary>
-    /// 场景中的 Map 视图组合根：在运行时将场景引用交给 <see cref="MapViewModeSwitcher"/>，
+    /// 场景中的 Map 视图组合根：在运行时将场景引用交给 <see cref="MapViewRuntimeFacade"/>，
     /// 并明确请求初始模式。
     /// <para>
-    /// 本类不拥有模式切换逻辑、相机数学、Map 数据或 UI 行为；这些职责分别保留在 Switcher、
+    /// 本类不拥有模式切换逻辑、相机数学、Map 数据或 UI 行为；这些职责分别保留在运行时门面、
     /// 相机控制器、运行时 Map 控制器和各模式 Handler 中。
     /// </para>
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class SampleMapViewBootstrapper : MonoBehaviour
     {
-        [SerializeField]
-        private MapViewModeSwitcher m_Switcher;
-
         [SerializeField]
         private Camera m_GameplayCamera;
 
@@ -35,10 +32,11 @@ namespace HexMap.Sample
         [SerializeField]
         private MapViewMode m_InitialMode = MapViewMode.Gameplay;
 
-        public MapViewModeSwitcher Switcher
+        private MapViewRuntimeFacade m_Runtime;
+
+        public MapViewRuntimeFacade Runtime
         {
-            get { return m_Switcher; }
-            set { m_Switcher = value; }
+            get { return m_Runtime; }
         }
 
         public Camera GameplayCamera
@@ -79,19 +77,18 @@ namespace HexMap.Sample
 
         private void Awake()
         {
-            if (m_Switcher == null)
-            {
-                Debug.LogError("SampleMapViewBootstrapper has no MapViewModeSwitcher reference.", this);
-                enabled = false;
-                return;
-            }
-
-            m_Switcher.Configure(new MapViewModeWiring(
+            m_Runtime = new MapViewRuntimeFacade();
+            if (m_Runtime.Initialize(m_InitialMode, new MapViewModeWiring(
                 m_GameplayCamera,
                 m_MapCamera,
                 m_GameplayUiRoot,
                 m_TopDownUiRoot,
-                m_Dispatcher));
+                m_Dispatcher)))
+            {
+                return;
+            }
+
+            enabled = false;
         }
 
         private void Start()
@@ -101,7 +98,16 @@ namespace HexMap.Sample
                 return;
             }
 
-            m_Switcher.SetMode(m_InitialMode);
+            m_Runtime.Start();
+        }
+
+        private void OnDestroy()
+        {
+            if (m_Runtime != null)
+            {
+                m_Runtime.Dispose();
+                m_Runtime = null;
+            }
         }
     }
 }

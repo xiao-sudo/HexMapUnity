@@ -4,6 +4,7 @@ using HexMap.Core;
 using HexMap.UnityRuntime;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace HexMap.Sample.Tests
 {
@@ -14,6 +15,8 @@ namespace HexMap.Sample.Tests
 
         private Camera m_GameplayCamera;
         private MapInputDispatcher m_Dispatcher;
+        private GameObject m_GameplayUiRoot;
+        private GameObject m_TopDownUiRoot;
         private MapViewModeWiring m_Wiring;
 
         [TearDown]
@@ -36,9 +39,9 @@ namespace HexMap.Sample.Tests
             CreateWiring();
             var runtime = new MapViewRuntimeFacade();
 
-            var result = runtime.Initialize(MapViewMode.Gameplay, m_Wiring);
+            var initialized = runtime.Initialize(MapViewMode.Gameplay, m_Wiring);
 
-            Assert.That(result.Succeeded, Is.True);
+            Assert.That(initialized, Is.True);
             Assert.That(runtime.IsInitialized, Is.True);
             Assert.That(runtime.IsRunning, Is.False);
             Assert.That(runtime.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
@@ -98,6 +101,53 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
+        public void TopDownModeUsesTheBaseCameraAndShowsOnlyTheTopDownUi()
+        {
+            CreateWiring();
+            var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
+
+            runtime.Start();
+            runtime.SetViewMode(MapViewMode.TopDown);
+
+            Assert.That(m_GameplayCamera.enabled, Is.True);
+            Assert.That(m_GameplayCamera.orthographic, Is.True);
+            Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_GameplayCamera));
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapInputChannels.TopDown));
+            Assert.That(m_GameplayUiRoot.activeSelf, Is.False);
+            Assert.That(m_TopDownUiRoot.activeSelf, Is.True);
+        }
+
+        [Test]
+        public void LeavingTopDownRestoresTheGameplayCameraView()
+        {
+            CreateWiring();
+            var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
+            var position = new Vector3(4f, 5f, 6f);
+            var rotation = Quaternion.Euler(11f, 22f, 33f);
+            m_GameplayCamera.transform.SetPositionAndRotation(position, rotation);
+            m_GameplayCamera.orthographic = false;
+            m_GameplayCamera.fieldOfView = 55f;
+            m_GameplayCamera.orthographicSize = 7f;
+            m_GameplayCamera.nearClipPlane = 0.5f;
+            m_GameplayCamera.farClipPlane = 444f;
+            m_GameplayCamera.cullingMask = 1 << 9;
+
+            runtime.Start();
+            runtime.SetViewMode(MapViewMode.TopDown);
+            runtime.SetViewMode(MapViewMode.Gameplay);
+
+            Assert.That(m_GameplayCamera.transform.position, Is.EqualTo(position));
+            Assert.That(Quaternion.Angle(m_GameplayCamera.transform.rotation, rotation), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(m_GameplayCamera.orthographic, Is.False);
+            Assert.That(m_GameplayCamera.fieldOfView, Is.EqualTo(55f).Within(0.0001f));
+            Assert.That(m_GameplayCamera.orthographicSize, Is.EqualTo(7f).Within(0.0001f));
+            Assert.That(m_GameplayCamera.nearClipPlane, Is.EqualTo(0.5f).Within(0.0001f));
+            Assert.That(m_GameplayCamera.farClipPlane, Is.EqualTo(444f).Within(0.0001f));
+            Assert.That(m_GameplayCamera.cullingMask, Is.EqualTo(1 << 9));
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapInputChannels.Gameplay));
+        }
+
+        [Test]
         public void InvalidWiringReturnsDiagnosticsAndCannotStart()
         {
             CreateWiring();
@@ -109,14 +159,14 @@ namespace HexMap.Sample.Tests
                 null);
             var runtime = new MapViewRuntimeFacade();
 
-            var result = runtime.Initialize((MapViewMode)99, invalidWiring);
+            LogAssert.Expect(
+                LogType.Error,
+                "Map view runtime initialization failed: initial mode must be Gameplay or TopDown.");
+            LogAssert.Expect(
+                LogType.Error,
+                "Map view runtime initialization failed: Map input dispatcher is required.");
 
-            Assert.That(result.Succeeded, Is.False);
-            Assert.That(result.Errors, Is.EqualTo(new[]
-            {
-                "Initial mode must be Gameplay or TopDown.",
-                "Map input dispatcher is required.",
-            }));
+            Assert.That(runtime.Initialize((MapViewMode)99, invalidWiring), Is.False);
             Assert.That(runtime.IsInitialized, Is.False);
             Assert.That(runtime.IsRunning, Is.False);
             Assert.That(() => runtime.Start(), Throws.TypeOf<InvalidOperationException>());
@@ -143,8 +193,8 @@ namespace HexMap.Sample.Tests
         private MapViewRuntimeFacade InitializeSuccessfully(MapViewMode initialMode)
         {
             var runtime = new MapViewRuntimeFacade();
-            var result = runtime.Initialize(initialMode, m_Wiring);
-            Assert.That(result.Succeeded, Is.True);
+            var initialized = runtime.Initialize(initialMode, m_Wiring);
+            Assert.That(initialized, Is.True);
             return runtime;
         }
 
@@ -158,13 +208,13 @@ namespace HexMap.Sample.Tests
             mapView.Build();
             mapCamera.HexMapView = mapView;
             m_Dispatcher = CreateObject("Map Input Dispatcher").AddComponent<MapInputDispatcher>();
-            var gameplayUiRoot = CreateObject("Gameplay UI");
-            var topDownUiRoot = CreateObject("Top Down UI");
+            m_GameplayUiRoot = CreateObject("Gameplay UI");
+            m_TopDownUiRoot = CreateObject("Top Down UI");
             m_Wiring = new MapViewModeWiring(
                 m_GameplayCamera,
                 mapCamera,
-                gameplayUiRoot,
-                topDownUiRoot,
+                m_GameplayUiRoot,
+                m_TopDownUiRoot,
                 m_Dispatcher);
         }
 

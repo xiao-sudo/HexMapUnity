@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
 
 namespace HexMap.Sample
 {
@@ -43,29 +41,30 @@ namespace HexMap.Sample
         /// <summary>
         /// Validates and retains the runtime wiring without entering a view mode.
         /// </summary>
-        public MapViewRuntimeInitializationResult Initialize(MapViewMode initialMode, in MapViewModeWiring wiring)
+        public bool Initialize(MapViewMode initialMode, in MapViewModeWiring wiring)
         {
             if (m_IsDisposed)
             {
-                return MapViewRuntimeInitializationResult.Failure("A disposed MapViewRuntimeFacade cannot be initialized.");
+                UnityEngine.Debug.LogError("Map view runtime initialization failed: a disposed MapViewRuntimeFacade cannot be initialized.");
+                return false;
             }
 
             if (m_IsInitialized)
             {
-                return MapViewRuntimeInitializationResult.Failure("MapViewRuntimeFacade can only be initialized once.");
+                UnityEngine.Debug.LogError("Map view runtime initialization failed: MapViewRuntimeFacade can only be initialized once.");
+                return false;
             }
 
-            var errors = Validate(initialMode, wiring);
-            if (errors.Count != 0)
+            if (!Validate(initialMode, wiring))
             {
-                return new MapViewRuntimeInitializationResult(errors);
+                return false;
             }
 
             m_ModeController = new MapViewRuntimeModeController(wiring);
             m_InitialMode = initialMode;
             m_CurrentMode = initialMode;
             m_IsInitialized = true;
-            return MapViewRuntimeInitializationResult.Success();
+            return true;
         }
 
         public void Start()
@@ -131,28 +130,33 @@ namespace HexMap.Sample
             m_IsDisposed = true;
         }
 
-        private static List<string> Validate(MapViewMode initialMode, in MapViewModeWiring wiring)
+        private static bool Validate(MapViewMode initialMode, in MapViewModeWiring wiring)
         {
-            var errors = new List<string>();
+            var isValid = true;
             if (!IsDeclaredMode(initialMode))
             {
-                errors.Add("Initial mode must be Gameplay or TopDown.");
+                UnityEngine.Debug.LogError(
+                    "Map view runtime initialization failed: initial mode must be Gameplay or TopDown.");
+                isValid = false;
             }
 
-            AddMissingReferenceError(errors, wiring.GameplayCamera, "Gameplay camera");
-            AddMissingReferenceError(errors, wiring.MapCamera, "Orthographic map camera");
-            AddMissingReferenceError(errors, wiring.GameplayUiRoot, "Gameplay UI root");
-            AddMissingReferenceError(errors, wiring.TopDownUiRoot, "Top-down UI root");
-            AddMissingReferenceError(errors, wiring.Dispatcher, "Map input dispatcher");
-            return errors;
+            isValid &= Require(wiring.GameplayCamera, "Gameplay camera");
+            isValid &= Require(wiring.MapCamera, "Orthographic map camera");
+            isValid &= Require(wiring.GameplayUiRoot, "Gameplay UI root");
+            isValid &= Require(wiring.TopDownUiRoot, "Top-down UI root");
+            isValid &= Require(wiring.Dispatcher, "Map input dispatcher");
+            return isValid;
         }
 
-        private static void AddMissingReferenceError(List<string> errors, UnityEngine.Object value, string name)
+        private static bool Require(UnityEngine.Object value, string name)
         {
-            if (value == null)
+            if (value != null)
             {
-                errors.Add(name + " is required.");
+                return true;
             }
+
+            UnityEngine.Debug.LogError("Map view runtime initialization failed: " + name + " is required.");
+            return false;
         }
 
         private static bool IsDeclaredMode(MapViewMode mode)
@@ -177,34 +181,4 @@ namespace HexMap.Sample
         }
     }
 
-    /// <summary>The inspectable outcome of explicit Map view runtime initialization.</summary>
-    public sealed class MapViewRuntimeInitializationResult
-    {
-        private readonly ReadOnlyCollection<string> m_Errors;
-
-        internal MapViewRuntimeInitializationResult(IEnumerable<string> errors)
-        {
-            m_Errors = new List<string>(errors).AsReadOnly();
-        }
-
-        public bool Succeeded
-        {
-            get { return m_Errors.Count == 0; }
-        }
-
-        public IReadOnlyList<string> Errors
-        {
-            get { return m_Errors; }
-        }
-
-        internal static MapViewRuntimeInitializationResult Success()
-        {
-            return new MapViewRuntimeInitializationResult(new string[0]);
-        }
-
-        internal static MapViewRuntimeInitializationResult Failure(string error)
-        {
-            return new MapViewRuntimeInitializationResult(new[] { error });
-        }
-    }
 }

@@ -3,7 +3,6 @@ using System.Text;
 using HexMap.UnityRuntime;
 using TMPro;
 using UnityEditor;
-using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -13,7 +12,7 @@ namespace HexMap.Sample.Editor
 {
     /// <summary>
     /// Fills in the parts of a two-mode sample scene that no runtime component can create for itself: the
-    /// click entry point, one panel per mode, the map gestures, and the references that tie them together.
+    /// one panel per mode, the map gestures, and the references that tie them together.
     /// <para>
     /// It works on whatever scene is open and finds its targets by component rather than by name, so it can
     /// be run again after the scene changes: anything already there is reused, and it reports what it
@@ -35,18 +34,16 @@ namespace HexMap.Sample.Editor
             var changes = new List<string>();
             var notes = new List<string>();
 
-            var switcher = FindSingle<MapViewModeSwitcher>();
-            if (switcher == null)
+            var bootstrapper = FindSingle<SampleMapViewBootstrapper>();
+            if (bootstrapper == null)
             {
                 Debug.LogError(
-                    "Wire Two-Mode Scene: the open scene has no MapViewModeSwitcher, so there is nothing to wire to.");
+                    "Wire Two-Mode Scene: the open scene has no SampleMapViewBootstrapper, so there is nothing to wire.");
                 return;
             }
 
-            var wiring = switcher.Wiring;
-
-            var dispatcher = wiring.Dispatcher != null
-                ? wiring.Dispatcher
+            var dispatcher = bootstrapper.Dispatcher != null
+                ? bootstrapper.Dispatcher
                 : FindSingle<MapInputDispatcher>();
             if (dispatcher == null)
             {
@@ -54,9 +51,7 @@ namespace HexMap.Sample.Editor
                 return;
             }
 
-            // The map camera is found by component now: the switcher no longer holds one, because the only
-            // thing that ever used it there was the focus request, which is gone.
-            var mapCamera = wiring.MapCamera != null ? wiring.MapCamera : FindSingle<OrthographicMapCamera>();
+            var mapCamera = bootstrapper.MapCamera != null ? bootstrapper.MapCamera : FindSingle<OrthographicMapCamera>();
 
             // The only device-input entry point: it translates EasyTouch tap and swipe events into the
             // dispatcher vocabulary without knowing a mode or camera implementation.
@@ -69,8 +64,6 @@ namespace HexMap.Sample.Editor
                 changes.Add("pointed EasyTouchMapInputAdapter at '" + dispatcher.name + "'");
             }
 
-            var bootstrapper = EnsureComponent<SampleMapViewBootstrapper>(switcher.gameObject, changes);
-
             // Camera input is routed by the dispatcher and consumed only by the active TopDown handler.
             // The scene still needs a camera for mode wiring, but no longer needs direct Unity Input
             // adapters on that camera.
@@ -79,21 +72,17 @@ namespace HexMap.Sample.Editor
                 notes.Add("no OrthographicMapCamera in the scene, so TopDown camera input cannot be consumed");
             }
 
-            WireSwitcher(switcher, dispatcher, changes);
-            WireBootstrapper(bootstrapper, switcher, mapCamera, dispatcher, changes);
-
-            WireModeButton(switcher, wiring.GameplayUiRoot, "gameplay", changes, notes);
-            WireModeButton(switcher, wiring.TopDownUiRoot, "top-down", changes, notes);
+            WireBootstrapper(bootstrapper, mapCamera, dispatcher, changes);
 
             WirePanel(
-                wiring.GameplayUiRoot,
+                bootstrapper.GameplayUiRoot,
                 FindSingle<GameplayMapInputHandler>(),
                 "Gameplay",
                 "gameplay",
                 changes,
                 notes);
             WirePanel(
-                wiring.TopDownUiRoot,
+                bootstrapper.TopDownUiRoot,
                 FindSingle<TopDownMapInputHandler>(),
                 "Map view",
                 "top-down",
@@ -120,92 +109,23 @@ namespace HexMap.Sample.Editor
             Debug.Log(summary.ToString());
         }
 
-        private static void WireSwitcher(
-            MapViewModeSwitcher switcher,
-            MapInputDispatcher dispatcher,
-            List<string> changes)
-        {
-            Undo.RecordObject(switcher, ChangeLabel);
-
-            var wiring = switcher.Wiring;
-            if (wiring.Dispatcher != dispatcher)
-            {
-                // Configure is the one writer of the wiring. The rest of the value is read back from the
-                // switcher and handed straight back, so this only replaces the dispatcher.
-                switcher.Configure(new MapViewModeWiring(
-                    wiring.GameplayCamera,
-                    wiring.MapCamera,
-                    wiring.GameplayUiRoot,
-                    wiring.TopDownUiRoot,
-                    dispatcher));
-                changes.Add("pointed the switcher at '" + dispatcher.name + "'");
-            }
-
-            EditorUtility.SetDirty(switcher);
-        }
-
         private static void WireBootstrapper(
             SampleMapViewBootstrapper bootstrapper,
-            MapViewModeSwitcher switcher,
             OrthographicMapCamera mapCamera,
             MapInputDispatcher dispatcher,
             List<string> changes)
         {
-            var wiring = switcher.Wiring;
-            if (bootstrapper.Switcher == switcher
-                && bootstrapper.GameplayCamera == wiring.GameplayCamera
-                && bootstrapper.MapCamera == mapCamera
-                && bootstrapper.GameplayUiRoot == wiring.GameplayUiRoot
-                && bootstrapper.TopDownUiRoot == wiring.TopDownUiRoot
+            if (bootstrapper.MapCamera == mapCamera
                 && bootstrapper.Dispatcher == dispatcher)
             {
                 return;
             }
 
             Undo.RecordObject(bootstrapper, ChangeLabel);
-            bootstrapper.Switcher = switcher;
-            bootstrapper.GameplayCamera = wiring.GameplayCamera;
             bootstrapper.MapCamera = mapCamera;
-            bootstrapper.GameplayUiRoot = wiring.GameplayUiRoot;
-            bootstrapper.TopDownUiRoot = wiring.TopDownUiRoot;
             bootstrapper.Dispatcher = dispatcher;
             EditorUtility.SetDirty(bootstrapper);
-            changes.Add("wired SampleMapViewBootstrapper on '" + switcher.name + "'");
-        }
-
-        private static void WireModeButton(
-            MapViewModeSwitcher switcher,
-            GameObject root,
-            string mode,
-            List<string> changes,
-            List<string> notes)
-        {
-            if (root == null)
-            {
-                notes.Add("the switcher has no " + mode + " UI root, so its button was not wired");
-                return;
-            }
-
-            var button = root.GetComponentInChildren<Button>(true);
-            if (button == null)
-            {
-                notes.Add("'" + root.name + "' has no Button, so nothing can switch the mode back");
-                return;
-            }
-
-            for (var i = 0; i < button.onClick.GetPersistentEventCount(); i++)
-            {
-                if (button.onClick.GetPersistentTarget(i) == switcher
-                    && button.onClick.GetPersistentMethodName(i) == nameof(MapViewModeSwitcher.Toggle))
-                {
-                    return;
-                }
-            }
-
-            Undo.RecordObject(button, ChangeLabel);
-            UnityEventTools.AddPersistentListener(button.onClick, switcher.Toggle);
-            EditorUtility.SetDirty(button);
-            changes.Add("wired the button in '" + root.name + "' to Toggle()");
+            changes.Add("wired SampleMapViewBootstrapper on '" + bootstrapper.name + "'");
         }
 
         private static void WirePanel(

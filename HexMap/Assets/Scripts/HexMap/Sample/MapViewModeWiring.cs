@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace HexMap.Sample
 {
-    /// <summary>How a <see cref="MapViewModeSwitcher"/> is wired to its scene, in one readable value.</summary>
+    /// <summary>How a Map view runtime is wired to its scene, in one readable value.</summary>
     public readonly struct MapViewModeWiring
     {
         public MapViewModeWiring(

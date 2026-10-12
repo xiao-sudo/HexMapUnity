@@ -60,7 +60,7 @@ namespace HexMap.Sample
             ClearActiveInput();
         }
 
-        public void EnterMode(Camera camera, int channel)
+        void IMapViewModeHost.EnterMode(Camera camera, int channel)
         {
             if (camera != null)
             {
