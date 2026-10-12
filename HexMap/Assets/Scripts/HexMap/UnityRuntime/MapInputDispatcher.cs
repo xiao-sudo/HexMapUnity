@@ -213,7 +213,7 @@ namespace HexMap.UnityRuntime
                 ReportProblem(
                     "dead-handler-" + m_ActiveChannel,
                     "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
-                        + "; the Map view runtime must release it during disposal.");
+                        + "; unregister it in OnDisable.");
                 return false;
             }
 
@@ -243,7 +243,7 @@ namespace HexMap.UnityRuntime
                 ReportProblem(
                     "dead-handler-" + m_ActiveChannel,
                     "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
-                        + "; the Map view runtime must release it during disposal.");
+                        + "; unregister it in OnDisable.");
                 return false;
             }
 
@@ -274,7 +274,7 @@ namespace HexMap.UnityRuntime
                 ReportProblem(
                     "dead-handler-" + m_ActiveChannel,
                     "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
-                        + "; the Map view runtime must release it during disposal.");
+                        + "; unregister it in OnDisable.");
                 return false;
             }
 
