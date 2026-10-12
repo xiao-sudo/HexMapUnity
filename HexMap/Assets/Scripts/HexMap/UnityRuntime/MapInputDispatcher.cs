@@ -221,8 +221,8 @@ namespace HexMap.UnityRuntime
         }
 
         /// <summary>
-        /// Routes a screen-space drag delta to the active channel. Drags carry no map-picking semantics:
-        /// the handler decides what a delta means for its mode, such as panning a camera.
+        /// Routes a screen-space drag delta and active viewport aspect to the active channel. Drags carry no
+        /// map-picking semantics: the handler decides what a delta means for its mode, such as panning a camera.
         /// </summary>
         /// <returns>True when the active handler consumed the drag.</returns>
         public bool OnMapDragged(Vector2 screenDelta)
@@ -238,6 +238,12 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
+            if (m_ActiveCamera == null)
+            {
+                ReportProblem("no-camera-drag", "MapInputDispatcher has no active camera, so drags cannot be routed.");
+                return false;
+            }
+
             if (!IsAlive(handler))
             {
                 ReportProblem(
@@ -247,13 +253,14 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            return InvokeHandler(() => handler.OnMapDragged(screenDelta), "drag");
+            var context = new MapDragContext(screenDelta, m_ActiveCamera.aspect);
+            return InvokeHandler(() => handler.OnMapDragged(context), "drag");
         }
 
         /// <summary>
-        /// Routes a device-independent camera-distance intent to the active channel. Like drags, camera
-        /// distance changes do not need map picking dependencies: the active handler owns their camera
-        /// meaning and reports whether it consumed them.
+        /// Routes a device-independent camera-distance intent and active viewport aspect to the active channel.
+        /// Like drags, camera-distance changes do not need map picking dependencies: the active handler owns
+        /// their camera meaning and reports whether it consumed them.
         /// </summary>
         /// <returns>True when the active handler consumed the camera-distance intent.</returns>
         public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
@@ -269,6 +276,14 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
+            if (m_ActiveCamera == null)
+            {
+                ReportProblem(
+                    "no-camera-distance",
+                    "MapInputDispatcher has no active camera, so camera-distance changes cannot be routed.");
+                return false;
+            }
+
             if (!IsAlive(handler))
             {
                 ReportProblem(
@@ -278,7 +293,10 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            var handledContext = context;
+            var handledContext = new MapCameraDistanceContext(
+                context.ScreenAnchor,
+                context.NormalizedDistanceDelta,
+                m_ActiveCamera.aspect);
             return InvokeHandler(
                 () => handler.OnMapCameraDistanceChanged(handledContext),
                 "camera-distance change");

@@ -7,10 +7,11 @@ namespace HexMap.UnityRuntime
     /// The input layer converts a physical gesture into this context without exposing its input backend
     /// to map handlers.
     /// </summary>
-    public struct MapCameraDistanceContext
+    public readonly struct MapCameraDistanceContext
     {
         private readonly Vector2 m_ScreenAnchor;
         private readonly float m_NormalizedDistanceDelta;
+        private readonly float m_ViewportAspect;
 
         /// <summary>
         /// The screen-pixel anchor that the camera should preserve while changing distance.
@@ -29,10 +30,25 @@ namespace HexMap.UnityRuntime
             get { return m_NormalizedDistanceDelta; }
         }
 
+        /// <summary>The viewport aspect selected by the active input route.</summary>
+        public float ViewportAspect
+        {
+            get { return m_ViewportAspect; }
+        }
+
         public MapCameraDistanceContext(Vector2 screenAnchor, float normalizedDistanceDelta)
+            : this(screenAnchor, normalizedDistanceDelta, 0f)
+        {
+        }
+
+        public MapCameraDistanceContext(
+            Vector2 screenAnchor,
+            float normalizedDistanceDelta,
+            float viewportAspect)
         {
             m_ScreenAnchor = screenAnchor;
             m_NormalizedDistanceDelta = normalizedDistanceDelta;
+            m_ViewportAspect = viewportAspect;
         }
     }
 }

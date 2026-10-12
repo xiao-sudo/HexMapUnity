@@ -15,21 +15,12 @@ namespace HexMap.Sample
     public sealed class TopDownMapInputHandler : MonoBehaviour, IMapInputHandler, IMapPlotClickSource
     {
         [SerializeField]
-        private MapInputDispatcher m_Dispatcher;
-
-        [SerializeField]
         private OrthographicMapCameraInputController m_CameraInputController;
 
         /// <summary>
         /// Raised for every delivered click. PlotId is -1 when the click hit nothing.
         /// </summary>
         public event Action<int> PlotClicked;
-
-        public MapInputDispatcher Dispatcher
-        {
-            get { return m_Dispatcher; }
-            set { m_Dispatcher = value; }
-        }
 
         public OrthographicMapCameraInputController CameraInputController
         {
@@ -43,32 +34,16 @@ namespace HexMap.Sample
             return true;
         }
 
-        public bool OnMapDragged(Vector2 screenDelta)
+        public bool OnMapDragged(in MapDragContext context)
         {
-            float viewportAspect;
             return m_CameraInputController != null
-                && TryGetActiveCameraAspect(out viewportAspect)
-                && m_CameraInputController.HandleMapDragged(screenDelta, viewportAspect);
+                && m_CameraInputController.HandleMapDragged(context.ScreenDelta, context.ViewportAspect);
         }
 
         public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
         {
-            float viewportAspect;
             return m_CameraInputController != null
-                && TryGetActiveCameraAspect(out viewportAspect)
-                && m_CameraInputController.HandleCameraDistanceChanged(context, viewportAspect);
-        }
-
-        private bool TryGetActiveCameraAspect(out float viewportAspect)
-        {
-            viewportAspect = 0f;
-            if (m_Dispatcher == null || m_Dispatcher.ActiveCamera == null)
-            {
-                return false;
-            }
-
-            viewportAspect = m_Dispatcher.ActiveCamera.aspect;
-            return true;
+                && m_CameraInputController.HandleCameraDistanceChanged(context, context.ViewportAspect);
         }
     }
 }

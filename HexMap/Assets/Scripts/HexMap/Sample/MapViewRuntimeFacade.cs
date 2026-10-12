@@ -210,8 +210,6 @@ namespace HexMap.Sample
 
             isValid &= Require(wiring.GameplayCamera, "Gameplay camera");
             isValid &= Require(wiring.MapCamera, "Orthographic map camera");
-            isValid &= Require(wiring.GameplayUiRoot, "Gameplay UI root");
-            isValid &= Require(wiring.TopDownUiRoot, "Top-down UI root");
             isValid &= Require(wiring.Dispatcher, "Map input dispatcher");
             isValid &= RequireHandler(gameplayHandler, "Gameplay");
             isValid &= RequireHandler(topDownHandler, "TopDown");

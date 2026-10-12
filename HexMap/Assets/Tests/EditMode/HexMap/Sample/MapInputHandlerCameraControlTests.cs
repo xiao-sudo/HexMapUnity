@@ -141,13 +141,8 @@ namespace HexMap.Sample.Tests
             var target = CreateObject(name);
             target.SetActive(false);
             var handler = target.AddComponent<T>();
-            if (handler is GameplayMapInputHandler gameplay)
+            if (handler is TopDownMapInputHandler topDown)
             {
-                gameplay.Dispatcher = m_Dispatcher;
-            }
-            else if (handler is TopDownMapInputHandler topDown)
-            {
-                topDown.Dispatcher = m_Dispatcher;
                 topDown.CameraInputController = cameraControl;
             }
 

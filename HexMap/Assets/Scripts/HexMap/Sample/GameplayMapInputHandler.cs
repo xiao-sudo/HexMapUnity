@@ -16,9 +16,6 @@ namespace HexMap.Sample
     public sealed class GameplayMapInputHandler : MonoBehaviour, IMapInputHandler, IMapPlotClickSource
     {
         [SerializeField]
-        private MapInputDispatcher m_Dispatcher;
-
-        [SerializeField]
         private GvgMapRuntimeController m_Controller;
 
         /// <summary>
@@ -26,12 +23,6 @@ namespace HexMap.Sample
         /// UI learns to close.
         /// </summary>
         public event Action<int> PlotClicked;
-
-        public MapInputDispatcher Dispatcher
-        {
-            get { return m_Dispatcher; }
-            set { m_Dispatcher = value; }
-        }
 
         public GvgMapRuntimeController Controller
         {
@@ -58,7 +49,7 @@ namespace HexMap.Sample
             return true;
         }
 
-        public bool OnMapDragged(Vector2 screenDelta)
+        public bool OnMapDragged(in MapDragContext context)
         {
             return false;
         }

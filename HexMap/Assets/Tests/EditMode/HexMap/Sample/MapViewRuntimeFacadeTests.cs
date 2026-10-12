@@ -15,8 +15,6 @@ namespace HexMap.Sample.Tests
 
         private Camera m_GameplayCamera;
         private MapInputDispatcher m_Dispatcher;
-        private GameObject m_GameplayUiRoot;
-        private GameObject m_TopDownUiRoot;
         private MapViewModeWiring m_Wiring;
         private RecordingInputHandler m_GameplayHandler;
         private RecordingInputHandler m_TopDownHandler;
@@ -103,7 +101,7 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
-        public void TopDownModeUsesTheBaseCameraAndShowsOnlyTheTopDownUi()
+        public void TopDownModeUsesTheBaseCameraAndTopDownInputRoute()
         {
             CreateWiring();
             var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
@@ -115,8 +113,36 @@ namespace HexMap.Sample.Tests
             Assert.That(m_GameplayCamera.orthographic, Is.True);
             Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_GameplayCamera));
             Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapInputChannels.TopDown));
-            Assert.That(m_GameplayUiRoot.activeSelf, Is.False);
-            Assert.That(m_TopDownUiRoot.activeSelf, Is.True);
+        }
+
+        [Test]
+        public void UiPresenterFollowsFacadeModeAndStopEvents()
+        {
+            CreateWiring();
+            var gameplayUi = CreateObject("Gameplay UI");
+            var topDownUi = CreateObject("Top Down UI");
+            var presenter = CreateObject("Map View UI Presenter").AddComponent<SampleMapViewModeUiPresenter>();
+            presenter.Configure(gameplayUi, topDownUi);
+            var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
+
+            presenter.Bind(runtime);
+            Assert.That(gameplayUi.activeSelf, Is.False);
+            Assert.That(topDownUi.activeSelf, Is.False);
+
+            runtime.Start();
+            Assert.That(gameplayUi.activeSelf, Is.True);
+            Assert.That(topDownUi.activeSelf, Is.False);
+
+            runtime.SetViewMode(MapViewMode.TopDown);
+            Assert.That(gameplayUi.activeSelf, Is.False);
+            Assert.That(topDownUi.activeSelf, Is.True);
+
+            runtime.Stop();
+            Assert.That(gameplayUi.activeSelf, Is.False);
+            Assert.That(topDownUi.activeSelf, Is.False);
+
+            presenter.Unbind();
+            runtime.Dispose();
         }
 
         [Test]
@@ -156,8 +182,6 @@ namespace HexMap.Sample.Tests
             var invalidWiring = new MapViewModeWiring(
                 m_Wiring.GameplayCamera,
                 m_Wiring.MapCamera,
-                m_Wiring.GameplayUiRoot,
-                m_Wiring.TopDownUiRoot,
                 null);
             var runtime = new MapViewRuntimeFacade();
 
@@ -212,13 +236,9 @@ namespace HexMap.Sample.Tests
             m_Dispatcher = CreateObject("Map Input Dispatcher").AddComponent<MapInputDispatcher>();
             m_GameplayHandler = new RecordingInputHandler();
             m_TopDownHandler = new RecordingInputHandler();
-            m_GameplayUiRoot = CreateObject("Gameplay UI");
-            m_TopDownUiRoot = CreateObject("Top Down UI");
             m_Wiring = new MapViewModeWiring(
                 m_GameplayCamera,
                 mapCamera,
-                m_GameplayUiRoot,
-                m_TopDownUiRoot,
                 m_Dispatcher);
         }
 
@@ -236,7 +256,7 @@ namespace HexMap.Sample.Tests
                 return true;
             }
 
-            public bool OnMapDragged(Vector2 screenDelta)
+            public bool OnMapDragged(in MapDragContext context)
             {
                 return true;
             }

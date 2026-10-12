@@ -35,16 +35,16 @@ namespace HexMap.Sample.Editor
             var changes = new List<string>();
             var notes = new List<string>();
 
-            var bootstrapper = FindSingle<SampleMapViewBootstrapper>();
-            if (bootstrapper == null)
+            var host = FindSingle<SampleMapViewRuntimeHost>();
+            if (host == null)
             {
                 Debug.LogError(
-                    "Wire Two-Mode Scene: the open scene has no SampleMapViewBootstrapper, so there is nothing to wire.");
+                    "Wire Two-Mode Scene: the open scene has no SampleMapViewRuntimeHost, so there is nothing to wire.");
                 return;
             }
 
-            var dispatcher = bootstrapper.Dispatcher != null
-                ? bootstrapper.Dispatcher
+            var dispatcher = host.Dispatcher != null
+                ? host.Dispatcher
                 : FindSingle<MapInputDispatcher>();
             if (dispatcher == null)
             {
@@ -52,7 +52,13 @@ namespace HexMap.Sample.Editor
                 return;
             }
 
-            var mapCamera = bootstrapper.MapCamera != null ? bootstrapper.MapCamera : FindSingle<OrthographicMapCamera>();
+            var mapCamera = host.MapCamera != null ? host.MapCamera : FindSingle<OrthographicMapCamera>();
+            var presenter = FindSingle<SampleMapViewModeUiPresenter>();
+            if (presenter == null)
+            {
+                Debug.LogError("Wire Two-Mode Scene: the open scene has no SampleMapViewModeUiPresenter.");
+                return;
+            }
 
             // Camera input is routed by the dispatcher and consumed only by the active TopDown handler.
             // The scene still needs a camera for mode wiring, but no longer needs direct Unity Input
@@ -62,21 +68,21 @@ namespace HexMap.Sample.Editor
                 notes.Add("no OrthographicMapCamera in the scene, so TopDown camera input cannot be consumed");
             }
 
-            WireBootstrapper(bootstrapper, mapCamera, dispatcher, changes);
+            WireHost(host, mapCamera, dispatcher, changes);
 
             var gameplayHandler = FindSingle<GameplayMapInputHandler>();
             var topDownHandler = FindSingle<TopDownMapInputHandler>();
-            WireInputHandlers(bootstrapper, gameplayHandler, topDownHandler, changes, notes);
+            WireInputHandlers(host, gameplayHandler, topDownHandler, changes, notes);
 
             WirePanel(
-                bootstrapper.GameplayUiRoot,
+                presenter.GameplayUiRoot,
                 gameplayHandler,
                 "Gameplay",
                 "gameplay",
                 changes,
                 notes);
             WirePanel(
-                bootstrapper.TopDownUiRoot,
+                presenter.TopDownUiRoot,
                 topDownHandler,
                 "Map view",
                 "top-down",
@@ -103,27 +109,33 @@ namespace HexMap.Sample.Editor
             Debug.Log(summary.ToString());
         }
 
-        private static void WireBootstrapper(
-            SampleMapViewBootstrapper bootstrapper,
+        private static void WireHost(
+            SampleMapViewRuntimeHost host,
             OrthographicMapCamera mapCamera,
             MapInputDispatcher dispatcher,
             List<string> changes)
         {
-            if (bootstrapper.MapCamera == mapCamera
-                && bootstrapper.Dispatcher == dispatcher)
+            if (host.MapCamera == mapCamera
+                && host.Dispatcher == dispatcher)
             {
                 return;
             }
 
-            Undo.RecordObject(bootstrapper, ChangeLabel);
-            bootstrapper.MapCamera = mapCamera;
-            bootstrapper.Dispatcher = dispatcher;
-            EditorUtility.SetDirty(bootstrapper);
-            changes.Add("wired SampleMapViewBootstrapper on '" + bootstrapper.name + "'");
+            Undo.RecordObject(host, ChangeLabel);
+            host.Configure(
+                host.GameplayCamera,
+                mapCamera,
+                dispatcher,
+                host.GameplayHandler,
+                host.TopDownHandler,
+                host.InitialMode,
+                host.PinchDeadZoneNormalized);
+            EditorUtility.SetDirty(host);
+            changes.Add("wired SampleMapViewRuntimeHost on '" + host.name + "'");
         }
 
         private static void WireInputHandlers(
-            SampleMapViewBootstrapper bootstrapper,
+            SampleMapViewRuntimeHost host,
             GameplayMapInputHandler gameplayHandler,
             TopDownMapInputHandler topDownHandler,
             List<string> changes,
@@ -135,16 +147,22 @@ namespace HexMap.Sample.Editor
                 return;
             }
 
-            if (bootstrapper.GameplayHandler == gameplayHandler && bootstrapper.TopDownHandler == topDownHandler)
+            if (host.GameplayHandler == gameplayHandler && host.TopDownHandler == topDownHandler)
             {
                 return;
             }
 
-            Undo.RecordObject(bootstrapper, ChangeLabel);
-            bootstrapper.GameplayHandler = gameplayHandler;
-            bootstrapper.TopDownHandler = topDownHandler;
-            EditorUtility.SetDirty(bootstrapper);
-            changes.Add("wired Map view primary input handlers on '" + bootstrapper.name + "'");
+            Undo.RecordObject(host, ChangeLabel);
+            host.Configure(
+                host.GameplayCamera,
+                host.MapCamera,
+                host.Dispatcher,
+                gameplayHandler,
+                topDownHandler,
+                host.InitialMode,
+                host.PinchDeadZoneNormalized);
+            EditorUtility.SetDirty(host);
+            changes.Add("wired Map view primary input handlers on '" + host.name + "'");
         }
 
         private static void WirePanel(
@@ -157,6 +175,7 @@ namespace HexMap.Sample.Editor
         {
             if (root == null)
             {
+                notes.Add("no " + mode + " UI root is configured on SampleMapViewModeUiPresenter");
                 return;
             }
 
@@ -271,20 +290,6 @@ namespace HexMap.Sample.Editor
             }
         }
 
-        private static T EnsureComponent<T>(GameObject host, List<string> changes)
-            where T : Component
-        {
-            var existing = host.GetComponent<T>();
-            if (existing != null)
-            {
-                return existing;
-            }
-
-            var created = Undo.AddComponent<T>(host);
-            changes.Add("added " + typeof(T).Name + " to '" + host.name + "'");
-            return created;
-        }
-
         private static T FindSingle<T>()
             where T : Component
         {
@@ -296,12 +301,14 @@ namespace HexMap.Sample.Editor
 
             if (found.Length > 1)
             {
-                Debug.LogWarning(
+                Debug.LogError(
                     "Wire Two-Mode Scene: the scene has " + found.Length + " " + typeof(T).Name
-                        + " components; using '" + found[0].name + "'.");
+                        + " components. Resolve the duplicate configuration before wiring.");
+                return null;
             }
 
             return found[0];
         }
+
     }
 }

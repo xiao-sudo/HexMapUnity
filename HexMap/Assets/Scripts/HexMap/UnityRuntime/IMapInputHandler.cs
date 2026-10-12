@@ -19,10 +19,11 @@ namespace HexMap.UnityRuntime
         bool OnMapClicked(in MapClickContext context);
 
         /// <summary>
-        /// Handles one map drag in screen pixels. Drag routing deliberately does not perform map picking.
+        /// Handles one map drag in screen pixels. Drag routing deliberately does not perform map picking;
+        /// the context contains viewport information selected by the active route.
         /// </summary>
         /// <returns>True when the handler consumed the drag.</returns>
-        bool OnMapDragged(Vector2 screenDelta);
+        bool OnMapDragged(in MapDragContext context);
 
         /// <summary>
         /// Handles one device-independent request to move the map camera nearer or farther away.

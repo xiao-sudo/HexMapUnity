@@ -446,7 +446,9 @@ namespace HexMap.UnityRuntime.Tests
         [Test]
         public void ADragIsRoutedWithoutNeedingMapPickingDependencies()
         {
-            var dispatcher = CreateDispatcher(null, null, GameplayChannel);
+            var camera = CreateCamera();
+            camera.aspect = 1.75f;
+            var dispatcher = CreateDispatcher(null, camera, GameplayChannel);
             var handler = new RecordingHandler();
             Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
 
@@ -455,6 +457,7 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(dispatcher.OnMapDragged(delta), Is.True);
             Assert.That(handler.DragCallCount, Is.EqualTo(1));
             Assert.That(handler.LastDragDelta, Is.EqualTo(delta));
+            Assert.That(handler.LastDragViewportAspect, Is.EqualTo(1.75f));
         }
 
         [Test]
@@ -518,7 +521,9 @@ namespace HexMap.UnityRuntime.Tests
         [Test]
         public void CameraDistanceIntentIsRoutedToTheHandlerForTheActiveChannelWithoutPicking()
         {
-            var dispatcher = CreateDispatcher(null, null, GameplayChannel);
+            var camera = CreateCamera();
+            camera.aspect = 1.5f;
+            var dispatcher = CreateDispatcher(null, camera, GameplayChannel);
             var gameplay = new RecordingHandler();
             var topDown = new RecordingHandler();
             Assert.That(dispatcher.Register(GameplayChannel, gameplay), Is.True);
@@ -529,13 +534,14 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(gameplay.CameraDistanceCallCount, Is.EqualTo(1));
             Assert.That(gameplay.LastCameraDistanceContext.ScreenAnchor, Is.EqualTo(new Vector2(735f, 428f)));
             Assert.That(gameplay.LastCameraDistanceContext.NormalizedDistanceDelta, Is.EqualTo(0.125f));
+            Assert.That(gameplay.LastCameraDistanceContext.ViewportAspect, Is.EqualTo(1.5f));
             Assert.That(topDown.CameraDistanceCallCount, Is.EqualTo(0));
         }
 
         [Test]
         public void CameraDistanceIntentReturnsTheActiveHandlersConsumptionResult()
         {
-            var dispatcher = CreateDispatcher(null, null, GameplayChannel);
+            var dispatcher = CreateDispatcher(null, CreateCamera(), GameplayChannel);
             var handler = new RecordingHandler { Consume = false };
             Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
 
@@ -555,6 +561,29 @@ namespace HexMap.UnityRuntime.Tests
             Assert.That(
                 dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(Vector2.one, 0.1f)),
                 Is.False);
+            Assert.That(handler.CameraDistanceCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void DragAndCameraDistanceWithoutAnActiveCameraAreDropped()
+        {
+            var dispatcher = CreateDispatcher(null, null, GameplayChannel);
+            var handler = new RecordingHandler();
+            Assert.That(dispatcher.Register(GameplayChannel, handler), Is.True);
+
+            LogAssert.Expect(
+                LogType.Error,
+                new Regex(Regex.Escape("MapInputDispatcher has no active camera, so drags cannot be routed.")));
+            LogAssert.Expect(
+                LogType.Error,
+                new Regex(Regex.Escape(
+                    "MapInputDispatcher has no active camera, so camera-distance changes cannot be routed.")));
+
+            Assert.That(dispatcher.OnMapDragged(Vector2.one), Is.False);
+            Assert.That(
+                dispatcher.OnMapCameraDistanceChanged(new MapCameraDistanceContext(Vector2.zero, 0.1f)),
+                Is.False);
+            Assert.That(handler.DragCallCount, Is.EqualTo(0));
             Assert.That(handler.CameraDistanceCallCount, Is.EqualTo(0));
         }
 
@@ -624,6 +653,8 @@ namespace HexMap.UnityRuntime.Tests
 
             public Vector2 LastDragDelta { get; private set; }
 
+            public float LastDragViewportAspect { get; private set; }
+
             public int CameraDistanceCallCount { get; private set; }
 
             public MapCameraDistanceContext LastCameraDistanceContext { get; private set; }
@@ -637,10 +668,11 @@ namespace HexMap.UnityRuntime.Tests
                 return Consume;
             }
 
-            public bool OnMapDragged(Vector2 screenDelta)
+            public bool OnMapDragged(in MapDragContext context)
             {
                 DragCallCount++;
-                LastDragDelta = screenDelta;
+                LastDragDelta = context.ScreenDelta;
+                LastDragViewportAspect = context.ViewportAspect;
                 return Consume;
             }
 
@@ -663,7 +695,7 @@ namespace HexMap.UnityRuntime.Tests
                 return true;
             }
 
-            public bool OnMapDragged(Vector2 screenDelta)
+            public bool OnMapDragged(in MapDragContext context)
             {
                 return true;
             }

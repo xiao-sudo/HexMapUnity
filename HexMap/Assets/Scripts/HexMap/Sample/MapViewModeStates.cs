@@ -21,13 +21,11 @@ namespace HexMap.Sample
     internal sealed class MapGameplayViewState : IMapViewModeState
     {
         private readonly Camera m_Camera;
-        private readonly GameObject m_UiRoot;
         private readonly int m_Channel;
 
-        public MapGameplayViewState(Camera camera, GameObject uiRoot, int channel)
+        public MapGameplayViewState(Camera camera, int channel)
         {
             m_Camera = camera;
-            m_UiRoot = uiRoot;
             m_Channel = channel;
         }
 
@@ -39,12 +37,10 @@ namespace HexMap.Sample
         public void Enter(IMapViewModeHost host)
         {
             host.EnterMode(m_Camera, m_Channel);
-            MapViewModeUi.SetRootActive(m_UiRoot, true);
         }
 
         public void Exit()
         {
-            MapViewModeUi.SetRootActive(m_UiRoot, false);
         }
     }
 
@@ -56,7 +52,6 @@ namespace HexMap.Sample
     {
         private readonly Camera m_Camera;
         private readonly OrthographicMapCamera m_MapCamera;
-        private readonly GameObject m_UiRoot;
         private readonly int m_Channel;
 
         private CameraViewState m_RememberedCameraState;
@@ -65,12 +60,10 @@ namespace HexMap.Sample
         public MapTopDownViewState(
             Camera camera,
             OrthographicMapCamera mapCamera,
-            GameObject uiRoot,
             int channel)
         {
             m_Camera = camera;
             m_MapCamera = mapCamera;
-            m_UiRoot = uiRoot;
             m_Channel = channel;
         }
 
@@ -105,13 +98,10 @@ namespace HexMap.Sample
             }
 
             host.EnterMode(m_Camera, m_Channel);
-            MapViewModeUi.SetRootActive(m_UiRoot, true);
         }
 
         public void Exit()
         {
-            MapViewModeUi.SetRootActive(m_UiRoot, false);
-
             if (m_MapCamera != null)
             {
                 m_MapCamera.FrameChanged -= ApplyFrame;
@@ -141,17 +131,6 @@ namespace HexMap.Sample
             if (frame.HasCullingMask)
             {
                 m_Camera.cullingMask = frame.CullingMask;
-            }
-        }
-    }
-
-    internal static class MapViewModeUi
-    {
-        public static void SetRootActive(GameObject root, bool active)
-        {
-            if (root != null && root.activeSelf != active)
-            {
-                root.SetActive(active);
             }
         }
     }

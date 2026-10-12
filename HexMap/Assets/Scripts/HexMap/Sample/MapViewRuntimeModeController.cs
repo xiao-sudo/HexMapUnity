@@ -9,8 +9,6 @@ namespace HexMap.Sample
     {
         private readonly Camera m_GameplayCamera;
         private readonly OrthographicMapCamera m_MapCamera;
-        private readonly GameObject m_GameplayUiRoot;
-        private readonly GameObject m_TopDownUiRoot;
         private readonly MapInputDispatcher m_Dispatcher;
         private readonly IMapInputHandler m_GameplayHandler;
         private readonly IMapInputHandler m_TopDownHandler;
@@ -27,8 +25,6 @@ namespace HexMap.Sample
         {
             m_GameplayCamera = wiring.GameplayCamera;
             m_MapCamera = wiring.MapCamera;
-            m_GameplayUiRoot = wiring.GameplayUiRoot;
-            m_TopDownUiRoot = wiring.TopDownUiRoot;
             m_Dispatcher = wiring.Dispatcher;
             m_GameplayHandler = gameplayHandler;
             m_TopDownHandler = topDownHandler;
@@ -63,12 +59,6 @@ namespace HexMap.Sample
             {
                 m_CurrentState.Exit();
             }
-            else
-            {
-                MapViewModeUi.SetRootActive(m_GameplayUiRoot, false);
-                MapViewModeUi.SetRootActive(m_TopDownUiRoot, false);
-            }
-
             ClearActiveInput();
             m_CurrentState = target == MapViewMode.TopDown ? m_TopDownState : m_GameplayState;
             m_CurrentState.Enter(this);
@@ -118,12 +108,10 @@ namespace HexMap.Sample
 
             m_GameplayState = new MapGameplayViewState(
                 m_GameplayCamera,
-                m_GameplayUiRoot,
                 SampleMapInputChannels.For(MapViewMode.Gameplay));
             m_TopDownState = new MapTopDownViewState(
                 m_GameplayCamera,
                 m_MapCamera,
-                m_TopDownUiRoot,
                 SampleMapInputChannels.For(MapViewMode.TopDown));
         }
 
