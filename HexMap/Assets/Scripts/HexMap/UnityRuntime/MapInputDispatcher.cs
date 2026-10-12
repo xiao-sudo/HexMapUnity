@@ -33,8 +33,6 @@ namespace HexMap.UnityRuntime
         private MapClickContext m_LastContext;
         private bool m_HasLastContext;
 
-        public event System.Action<MapInputDispatchResult> InputProcessed;
-
         public GvgMapRuntimeController Controller
         {
             get { return m_Controller; }
@@ -219,11 +217,7 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            var consumed = InvokeHandler(
-                () => handler.OnMapClicked(m_LastContext),
-                "click");
-            PublishInputProcessed(MapInputDispatchResult.Clicked(m_ActiveChannel, m_LastContext, consumed));
-            return consumed;
+            return InvokeHandler(() => handler.OnMapClicked(m_LastContext), "click");
         }
 
         /// <summary>
@@ -253,11 +247,7 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            var consumed = InvokeHandler(
-                () => handler.OnMapDragged(screenDelta),
-                "drag");
-            PublishInputProcessed(MapInputDispatchResult.Dragged(m_ActiveChannel, screenDelta, consumed));
-            return consumed;
+            return InvokeHandler(() => handler.OnMapDragged(screenDelta), "drag");
         }
 
         /// <summary>
@@ -289,11 +279,9 @@ namespace HexMap.UnityRuntime
             }
 
             var handledContext = context;
-            var consumed = InvokeHandler(
+            return InvokeHandler(
                 () => handler.OnMapCameraDistanceChanged(handledContext),
                 "camera-distance change");
-            PublishInputProcessed(MapInputDispatchResult.CameraDistanceChanged(m_ActiveChannel, handledContext, consumed));
-            return consumed;
         }
 
         private bool InvokeHandler(System.Func<bool> invoke, string inputName)
@@ -313,26 +301,6 @@ namespace HexMap.UnityRuntime
             }
         }
 
-        private void PublishInputProcessed(MapInputDispatchResult result)
-        {
-            var observers = InputProcessed;
-            if (observers == null)
-            {
-                return;
-            }
-
-            foreach (System.Action<MapInputDispatchResult> observer in observers.GetInvocationList())
-            {
-                try
-                {
-                    observer(result);
-                }
-                catch (System.Exception exception)
-                {
-                    Debug.LogException(exception, this);
-                }
-            }
-        }
 
         private static bool IsAlive(IMapInputHandler handler)
         {

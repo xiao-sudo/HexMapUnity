@@ -20,8 +20,6 @@ namespace HexMap.Sample
         private IMapViewModeState m_CurrentState;
         private bool m_AreHandlersRegistered;
 
-        public event System.Action<MapViewInputObservation> InputProcessed;
-
         public MapViewRuntimeModeController(
             in MapViewModeWiring wiring,
             IMapInputHandler gameplayHandler,
@@ -49,7 +47,6 @@ namespace HexMap.Sample
                 return false;
             }
 
-            m_Dispatcher.InputProcessed += OnInputProcessed;
             m_AreHandlersRegistered = true;
             return true;
         }
@@ -96,7 +93,6 @@ namespace HexMap.Sample
                 return;
             }
 
-            m_Dispatcher.InputProcessed -= OnInputProcessed;
             m_Dispatcher.Unregister(SampleMapInputChannels.TopDown, m_TopDownHandler);
             m_Dispatcher.Unregister(SampleMapInputChannels.Gameplay, m_GameplayHandler);
             m_AreHandlersRegistered = false;
@@ -137,23 +133,5 @@ namespace HexMap.Sample
             m_Dispatcher.SetActiveChannel(MapInputChannels.None);
         }
 
-        private void OnInputProcessed(MapInputDispatchResult result)
-        {
-            MapViewMode mode;
-            if (result.Channel == SampleMapInputChannels.Gameplay)
-            {
-                mode = MapViewMode.Gameplay;
-            }
-            else if (result.Channel == SampleMapInputChannels.TopDown)
-            {
-                mode = MapViewMode.TopDown;
-            }
-            else
-            {
-                return;
-            }
-
-            InputProcessed?.Invoke(new MapViewInputObservation(mode, result));
-        }
     }
 }

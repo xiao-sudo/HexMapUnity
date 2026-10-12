@@ -16,7 +16,6 @@ namespace HexMap.Sample
         private bool m_IsRunning;
         private bool m_IsDisposed;
         private readonly RuntimeObserverSet<MapViewMode> m_ModeChangedObservers = new RuntimeObserverSet<MapViewMode>();
-        private readonly RuntimeObserverSet<MapViewInputObservation> m_InputObservers = new RuntimeObserverSet<MapViewInputObservation>();
         private readonly RuntimeObserverSet<bool> m_RuntimeStoppedObservers = new RuntimeObserverSet<bool>();
 
         public MapViewMode CurrentMode
@@ -72,7 +71,6 @@ namespace HexMap.Sample
             }
 
             m_ModeController = modeController;
-            m_ModeController.InputProcessed += PublishInputProcessed;
             m_InitialMode = initialMode;
             m_CurrentMode = initialMode;
             m_IsInitialized = true;
@@ -140,13 +138,11 @@ namespace HexMap.Sample
             Stop();
             if (m_ModeController != null)
             {
-                m_ModeController.InputProcessed -= PublishInputProcessed;
                 m_ModeController.Dispose();
                 m_ModeController = null;
             }
 
             m_ModeChangedObservers.Clear();
-            m_InputObservers.Clear();
             m_RuntimeStoppedObservers.Clear();
             m_IsDisposed = true;
         }
@@ -173,17 +169,6 @@ namespace HexMap.Sample
             return m_RuntimeStoppedObservers.Subscribe(_ => observer(), observer.Target);
         }
 
-        public IDisposable SubscribeInputProcessed(Action<MapViewInputObservation> observer)
-        {
-            EnsureNotDisposed();
-            if (observer == null)
-            {
-                throw new ArgumentNullException(nameof(observer));
-            }
-
-            return m_InputObservers.Subscribe(observer, observer.Target);
-        }
-
         private static bool Validate(
             MapViewMode initialMode,
             in MapViewModeWiring wiring,
@@ -206,11 +191,6 @@ namespace HexMap.Sample
             isValid &= RequireHandler(gameplayHandler, "Gameplay");
             isValid &= RequireHandler(topDownHandler, "TopDown");
             return isValid;
-        }
-
-        private void PublishInputProcessed(MapViewInputObservation observation)
-        {
-            m_InputObservers.Publish(observation);
         }
 
         private static bool Require(UnityEngine.Object value, string name)

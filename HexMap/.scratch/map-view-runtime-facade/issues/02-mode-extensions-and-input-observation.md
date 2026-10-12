@@ -40,6 +40,28 @@ bool Initialize(
 输入观察仍是 Facade 的独立职责。它发布带有模式语义、在 handler 处理后的结果（包括 `Consumed`），
 而不向观察者暴露 `MapInputDispatcher`。
 
+### 后续收敛：删除通用输入观察链
+
+上一段关于“Facade 发布处理后输入结果”的设计已撤销，不实现 `MapInputDispatcher.InputProcessed`、
+`MapInputDispatchResult`、`MapViewInputObservation` 或 `SubscribeInputProcessed`。
+
+原因是 Dispatcher 的职责只能是按活动 channel 路由输入。若由它生产统一的处理结果，它必须持续了解并
+维护点击、拖拽、缩放以及未来每一种输入类型的结果形状，导致稳定的路由器退化为随输入类型增长的事件
+总线。
+
+处理后的业务观察改由具体 `IMapInputHandler` 实现或其下游拥有者按模式语义提供：
+
+- `GameplayMapInputHandler.PlotClicked` 与 `TopDownMapInputHandler.PlotClicked` 是正确的现有范例；
+  它们表达“模式中的格子操作”，而不是“Dispatcher 收到一次点击”。
+- 若未来业务确实要观察俯视地图平移或相机距离变化，应由 `TopDownMapInputHandler`、
+  `OrthographicMapCameraInputController` 或 `OrthographicMapCamera` 在实际状态改变后发布对应的
+  领域语义回调。
+- 不在 `IMapInputHandler` 接口上增加统一回调；这会强迫所有实现承担不属于它们的通用观察协议，并将
+  Dispatcher 的耦合问题转移到接口。
+
+Facade 仍提供可取消的模式变更与运行时停止订阅。Dispatcher 仍需隔离 handler 异常：异常只使本次
+输入返回未消费，不停止 Map view runtime。
+
 - [ ] 扩展只在门面首次初始化时有序安装一次，并在门面销毁时按反序释放其资源；禁用再启用不重复安装。
 - [ ] 每个支持模式在启动前必须恰有一个主输入 handler；缺失、重复或安装失败将拒绝启动并提供可定位诊断。
 - [ ] 处理后输入观察、模式变更和运行时停止均通过返回注销句柄的订阅方式提供；已销毁 Unity 订阅目标会自动清除。
