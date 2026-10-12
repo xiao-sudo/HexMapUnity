@@ -124,6 +124,21 @@ namespace HexMap.Sample
             m_CurrentState.Enter(this);
         }
 
+        /// <summary>
+        /// Leaves the active mode and removes its presentation and input route. The switcher remains
+        /// configured, so a later <see cref="SetMode"/> starts a new mode lifetime.
+        /// </summary>
+        internal void Stop()
+        {
+            if (m_CurrentState != null)
+            {
+                m_CurrentState.Exit();
+                m_CurrentState = null;
+            }
+
+            ClearActiveInput();
+        }
+
         private void EnsureStates()
         {
             if (m_CurrentState != null)
