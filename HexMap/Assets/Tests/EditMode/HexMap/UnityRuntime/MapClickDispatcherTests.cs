@@ -383,7 +383,8 @@ namespace HexMap.UnityRuntime.Tests
             RecordingHandler registered;
             var dispatcher = CreateReadyDispatcher(out controller, out camera, out registered);
 
-            // A handler destroyed without unregistering is the case a forgotten OnDisable leaves behind.
+            // A handler destroyed without unregistering is a lifecycle leak the Map view runtime must
+            // release during disposal.
             m_HandlerObject = new GameObject("Destroyed Handler");
             var doomed = m_HandlerObject.AddComponent<UnityHandler>();
             Assert.That(dispatcher.Register(TopDownChannel, doomed), Is.True);
@@ -584,7 +585,7 @@ namespace HexMap.UnityRuntime.Tests
         private static string DeadHandlerMessage(int channel)
         {
             return "MapInputDispatcher still has a destroyed handler for channel " + channel
-                + "; unregister it in OnDisable.";
+                + "; the Map view runtime must release it during disposal.";
         }
 
         private static string NoCameraMessage()
