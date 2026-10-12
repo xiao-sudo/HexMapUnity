@@ -13,7 +13,7 @@ namespace HexMap.Sample
     /// the other mode answer the same click with entirely different UI.
     /// </para>
     /// </summary>
-    public sealed class GameplayMapInputHandler : MonoBehaviour, IMapInputHandler, IMapPlotClickSource
+    public sealed class GameplayMapInputHandler : MonoBehaviour, IMapInputHandler
     {
         [SerializeField]
         private GvgMapRuntimeController m_Controller;

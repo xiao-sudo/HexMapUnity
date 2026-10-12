@@ -12,7 +12,7 @@ namespace HexMap.Sample
     /// gameplay selection, because previewing the map is not playing it.
     /// </para>
     /// </summary>
-    public sealed class TopDownMapInputHandler : MonoBehaviour, IMapInputHandler, IMapPlotClickSource
+    public sealed class TopDownMapInputHandler : MonoBehaviour, IMapInputHandler
     {
         [SerializeField]
         private OrthographicMapCameraInputController m_CameraInputController;

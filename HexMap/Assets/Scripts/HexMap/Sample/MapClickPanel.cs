@@ -34,8 +34,6 @@ namespace HexMap.Sample
         [Tooltip("Prefixed to the plot id in the label, so the two modes' panels are told apart at a glance.")]
         private string m_Title = "Plot";
 
-        private IMapPlotClickSource m_ResolvedSource;
-
         /// <summary>
         /// The plot id of the last click, or -1 while closed. Reading it is how a test or a debugger sees
         /// what the panel was told without looking at the screen.
@@ -73,14 +71,6 @@ namespace HexMap.Sample
 
         private void OnEnable()
         {
-            m_ResolvedSource = ResolveSource();
-            if (m_ResolvedSource == null)
-            {
-                SetOpen(false);
-                return;
-            }
-
-            m_ResolvedSource.PlotClicked += OnPlotClicked;
 
             // A panel that starts visible would claim a plot the player never clicked.
             SetOpen(false);
@@ -88,38 +78,10 @@ namespace HexMap.Sample
 
         private void OnDisable()
         {
-            if (m_ResolvedSource != null)
-            {
-                m_ResolvedSource.PlotClicked -= OnPlotClicked;
-            }
-
-            m_ResolvedSource = null;
+  
         }
 
-        private IMapPlotClickSource ResolveSource()
-        {
-            // The Unity null check comes first: an interface reference to a destroyed object is still a
-            // non-null interface, so asking for the interface alone would accept a dead handler.
-            if (m_Source == null)
-            {
-                Debug.LogError(
-                    "MapClickPanel has no source handler, so it can never open. Wire the mode handler that owns this panel.",
-                    this);
-                return null;
-            }
-
-            var source = m_Source as IMapPlotClickSource;
-            if (source == null)
-            {
-                Debug.LogError(
-                    "MapClickPanel's source does not announce plot clicks. Wire a mode handler such as GameplayMapInputHandler or TopDownMapInputHandler.",
-                    this);
-            }
-
-            return source;
-        }
-
-        private void OnPlotClicked(int plotId)
+        public void OnPlotClicked(int plotId)
         {
             ShownPlotId = plotId;
 
