@@ -1,4 +1,5 @@
 using System;
+using HexMap.UnityRuntime;
 
 namespace HexMap.Sample
 {
@@ -14,10 +15,9 @@ namespace HexMap.Sample
         private bool m_IsInitialized;
         private bool m_IsRunning;
         private bool m_IsDisposed;
-
-        public event Action<MapViewMode> ModeChanged;
-
-        public event Action RuntimeStopped;
+        private readonly RuntimeObserverSet<MapViewMode> m_ModeChangedObservers = new RuntimeObserverSet<MapViewMode>();
+        private readonly RuntimeObserverSet<MapViewInputObservation> m_InputObservers = new RuntimeObserverSet<MapViewInputObservation>();
+        private readonly RuntimeObserverSet<bool> m_RuntimeStoppedObservers = new RuntimeObserverSet<bool>();
 
         public MapViewMode CurrentMode
         {
@@ -41,7 +41,11 @@ namespace HexMap.Sample
         /// <summary>
         /// Validates and retains the runtime wiring without entering a view mode.
         /// </summary>
-        public bool Initialize(MapViewMode initialMode, in MapViewModeWiring wiring)
+        public bool Initialize(
+            MapViewMode initialMode,
+            in MapViewModeWiring wiring,
+            IMapInputHandler gameplayHandler,
+            IMapInputHandler topDownHandler)
         {
             if (m_IsDisposed)
             {
@@ -55,12 +59,20 @@ namespace HexMap.Sample
                 return false;
             }
 
-            if (!Validate(initialMode, wiring))
+            if (!Validate(initialMode, wiring, gameplayHandler, topDownHandler))
             {
                 return false;
             }
 
-            m_ModeController = new MapViewRuntimeModeController(wiring);
+            var modeController = new MapViewRuntimeModeController(wiring, gameplayHandler, topDownHandler);
+            if (!modeController.TryRegisterHandlers())
+            {
+                modeController.Dispose();
+                return false;
+            }
+
+            m_ModeController = modeController;
+            m_ModeController.InputProcessed += PublishInputProcessed;
             m_InitialMode = initialMode;
             m_CurrentMode = initialMode;
             m_IsInitialized = true;
@@ -79,7 +91,7 @@ namespace HexMap.Sample
             m_ModeController.SetMode(m_InitialMode);
             m_CurrentMode = m_InitialMode;
             m_IsRunning = true;
-            ModeChanged?.Invoke(m_CurrentMode);
+            m_ModeChangedObservers.Publish(m_CurrentMode);
         }
 
         public void SetViewMode(MapViewMode target)
@@ -103,7 +115,7 @@ namespace HexMap.Sample
 
             m_ModeController.SetMode(target);
             m_CurrentMode = target;
-            ModeChanged?.Invoke(m_CurrentMode);
+            m_ModeChangedObservers.Publish(m_CurrentMode);
         }
 
         public void Stop()
@@ -115,7 +127,7 @@ namespace HexMap.Sample
 
             m_ModeController.Stop();
             m_IsRunning = false;
-            RuntimeStopped?.Invoke();
+            m_RuntimeStoppedObservers.Publish(true);
         }
 
         public void Dispose()
@@ -126,11 +138,57 @@ namespace HexMap.Sample
             }
 
             Stop();
-            m_ModeController = null;
+            if (m_ModeController != null)
+            {
+                m_ModeController.InputProcessed -= PublishInputProcessed;
+                m_ModeController.Dispose();
+                m_ModeController = null;
+            }
+
+            m_ModeChangedObservers.Clear();
+            m_InputObservers.Clear();
+            m_RuntimeStoppedObservers.Clear();
             m_IsDisposed = true;
         }
 
-        private static bool Validate(MapViewMode initialMode, in MapViewModeWiring wiring)
+        public IDisposable SubscribeModeChanged(Action<MapViewMode> observer)
+        {
+            EnsureNotDisposed();
+            if (observer == null)
+            {
+                throw new ArgumentNullException(nameof(observer));
+            }
+
+            return m_ModeChangedObservers.Subscribe(observer, observer.Target);
+        }
+
+        public IDisposable SubscribeRuntimeStopped(Action observer)
+        {
+            EnsureNotDisposed();
+            if (observer == null)
+            {
+                throw new ArgumentNullException(nameof(observer));
+            }
+
+            return m_RuntimeStoppedObservers.Subscribe(_ => observer(), observer.Target);
+        }
+
+        public IDisposable SubscribeInputProcessed(Action<MapViewInputObservation> observer)
+        {
+            EnsureNotDisposed();
+            if (observer == null)
+            {
+                throw new ArgumentNullException(nameof(observer));
+            }
+
+            return m_InputObservers.Subscribe(observer, observer.Target);
+        }
+
+        private static bool Validate(
+            MapViewMode initialMode,
+            in MapViewModeWiring wiring,
+            IMapInputHandler gameplayHandler,
+            IMapInputHandler topDownHandler)
         {
             var isValid = true;
             if (!IsDeclaredMode(initialMode))
@@ -145,7 +203,14 @@ namespace HexMap.Sample
             isValid &= Require(wiring.GameplayUiRoot, "Gameplay UI root");
             isValid &= Require(wiring.TopDownUiRoot, "Top-down UI root");
             isValid &= Require(wiring.Dispatcher, "Map input dispatcher");
+            isValid &= RequireHandler(gameplayHandler, "Gameplay");
+            isValid &= RequireHandler(topDownHandler, "TopDown");
             return isValid;
+        }
+
+        private void PublishInputProcessed(MapViewInputObservation observation)
+        {
+            m_InputObservers.Publish(observation);
         }
 
         private static bool Require(UnityEngine.Object value, string name)
@@ -156,6 +221,18 @@ namespace HexMap.Sample
             }
 
             UnityEngine.Debug.LogError("Map view runtime initialization failed: " + name + " is required.");
+            return false;
+        }
+
+        private static bool RequireHandler(IMapInputHandler handler, string modeName)
+        {
+            if (handler != null)
+            {
+                return true;
+            }
+
+            UnityEngine.Debug.LogError(
+                "Map view runtime initialization failed: " + modeName + " mode requires a primary input handler.");
             return false;
         }
 

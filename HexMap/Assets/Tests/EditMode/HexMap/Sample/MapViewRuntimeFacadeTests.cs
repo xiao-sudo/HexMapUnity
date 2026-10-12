@@ -18,6 +18,8 @@ namespace HexMap.Sample.Tests
         private GameObject m_GameplayUiRoot;
         private GameObject m_TopDownUiRoot;
         private MapViewModeWiring m_Wiring;
+        private RecordingInputHandler m_GameplayHandler;
+        private RecordingInputHandler m_TopDownHandler;
 
         [TearDown]
         public void TearDown()
@@ -39,7 +41,7 @@ namespace HexMap.Sample.Tests
             CreateWiring();
             var runtime = new MapViewRuntimeFacade();
 
-            var initialized = runtime.Initialize(MapViewMode.Gameplay, m_Wiring);
+            var initialized = runtime.Initialize(MapViewMode.Gameplay, m_Wiring, m_GameplayHandler, m_TopDownHandler);
 
             Assert.That(initialized, Is.True);
             Assert.That(runtime.IsInitialized, Is.True);
@@ -56,8 +58,8 @@ namespace HexMap.Sample.Tests
             var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
             var modes = new List<MapViewMode>();
             var stopCount = 0;
-            runtime.ModeChanged += modes.Add;
-            runtime.RuntimeStopped += () => stopCount++;
+            runtime.SubscribeModeChanged(modes.Add);
+            runtime.SubscribeRuntimeStopped(() => stopCount++);
 
             runtime.Start();
 
@@ -81,7 +83,7 @@ namespace HexMap.Sample.Tests
             CreateWiring();
             var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
             var modes = new List<MapViewMode>();
-            runtime.ModeChanged += modes.Add;
+            runtime.SubscribeModeChanged(modes.Add);
 
             runtime.Start();
             runtime.SetViewMode(MapViewMode.TopDown);
@@ -166,7 +168,7 @@ namespace HexMap.Sample.Tests
                 LogType.Error,
                 "Map view runtime initialization failed: Map input dispatcher is required.");
 
-            Assert.That(runtime.Initialize((MapViewMode)99, invalidWiring), Is.False);
+            Assert.That(runtime.Initialize((MapViewMode)99, invalidWiring, m_GameplayHandler, m_TopDownHandler), Is.False);
             Assert.That(runtime.IsInitialized, Is.False);
             Assert.That(runtime.IsRunning, Is.False);
             Assert.That(() => runtime.Start(), Throws.TypeOf<InvalidOperationException>());
@@ -178,7 +180,7 @@ namespace HexMap.Sample.Tests
             CreateWiring();
             var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
             var stopCount = 0;
-            runtime.RuntimeStopped += () => stopCount++;
+            runtime.SubscribeRuntimeStopped(() => stopCount++);
             runtime.Start();
 
             runtime.Dispose();
@@ -193,7 +195,7 @@ namespace HexMap.Sample.Tests
         private MapViewRuntimeFacade InitializeSuccessfully(MapViewMode initialMode)
         {
             var runtime = new MapViewRuntimeFacade();
-            var initialized = runtime.Initialize(initialMode, m_Wiring);
+            var initialized = runtime.Initialize(initialMode, m_Wiring, m_GameplayHandler, m_TopDownHandler);
             Assert.That(initialized, Is.True);
             return runtime;
         }
@@ -208,6 +210,8 @@ namespace HexMap.Sample.Tests
             mapView.Build();
             mapCamera.HexMapView = mapView;
             m_Dispatcher = CreateObject("Map Input Dispatcher").AddComponent<MapInputDispatcher>();
+            m_GameplayHandler = new RecordingInputHandler();
+            m_TopDownHandler = new RecordingInputHandler();
             m_GameplayUiRoot = CreateObject("Gameplay UI");
             m_TopDownUiRoot = CreateObject("Top Down UI");
             m_Wiring = new MapViewModeWiring(
@@ -223,6 +227,24 @@ namespace HexMap.Sample.Tests
             var target = new GameObject(name);
             m_Objects.Add(target);
             return target;
+        }
+
+        private sealed class RecordingInputHandler : IMapInputHandler
+        {
+            public bool OnMapClicked(in MapClickContext context)
+            {
+                return true;
+            }
+
+            public bool OnMapDragged(Vector2 screenDelta)
+            {
+                return true;
+            }
+
+            public bool OnMapCameraDistanceChanged(in MapCameraDistanceContext context)
+            {
+                return true;
+            }
         }
     }
 }

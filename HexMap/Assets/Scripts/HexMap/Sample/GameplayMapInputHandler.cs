@@ -39,20 +39,6 @@ namespace HexMap.Sample
             set { m_Controller = value; }
         }
 
-        private void OnEnable()
-        {
-            RegisterIfPossible();
-        }
-
-        private void OnDisable()
-        {
-            // Unregistering is idempotent on the dispatcher, so this is safe even if OnEnable never ran.
-            if (m_Dispatcher != null)
-            {
-                m_Dispatcher.Unregister(SampleMapInputChannels.Gameplay, this);
-            }
-        }
-
         public bool OnMapClicked(in MapClickContext context)
         {
             if (!context.HasPlot)
@@ -82,19 +68,5 @@ namespace HexMap.Sample
             return false;
         }
 
-        private void RegisterIfPossible()
-        {
-            if (m_Dispatcher == null)
-            {
-                Debug.LogError("GameplayMapInputHandler has no MapInputDispatcher reference.", this);
-                return;
-            }
-
-            if (!m_Dispatcher.Register(SampleMapInputChannels.Gameplay, this))
-            {
-                // The dispatcher already logged why; nothing useful to add here.
-                return;
-            }
-        }
     }
 }

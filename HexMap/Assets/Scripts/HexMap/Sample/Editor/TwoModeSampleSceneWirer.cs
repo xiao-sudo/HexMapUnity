@@ -74,16 +74,20 @@ namespace HexMap.Sample.Editor
 
             WireBootstrapper(bootstrapper, mapCamera, dispatcher, changes);
 
+            var gameplayHandler = FindSingle<GameplayMapInputHandler>();
+            var topDownHandler = FindSingle<TopDownMapInputHandler>();
+            WireInputHandlers(bootstrapper, gameplayHandler, topDownHandler, changes, notes);
+
             WirePanel(
                 bootstrapper.GameplayUiRoot,
-                FindSingle<GameplayMapInputHandler>(),
+                gameplayHandler,
                 "Gameplay",
                 "gameplay",
                 changes,
                 notes);
             WirePanel(
                 bootstrapper.TopDownUiRoot,
-                FindSingle<TopDownMapInputHandler>(),
+                topDownHandler,
                 "Map view",
                 "top-down",
                 changes,
@@ -126,6 +130,31 @@ namespace HexMap.Sample.Editor
             bootstrapper.Dispatcher = dispatcher;
             EditorUtility.SetDirty(bootstrapper);
             changes.Add("wired SampleMapViewBootstrapper on '" + bootstrapper.name + "'");
+        }
+
+        private static void WireInputHandlers(
+            SampleMapViewBootstrapper bootstrapper,
+            GameplayMapInputHandler gameplayHandler,
+            TopDownMapInputHandler topDownHandler,
+            List<string> changes,
+            List<string> notes)
+        {
+            if (gameplayHandler == null || topDownHandler == null)
+            {
+                notes.Add("both GameplayMapInputHandler and TopDownMapInputHandler are required before the Map view runtime can start");
+                return;
+            }
+
+            if (bootstrapper.GameplayHandler == gameplayHandler && bootstrapper.TopDownHandler == topDownHandler)
+            {
+                return;
+            }
+
+            Undo.RecordObject(bootstrapper, ChangeLabel);
+            bootstrapper.GameplayHandler = gameplayHandler;
+            bootstrapper.TopDownHandler = topDownHandler;
+            EditorUtility.SetDirty(bootstrapper);
+            changes.Add("wired Map view primary input handlers on '" + bootstrapper.name + "'");
         }
 
         private static void WirePanel(

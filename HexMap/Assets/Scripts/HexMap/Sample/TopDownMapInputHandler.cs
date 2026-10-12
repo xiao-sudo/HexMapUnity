@@ -37,25 +37,6 @@ namespace HexMap.Sample
             set { m_CameraInputController = value; }
         }
 
-        private void OnEnable()
-        {
-            if (m_Dispatcher == null)
-            {
-                Debug.LogError("TopDownMapInputHandler has no MapInputDispatcher reference.", this);
-                return;
-            }
-
-            m_Dispatcher.Register(SampleMapInputChannels.TopDown, this);
-        }
-
-        private void OnDisable()
-        {
-            if (m_Dispatcher != null)
-            {
-                m_Dispatcher.Unregister(SampleMapInputChannels.TopDown, this);
-            }
-        }
-
         public bool OnMapClicked(in MapClickContext context)
         {
             PlotClicked?.Invoke(context.HasPlot ? context.PlotId : -1);

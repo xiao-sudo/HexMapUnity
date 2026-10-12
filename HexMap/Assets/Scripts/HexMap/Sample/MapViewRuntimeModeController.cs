@@ -5,25 +5,53 @@ using UnityEngine;
 namespace HexMap.Sample
 {
     /// <summary>Owns the implementation details of a configured Map view-mode lifetime.</summary>
-    internal sealed class MapViewRuntimeModeController : IMapViewModeHost
+    internal sealed class MapViewRuntimeModeController : IMapViewModeHost, System.IDisposable
     {
         private readonly Camera m_GameplayCamera;
         private readonly OrthographicMapCamera m_MapCamera;
         private readonly GameObject m_GameplayUiRoot;
         private readonly GameObject m_TopDownUiRoot;
         private readonly MapInputDispatcher m_Dispatcher;
+        private readonly IMapInputHandler m_GameplayHandler;
+        private readonly IMapInputHandler m_TopDownHandler;
 
         private IMapViewModeState m_GameplayState;
         private IMapViewModeState m_TopDownState;
         private IMapViewModeState m_CurrentState;
+        private bool m_AreHandlersRegistered;
 
-        public MapViewRuntimeModeController(in MapViewModeWiring wiring)
+        public event System.Action<MapViewInputObservation> InputProcessed;
+
+        public MapViewRuntimeModeController(
+            in MapViewModeWiring wiring,
+            IMapInputHandler gameplayHandler,
+            IMapInputHandler topDownHandler)
         {
             m_GameplayCamera = wiring.GameplayCamera;
             m_MapCamera = wiring.MapCamera;
             m_GameplayUiRoot = wiring.GameplayUiRoot;
             m_TopDownUiRoot = wiring.TopDownUiRoot;
             m_Dispatcher = wiring.Dispatcher;
+            m_GameplayHandler = gameplayHandler;
+            m_TopDownHandler = topDownHandler;
+        }
+
+        public bool TryRegisterHandlers()
+        {
+            if (!m_Dispatcher.Register(SampleMapInputChannels.Gameplay, m_GameplayHandler))
+            {
+                return false;
+            }
+
+            if (!m_Dispatcher.Register(SampleMapInputChannels.TopDown, m_TopDownHandler))
+            {
+                m_Dispatcher.Unregister(SampleMapInputChannels.Gameplay, m_GameplayHandler);
+                return false;
+            }
+
+            m_Dispatcher.InputProcessed += OnInputProcessed;
+            m_AreHandlersRegistered = true;
+            return true;
         }
 
         public void SetMode(MapViewMode target)
@@ -60,6 +88,20 @@ namespace HexMap.Sample
             ClearActiveInput();
         }
 
+        public void Dispose()
+        {
+            Stop();
+            if (!m_AreHandlersRegistered)
+            {
+                return;
+            }
+
+            m_Dispatcher.InputProcessed -= OnInputProcessed;
+            m_Dispatcher.Unregister(SampleMapInputChannels.TopDown, m_TopDownHandler);
+            m_Dispatcher.Unregister(SampleMapInputChannels.Gameplay, m_GameplayHandler);
+            m_AreHandlersRegistered = false;
+        }
+
         void IMapViewModeHost.EnterMode(Camera camera, int channel)
         {
             if (camera != null)
@@ -93,6 +135,25 @@ namespace HexMap.Sample
         {
             m_Dispatcher.SetActiveCamera(null);
             m_Dispatcher.SetActiveChannel(MapInputChannels.None);
+        }
+
+        private void OnInputProcessed(MapInputDispatchResult result)
+        {
+            MapViewMode mode;
+            if (result.Channel == SampleMapInputChannels.Gameplay)
+            {
+                mode = MapViewMode.Gameplay;
+            }
+            else if (result.Channel == SampleMapInputChannels.TopDown)
+            {
+                mode = MapViewMode.TopDown;
+            }
+            else
+            {
+                return;
+            }
+
+            InputProcessed?.Invoke(new MapViewInputObservation(mode, result));
         }
     }
 }

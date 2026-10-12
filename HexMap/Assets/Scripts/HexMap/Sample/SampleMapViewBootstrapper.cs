@@ -30,6 +30,12 @@ namespace HexMap.Sample
         private MapInputDispatcher m_Dispatcher;
 
         [SerializeField]
+        private GameplayMapInputHandler m_GameplayHandler;
+
+        [SerializeField]
+        private TopDownMapInputHandler m_TopDownHandler;
+
+        [SerializeField]
         private MapViewMode m_InitialMode = MapViewMode.Gameplay;
 
         private MapViewRuntimeFacade m_Runtime;
@@ -69,6 +75,18 @@ namespace HexMap.Sample
             set { m_Dispatcher = value; }
         }
 
+        public GameplayMapInputHandler GameplayHandler
+        {
+            get { return m_GameplayHandler; }
+            set { m_GameplayHandler = value; }
+        }
+
+        public TopDownMapInputHandler TopDownHandler
+        {
+            get { return m_TopDownHandler; }
+            set { m_TopDownHandler = value; }
+        }
+
         public MapViewMode InitialMode
         {
             get { return m_InitialMode; }
@@ -83,7 +101,9 @@ namespace HexMap.Sample
                 m_MapCamera,
                 m_GameplayUiRoot,
                 m_TopDownUiRoot,
-                m_Dispatcher)))
+                m_Dispatcher),
+                m_GameplayHandler,
+                m_TopDownHandler))
             {
                 return;
             }

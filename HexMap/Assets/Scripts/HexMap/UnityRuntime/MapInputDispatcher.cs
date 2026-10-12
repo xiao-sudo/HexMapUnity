@@ -33,6 +33,8 @@ namespace HexMap.UnityRuntime
         private MapClickContext m_LastContext;
         private bool m_HasLastContext;
 
+        public event System.Action<MapInputDispatchResult> InputProcessed;
+
         public GvgMapRuntimeController Controller
         {
             get { return m_Controller; }
@@ -213,11 +215,15 @@ namespace HexMap.UnityRuntime
                 ReportProblem(
                     "dead-handler-" + m_ActiveChannel,
                     "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
-                        + "; unregister it in OnDisable.");
+                        + "; the Map view runtime must release it during disposal.");
                 return false;
             }
 
-            return handler.OnMapClicked(m_LastContext);
+            var consumed = InvokeHandler(
+                () => handler.OnMapClicked(m_LastContext),
+                "click");
+            PublishInputProcessed(MapInputDispatchResult.Clicked(m_ActiveChannel, m_LastContext, consumed));
+            return consumed;
         }
 
         /// <summary>
@@ -243,11 +249,15 @@ namespace HexMap.UnityRuntime
                 ReportProblem(
                     "dead-handler-" + m_ActiveChannel,
                     "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
-                        + "; unregister it in OnDisable.");
+                        + "; the Map view runtime must release it during disposal.");
                 return false;
             }
 
-            return handler.OnMapDragged(screenDelta);
+            var consumed = InvokeHandler(
+                () => handler.OnMapDragged(screenDelta),
+                "drag");
+            PublishInputProcessed(MapInputDispatchResult.Dragged(m_ActiveChannel, screenDelta, consumed));
+            return consumed;
         }
 
         /// <summary>
@@ -274,11 +284,54 @@ namespace HexMap.UnityRuntime
                 ReportProblem(
                     "dead-handler-" + m_ActiveChannel,
                     "MapInputDispatcher still has a destroyed handler for channel " + m_ActiveChannel
-                        + "; unregister it in OnDisable.");
+                        + "; the Map view runtime must release it during disposal.");
                 return false;
             }
 
-            return handler.OnMapCameraDistanceChanged(context);
+            var handledContext = context;
+            var consumed = InvokeHandler(
+                () => handler.OnMapCameraDistanceChanged(handledContext),
+                "camera-distance change");
+            PublishInputProcessed(MapInputDispatchResult.CameraDistanceChanged(m_ActiveChannel, handledContext, consumed));
+            return consumed;
+        }
+
+        private bool InvokeHandler(System.Func<bool> invoke, string inputName)
+        {
+            try
+            {
+                return invoke();
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogException(
+                    new System.InvalidOperationException(
+                        "MapInputDispatcher handler threw while processing a " + inputName + ".",
+                        exception),
+                    this);
+                return false;
+            }
+        }
+
+        private void PublishInputProcessed(MapInputDispatchResult result)
+        {
+            var observers = InputProcessed;
+            if (observers == null)
+            {
+                return;
+            }
+
+            foreach (System.Action<MapInputDispatchResult> observer in observers.GetInvocationList())
+            {
+                try
+                {
+                    observer(result);
+                }
+                catch (System.Exception exception)
+                {
+                    Debug.LogException(exception, this);
+                }
+            }
         }
 
         private static bool IsAlive(IMapInputHandler handler)
