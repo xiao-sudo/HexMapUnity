@@ -10,7 +10,7 @@ namespace HexMap.Sample
     /// URP stack and does not participate in a mode transition.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class MapViewModeSwitcher : MonoBehaviour
+    public sealed class MapViewModeSwitcher : MonoBehaviour, IMapViewModeHost
     {
         [SerializeField]
         [Tooltip("The single base camera. It keeps the AudioListener and the MainCamera tag in both modes.")]
@@ -184,6 +184,11 @@ namespace HexMap.Sample
                 m_Dispatcher.SetActiveCamera(camera);
                 m_Dispatcher.SetActiveChannel(channel);
             }
+        }
+
+        void IMapViewModeHost.EnterMode(Camera camera, int channel)
+        {
+            EnterMode(camera, channel);
         }
 
     }

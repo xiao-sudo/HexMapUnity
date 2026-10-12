@@ -1,12 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Text.RegularExpressions;
 using HexMap.Core;
 using HexMap.UnityRuntime;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.TestTools;
 
 namespace HexMap.Sample.Tests
 {
@@ -15,11 +12,9 @@ namespace HexMap.Sample.Tests
     {
         private readonly List<GameObject> m_Objects = new List<GameObject>();
 
-        private GameObject m_FacadeObject;
-        private MapViewRuntimeFacade m_Facade;
-        private MapViewModeSwitcher m_Switcher;
         private Camera m_GameplayCamera;
         private MapInputDispatcher m_Dispatcher;
+        private MapViewModeWiring m_Wiring;
 
         [TearDown]
         public void TearDown()
@@ -36,138 +31,124 @@ namespace HexMap.Sample.Tests
         }
 
         [Test]
-        public void EnableDisableAndReenableOwnTheInitialModeAndInputRoute()
+        public void InitializeDoesNotEnterTheInitialModeUntilStart()
         {
-            CreateInactiveFacade(MapViewMode.Gameplay);
+            CreateWiring();
+            var runtime = new MapViewRuntimeFacade();
+
+            var result = runtime.Initialize(MapViewMode.Gameplay, m_Wiring);
+
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(runtime.IsInitialized, Is.True);
+            Assert.That(runtime.IsRunning, Is.False);
+            Assert.That(runtime.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
+            Assert.That(m_Dispatcher.ActiveCamera, Is.Null);
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(MapInputChannels.None));
+        }
+
+        [Test]
+        public void StartStopAndRepeatedStopOwnTheInitialRoute()
+        {
+            CreateWiring();
+            var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
             var modes = new List<MapViewMode>();
             var stopCount = 0;
-            m_Facade.ModeChanged += modes.Add;
-            m_Facade.RuntimeStopped += () => stopCount++;
+            runtime.ModeChanged += modes.Add;
+            runtime.RuntimeStopped += () => stopCount++;
 
-            m_FacadeObject.SetActive(true);
+            runtime.Start();
 
-            Assert.That(m_Facade.IsConfigurationValid, Is.True);
-            Assert.That(m_Facade.IsRunning, Is.True);
-            Assert.That(m_Facade.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
+            Assert.That(runtime.IsRunning, Is.True);
             Assert.That(modes, Is.EqualTo(new[] { MapViewMode.Gameplay }));
             Assert.That(m_Dispatcher.ActiveCamera, Is.EqualTo(m_GameplayCamera));
             Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapInputChannels.Gameplay));
 
-            m_FacadeObject.SetActive(false);
+            runtime.Stop();
+            runtime.Stop();
 
-            Assert.That(m_Facade.IsRunning, Is.False);
-            Assert.That(stopCount, Is.EqualTo(1));
-            Assert.That(m_Dispatcher.ActiveCamera, Is.Null);
-            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(MapInputChannels.None));
-
-            m_FacadeObject.SetActive(true);
-
-            Assert.That(m_Facade.IsRunning, Is.True);
-            Assert.That(modes, Is.EqualTo(new[] { MapViewMode.Gameplay, MapViewMode.Gameplay }));
-            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(SampleMapInputChannels.Gameplay));
-        }
-
-        [Test]
-        public void DestroyingARunningFacadeStopsExactlyOnce()
-        {
-            CreateInactiveFacade(MapViewMode.Gameplay);
-            var stopCount = 0;
-            m_Facade.RuntimeStopped += () => stopCount++;
-            m_FacadeObject.SetActive(true);
-
-            UnityEngine.Object.DestroyImmediate(m_FacadeObject);
-            m_Objects.Remove(m_FacadeObject);
-
+            Assert.That(runtime.IsRunning, Is.False);
             Assert.That(stopCount, Is.EqualTo(1));
             Assert.That(m_Dispatcher.ActiveCamera, Is.Null);
             Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(MapInputChannels.None));
         }
 
         [Test]
-        public void DestroyingAFacadeAfterDisableDoesNotPublishASecondStop()
+        public void SetViewModePublishesOnlyRealTransitionsAndRestartsAtInitialMode()
         {
-            CreateInactiveFacade(MapViewMode.Gameplay);
-            var stopCount = 0;
-            m_Facade.RuntimeStopped += () => stopCount++;
-            m_FacadeObject.SetActive(true);
-            m_FacadeObject.SetActive(false);
-
-            UnityEngine.Object.DestroyImmediate(m_FacadeObject);
-            m_Objects.Remove(m_FacadeObject);
-
-            Assert.That(stopCount, Is.EqualTo(1));
-            Assert.That(m_Dispatcher.ActiveCamera, Is.Null);
-            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(MapInputChannels.None));
-        }
-
-        [Test]
-        public void SetViewModeChangesModeOnceAndIgnoresTheAlreadyActiveMode()
-        {
-            CreateInactiveFacade(MapViewMode.Gameplay);
+            CreateWiring();
+            var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
             var modes = new List<MapViewMode>();
-            m_Facade.ModeChanged += modes.Add;
-            m_FacadeObject.SetActive(true);
+            runtime.ModeChanged += modes.Add;
 
-            m_Facade.SetViewMode(MapViewMode.TopDown);
-            var revisionAfterChange = m_Dispatcher.InputRouteRevision;
-            m_Facade.SetViewMode(MapViewMode.TopDown);
+            runtime.Start();
+            runtime.SetViewMode(MapViewMode.TopDown);
+            var revisionAfterTopDown = m_Dispatcher.InputRouteRevision;
+            runtime.SetViewMode(MapViewMode.TopDown);
+            runtime.Stop();
+            runtime.Start();
 
-            Assert.That(m_Facade.CurrentMode, Is.EqualTo(MapViewMode.TopDown));
-            Assert.That(modes, Is.EqualTo(new[] { MapViewMode.Gameplay, MapViewMode.TopDown }));
-            Assert.That(m_Dispatcher.InputRouteRevision, Is.EqualTo(revisionAfterChange));
+            Assert.That(modes, Is.EqualTo(new[]
+            {
+                MapViewMode.Gameplay,
+                MapViewMode.TopDown,
+                MapViewMode.Gameplay,
+            }));
+            Assert.That(m_Dispatcher.InputRouteRevision, Is.GreaterThan(revisionAfterTopDown));
+            Assert.That(runtime.CurrentMode, Is.EqualTo(MapViewMode.Gameplay));
         }
 
         [Test]
-        public void MissingRequiredConfigurationPreventsStartupAndExplainsTheFailure()
+        public void InvalidWiringReturnsDiagnosticsAndCannotStart()
         {
-            CreateInactiveFacade(MapViewMode.Gameplay);
-            SetPrivateField("m_Dispatcher", null);
-            LogAssert.Expect(LogType.Error, new Regex("MapViewRuntimeFacade configuration error: Map input dispatcher is required."));
+            CreateWiring();
+            var invalidWiring = new MapViewModeWiring(
+                m_Wiring.GameplayCamera,
+                m_Wiring.MapCamera,
+                m_Wiring.GameplayUiRoot,
+                m_Wiring.TopDownUiRoot,
+                null);
+            var runtime = new MapViewRuntimeFacade();
 
-            m_FacadeObject.SetActive(true);
+            var result = runtime.Initialize((MapViewMode)99, invalidWiring);
 
-            Assert.That(m_Facade.IsConfigurationValid, Is.False);
-            Assert.That(m_Facade.IsRunning, Is.False);
-            Assert.That(m_Facade.ValidationErrors.Count, Is.EqualTo(1));
-            Assert.That(m_Facade.ValidationErrors[0], Is.EqualTo("Map input dispatcher is required."));
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Errors, Is.EqualTo(new[]
+            {
+                "Initial mode must be Gameplay or TopDown.",
+                "Map input dispatcher is required.",
+            }));
+            Assert.That(runtime.IsInitialized, Is.False);
+            Assert.That(runtime.IsRunning, Is.False);
+            Assert.That(() => runtime.Start(), Throws.TypeOf<InvalidOperationException>());
         }
 
         [Test]
-        public void InvalidInitialModePreventsStartupAndPublishesDiagnostics()
+        public void DisposeStopsOnceAndRejectsFurtherUse()
         {
-            CreateInactiveFacade((MapViewMode)99);
-            LogAssert.Expect(LogType.Error, new Regex("MapViewRuntimeFacade configuration error: Initial mode must be Gameplay or TopDown."));
+            CreateWiring();
+            var runtime = InitializeSuccessfully(MapViewMode.Gameplay);
+            var stopCount = 0;
+            runtime.RuntimeStopped += () => stopCount++;
+            runtime.Start();
 
-            m_FacadeObject.SetActive(true);
+            runtime.Dispose();
+            runtime.Dispose();
 
-            Assert.That(m_Facade.IsConfigurationValid, Is.False);
-            Assert.That(m_Facade.IsRunning, Is.False);
-            Assert.That(m_Facade.ValidationErrors.Count, Is.EqualTo(1));
-            Assert.That(m_Facade.ValidationErrors[0], Is.EqualTo("Initial mode must be Gameplay or TopDown."));
+            Assert.That(stopCount, Is.EqualTo(1));
+            Assert.That(m_Dispatcher.ActiveCamera, Is.Null);
+            Assert.That(m_Dispatcher.ActiveChannel, Is.EqualTo(MapInputChannels.None));
+            Assert.That(() => runtime.Start(), Throws.TypeOf<ObjectDisposedException>());
         }
 
-        [Test]
-        public void AnAlreadyActiveSwitcherBecomesAnInspectableStartupFailure()
+        private MapViewRuntimeFacade InitializeSuccessfully(MapViewMode initialMode)
         {
-            CreateInactiveFacade(MapViewMode.Gameplay);
-            m_Switcher.Configure(new MapViewModeWiring(
-                m_GameplayCamera,
-                m_GameplayCamera.GetComponent<OrthographicMapCamera>(),
-                FindObject("Gameplay UI"),
-                FindObject("Top Down UI"),
-                m_Dispatcher));
-            m_Switcher.SetMode(MapViewMode.Gameplay);
-            LogAssert.Expect(LogType.Error, new Regex("MapViewRuntimeFacade configuration error: MapViewModeSwitcher cannot accept"));
-
-            m_FacadeObject.SetActive(true);
-
-            Assert.That(m_Facade.IsConfigurationValid, Is.False);
-            Assert.That(m_Facade.IsRunning, Is.False);
-            Assert.That(m_Facade.ValidationErrors.Count, Is.EqualTo(1));
-            Assert.That(m_Facade.ValidationErrors[0], Does.Contain("MapViewModeSwitcher cannot accept"));
+            var runtime = new MapViewRuntimeFacade();
+            var result = runtime.Initialize(initialMode, m_Wiring);
+            Assert.That(result.Succeeded, Is.True);
+            return runtime;
         }
 
-        private void CreateInactiveFacade(MapViewMode initialMode)
+        private void CreateWiring()
         {
             m_GameplayCamera = CreateObject("Gameplay Camera").AddComponent<Camera>();
             var mapCamera = m_GameplayCamera.gameObject.AddComponent<OrthographicMapCamera>();
@@ -179,18 +160,12 @@ namespace HexMap.Sample.Tests
             m_Dispatcher = CreateObject("Map Input Dispatcher").AddComponent<MapInputDispatcher>();
             var gameplayUiRoot = CreateObject("Gameplay UI");
             var topDownUiRoot = CreateObject("Top Down UI");
-            m_Switcher = CreateObject("Map View Mode Switcher").AddComponent<MapViewModeSwitcher>();
-
-            m_FacadeObject = CreateObject("Map View Runtime Facade");
-            m_FacadeObject.SetActive(false);
-            m_Facade = m_FacadeObject.AddComponent<MapViewRuntimeFacade>();
-            SetPrivateField("m_Switcher", m_Switcher);
-            SetPrivateField("m_GameplayCamera", m_GameplayCamera);
-            SetPrivateField("m_MapCamera", mapCamera);
-            SetPrivateField("m_GameplayUiRoot", gameplayUiRoot);
-            SetPrivateField("m_TopDownUiRoot", topDownUiRoot);
-            SetPrivateField("m_Dispatcher", m_Dispatcher);
-            SetPrivateField("m_InitialMode", initialMode);
+            m_Wiring = new MapViewModeWiring(
+                m_GameplayCamera,
+                mapCamera,
+                gameplayUiRoot,
+                topDownUiRoot,
+                m_Dispatcher);
         }
 
         private GameObject CreateObject(string name)
@@ -198,27 +173,6 @@ namespace HexMap.Sample.Tests
             var target = new GameObject(name);
             m_Objects.Add(target);
             return target;
-        }
-
-        private GameObject FindObject(string name)
-        {
-            for (var index = 0; index < m_Objects.Count; index++)
-            {
-                if (m_Objects[index].name == name)
-                {
-                    return m_Objects[index];
-                }
-            }
-
-            Assert.Fail("Expected test object '" + name + "' to exist.");
-            return null;
-        }
-
-        private void SetPrivateField(string name, object value)
-        {
-            var field = typeof(MapViewRuntimeFacade).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.That(field, Is.Not.Null, "Expected serialized field '" + name + "'.");
-            field.SetValue(m_Facade, value);
         }
     }
 }

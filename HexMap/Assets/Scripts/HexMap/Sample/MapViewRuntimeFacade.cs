@@ -1,135 +1,100 @@
 using System;
 using System.Collections.Generic;
-using HexMap.UnityRuntime;
-using UnityEngine;
+using System.Collections.ObjectModel;
 
 namespace HexMap.Sample
 {
     /// <summary>
-    /// The scene-level lifecycle owner for the two supported Map view modes.
-    /// It keeps scene wiring and the concrete switcher private so gameplay code only depends on this
-    /// runtime boundary.
+    /// Explicit runtime lifecycle for the supported Map view modes. A composition root supplies scene
+    /// dependencies through <see cref="Initialize"/> before the runtime can start.
     /// </summary>
-    [DisallowMultipleComponent]
-    public sealed class MapViewRuntimeFacade : MonoBehaviour
+    public sealed class MapViewRuntimeFacade : IDisposable
     {
-        [SerializeField]
-        private MapViewModeSwitcher m_Switcher;
-
-        [SerializeField]
-        private Camera m_GameplayCamera;
-
-        [SerializeField]
-        private OrthographicMapCamera m_MapCamera;
-
-        [SerializeField]
-        private GameObject m_GameplayUiRoot;
-
-        [SerializeField]
-        private GameObject m_TopDownUiRoot;
-
-        [SerializeField]
-        private MapInputDispatcher m_Dispatcher;
-
-        [SerializeField]
-        private MapViewMode m_InitialMode = MapViewMode.Gameplay;
-
-        private readonly List<string> m_ValidationErrors = new List<string>();
-
+        private MapViewRuntimeModeController m_ModeController;
         private MapViewMode m_CurrentMode;
-        private bool m_IsConfigured;
+        private MapViewMode m_InitialMode;
+        private bool m_IsInitialized;
         private bool m_IsRunning;
+        private bool m_IsDisposed;
 
-        /// <summary>Raised after a mode has become the active presentation and input route.</summary>
         public event Action<MapViewMode> ModeChanged;
 
-        /// <summary>Raised after the active mode has been stopped and its input route cleared.</summary>
         public event Action RuntimeStopped;
 
-        /// <summary>The most recently entered mode, or the configured initial mode before first start.</summary>
         public MapViewMode CurrentMode
         {
-            get { return m_CurrentMode; }
+            get
+            {
+                EnsureInitialized();
+                return m_CurrentMode;
+            }
         }
 
-        /// <summary>Whether the facade currently owns an active view mode and input route.</summary>
+        public bool IsInitialized
+        {
+            get { return m_IsInitialized; }
+        }
+
         public bool IsRunning
         {
             get { return m_IsRunning; }
         }
 
-        /// <summary>Whether required scene configuration was valid during <see cref="Awake"/>.</summary>
-        public bool IsConfigurationValid
+        /// <summary>
+        /// Validates and retains the runtime wiring without entering a view mode.
+        /// </summary>
+        public MapViewRuntimeInitializationResult Initialize(MapViewMode initialMode, in MapViewModeWiring wiring)
         {
-            get { return m_IsConfigured; }
+            if (m_IsDisposed)
+            {
+                return MapViewRuntimeInitializationResult.Failure("A disposed MapViewRuntimeFacade cannot be initialized.");
+            }
+
+            if (m_IsInitialized)
+            {
+                return MapViewRuntimeInitializationResult.Failure("MapViewRuntimeFacade can only be initialized once.");
+            }
+
+            var errors = Validate(initialMode, wiring);
+            if (errors.Count != 0)
+            {
+                return new MapViewRuntimeInitializationResult(errors);
+            }
+
+            m_ModeController = new MapViewRuntimeModeController(wiring);
+            m_InitialMode = initialMode;
+            m_CurrentMode = initialMode;
+            m_IsInitialized = true;
+            return MapViewRuntimeInitializationResult.Success();
         }
 
-        /// <summary>Read-only diagnostics for configuration that prevented startup.</summary>
-        public IReadOnlyList<string> ValidationErrors
+        public void Start()
         {
-            get { return m_ValidationErrors; }
-        }
+            EnsureNotDisposed();
+            EnsureInitialized();
+            if (m_IsRunning)
+            {
+                return;
+            }
 
-        private void Awake()
-        {
-            ValidateConfiguration();
+            m_ModeController.SetMode(m_InitialMode);
             m_CurrentMode = m_InitialMode;
-            if (!m_IsConfigured)
-            {
-                ReportValidationErrors();
-                enabled = false;
-                return;
-            }
-
-            try
-            {
-                m_Switcher.Configure(new MapViewModeWiring(
-                    m_GameplayCamera,
-                    m_MapCamera,
-                    m_GameplayUiRoot,
-                    m_TopDownUiRoot,
-                    m_Dispatcher));
-            }
-            catch (InvalidOperationException exception)
-            {
-                m_ValidationErrors.Add("MapViewModeSwitcher cannot accept this facade's scene wiring: " + exception.Message);
-                m_IsConfigured = false;
-                ReportValidationErrors();
-                enabled = false;
-            }
+            m_IsRunning = true;
+            ModeChanged?.Invoke(m_CurrentMode);
         }
 
-        private void OnEnable()
-        {
-            if (!m_IsConfigured)
-            {
-                return;
-            }
-
-            StartRuntime();
-        }
-
-        private void OnDisable()
-        {
-            StopRuntime();
-        }
-
-        private void OnDestroy()
-        {
-            StopRuntime();
-        }
-
-        /// <summary>Switches the currently running Map presentation to a declared mode.</summary>
         public void SetViewMode(MapViewMode target)
         {
-            if (!IsDeclaredMode(target))
-            {
-                throw new ArgumentOutOfRangeException(nameof(target), target, "The requested map view mode is not defined.");
-            }
-
+            EnsureNotDisposed();
+            EnsureInitialized();
             if (!m_IsRunning)
             {
                 throw new InvalidOperationException("MapViewRuntimeFacade must be running before its view mode can change.");
+            }
+
+            if (!IsDeclaredMode(target))
+            {
+                throw new ArgumentOutOfRangeException(nameof(target), target, "The requested map view mode is not defined.");
             }
 
             if (m_CurrentMode == target)
@@ -137,73 +102,109 @@ namespace HexMap.Sample
                 return;
             }
 
-            m_Switcher.SetMode(target);
+            m_ModeController.SetMode(target);
             m_CurrentMode = target;
             ModeChanged?.Invoke(m_CurrentMode);
         }
 
-        private void StartRuntime()
-        {
-            if (m_IsRunning)
-            {
-                return;
-            }
-
-            m_Switcher.SetMode(m_InitialMode);
-            m_CurrentMode = m_InitialMode;
-            m_IsRunning = true;
-            ModeChanged?.Invoke(m_CurrentMode);
-        }
-
-        private void StopRuntime()
+        public void Stop()
         {
             if (!m_IsRunning)
             {
                 return;
             }
 
-            m_Switcher.Stop();
+            m_ModeController.Stop();
             m_IsRunning = false;
             RuntimeStopped?.Invoke();
         }
 
-        private void ValidateConfiguration()
+        public void Dispose()
         {
-            m_ValidationErrors.Clear();
-            AddMissingReferenceError(m_Switcher, "MapViewModeSwitcher");
-            AddMissingReferenceError(m_GameplayCamera, "Gameplay camera");
-            AddMissingReferenceError(m_MapCamera, "Orthographic map camera");
-            AddMissingReferenceError(m_GameplayUiRoot, "Gameplay UI root");
-            AddMissingReferenceError(m_TopDownUiRoot, "Top-down UI root");
-            AddMissingReferenceError(m_Dispatcher, "Map input dispatcher");
-
-            if (!IsDeclaredMode(m_InitialMode))
+            if (m_IsDisposed)
             {
-                m_ValidationErrors.Add("Initial mode must be Gameplay or TopDown.");
+                return;
             }
 
-            m_IsConfigured = m_ValidationErrors.Count == 0;
+            Stop();
+            m_ModeController = null;
+            m_IsDisposed = true;
         }
 
-        private void AddMissingReferenceError(UnityEngine.Object value, string name)
+        private static List<string> Validate(MapViewMode initialMode, in MapViewModeWiring wiring)
+        {
+            var errors = new List<string>();
+            if (!IsDeclaredMode(initialMode))
+            {
+                errors.Add("Initial mode must be Gameplay or TopDown.");
+            }
+
+            AddMissingReferenceError(errors, wiring.GameplayCamera, "Gameplay camera");
+            AddMissingReferenceError(errors, wiring.MapCamera, "Orthographic map camera");
+            AddMissingReferenceError(errors, wiring.GameplayUiRoot, "Gameplay UI root");
+            AddMissingReferenceError(errors, wiring.TopDownUiRoot, "Top-down UI root");
+            AddMissingReferenceError(errors, wiring.Dispatcher, "Map input dispatcher");
+            return errors;
+        }
+
+        private static void AddMissingReferenceError(List<string> errors, UnityEngine.Object value, string name)
         {
             if (value == null)
             {
-                m_ValidationErrors.Add(name + " is required.");
-            }
-        }
-
-        private void ReportValidationErrors()
-        {
-            for (var index = 0; index < m_ValidationErrors.Count; index++)
-            {
-                Debug.LogError("MapViewRuntimeFacade configuration error: " + m_ValidationErrors[index], this);
+                errors.Add(name + " is required.");
             }
         }
 
         private static bool IsDeclaredMode(MapViewMode mode)
         {
             return mode == MapViewMode.Gameplay || mode == MapViewMode.TopDown;
+        }
+
+        private void EnsureInitialized()
+        {
+            if (!m_IsInitialized)
+            {
+                throw new InvalidOperationException("MapViewRuntimeFacade must be initialized before use.");
+            }
+        }
+
+        private void EnsureNotDisposed()
+        {
+            if (m_IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(MapViewRuntimeFacade));
+            }
+        }
+    }
+
+    /// <summary>The inspectable outcome of explicit Map view runtime initialization.</summary>
+    public sealed class MapViewRuntimeInitializationResult
+    {
+        private readonly ReadOnlyCollection<string> m_Errors;
+
+        internal MapViewRuntimeInitializationResult(IEnumerable<string> errors)
+        {
+            m_Errors = new List<string>(errors).AsReadOnly();
+        }
+
+        public bool Succeeded
+        {
+            get { return m_Errors.Count == 0; }
+        }
+
+        public IReadOnlyList<string> Errors
+        {
+            get { return m_Errors; }
+        }
+
+        internal static MapViewRuntimeInitializationResult Success()
+        {
+            return new MapViewRuntimeInitializationResult(new string[0]);
+        }
+
+        internal static MapViewRuntimeInitializationResult Failure(string error)
+        {
+            return new MapViewRuntimeInitializationResult(new[] { error });
         }
     }
 }

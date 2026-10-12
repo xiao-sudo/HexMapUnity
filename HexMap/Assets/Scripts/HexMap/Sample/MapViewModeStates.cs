@@ -3,11 +3,16 @@ using UnityEngine;
 
 namespace HexMap.Sample
 {
+    internal interface IMapViewModeHost
+    {
+        void EnterMode(Camera camera, int channel);
+    }
+
     internal interface IMapViewModeState
     {
         MapViewMode Mode { get; }
 
-        void Enter(MapViewModeSwitcher switcher);
+        void Enter(IMapViewModeHost host);
 
         void Exit();
     }
@@ -31,9 +36,9 @@ namespace HexMap.Sample
             get { return MapViewMode.Gameplay; }
         }
 
-        public void Enter(MapViewModeSwitcher switcher)
+        public void Enter(IMapViewModeHost host)
         {
-            switcher.EnterMode(m_Camera, m_Channel);
+            host.EnterMode(m_Camera, m_Channel);
             MapViewModeUi.SetRootActive(m_UiRoot, true);
         }
 
@@ -74,7 +79,7 @@ namespace HexMap.Sample
             get { return MapViewMode.TopDown; }
         }
 
-        public void Enter(MapViewModeSwitcher switcher)
+        public void Enter(IMapViewModeHost host)
         {
             m_RememberedCameraState = CameraViewState.Capture(m_Camera);
             m_HasRememberedCameraState = true;
@@ -99,7 +104,7 @@ namespace HexMap.Sample
                 }
             }
 
-            switcher.EnterMode(m_Camera, m_Channel);
+            host.EnterMode(m_Camera, m_Channel);
             MapViewModeUi.SetRootActive(m_UiRoot, true);
         }
 
