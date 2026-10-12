@@ -7,19 +7,32 @@ using HexMap.Gvg.Authoring;
 using UnityEditor;
 #endif
 using UnityEngine;
+using UnityEngine.UI;
 using Random = UnityEngine.Random;
 
 namespace HexMap.Sample
 {
     public class Facade : MonoBehaviour
     {
-        [SerializeField]
-        private GvgMapRuntimeController m_Controller;
-
 #if UNITY_EDITOR
         [SerializeField]
         private GvgMapAuthoringAsset m_Asset;
 #endif
+
+        [SerializeField]
+        private SampleMapViewRuntimeHost m_Host;
+
+        [SerializeField]
+        private MapClickPanel m_GameClickPanel;
+
+        [SerializeField]
+        private MapClickPanel m_TopDownClickPanel;
+
+        [SerializeField]
+        private Button m_ToMainBtn;
+
+        [SerializeField]
+        private Button m_ToTopBtn;
 
         [SerializeField]
         private int m_TargetPlotId;
@@ -44,18 +57,18 @@ namespace HexMap.Sample
 
         private static int[] s_CampIds = { 11000, 11001, 11002, 11003, 11004, 11005 };
 
-        private void Update()
-        {
-            if (Input.GetMouseButtonDown(0))
-            {
-                SelectPlotAtMousePosition();
-            }
-
-            if (Input.GetMouseButtonDown(1))
-            {
-                SetCampAtMousePosition();
-            }
-        }
+        // private void Update()
+        // {
+        //     if (Input.GetMouseButtonDown(0))
+        //     {
+        //         SelectPlotAtMousePosition();
+        //     }
+        //
+        //     if (Input.GetMouseButtonDown(1))
+        //     {
+        //         SetCampAtMousePosition();
+        //     }
+        // }
 
         private void Start()
         {
@@ -74,24 +87,64 @@ namespace HexMap.Sample
                 plots.Add(data);
             }
 #else
-            var mapView = m_Controller.HexMapView;
-            var plots = new List<GvgPlotRuntimeData>(mapView.Map.Count);
-            foreach (var hexCell in mapView.Map.Cells)
+            var cellIds = new List<int>();
+            if (!Runtime.TryCopyMapCellIds(cellIds))
+            {
+                Debug.LogError("Sample Facade could not read the configured map cells.", this);
+                return;
+            }
+
+            var plots = new List<GvgPlotRuntimeData>(cellIds.Count);
+            foreach (var cellId in cellIds)
             {
                 int factionId = 11000 + Random.Range(0, 6);
-                var data = new GvgPlotRuntimeData(hexCell.Id, new List<int>() { hexCell.Id }, PlotType.Normal, 0, 0, -1,
+                var data = new GvgPlotRuntimeData(cellId, new List<int>() { cellId }, PlotType.Normal, 0, 0, -1,
                     -1, factionId);
-
                 plots.Add(data);
             }
 #endif
             InitImpl(plots);
             RandomCamp(plots);
+
+            m_Host.GameplayHandler.PlotClicked += OnGamePlotClicked;
+            m_Host.TopDownHandler.PlotClicked += OnTopDownPlotClicked;
+
+            m_ToMainBtn.onClick.AddListener(() =>
+            {
+                m_Host.SetViewMode(MapViewMode.Gameplay);
+            });
+
+            m_ToTopBtn.onClick.AddListener(() =>
+            {
+                m_Host.SetViewMode(MapViewMode.TopDown);
+            });
+        }
+
+        private void OnGamePlotClicked(int plotId)
+        {
+            var hasPlot = plotId >= 0;
+
+            if (hasPlot)
+            {
+                m_Host.Runtime.SelectPlot(plotId);
+                m_GameClickPanel.OnPlotClicked(plotId);
+            }
+        }
+
+        private void OnTopDownPlotClicked(int plotId)
+        {
+            var hasPlot = plotId >= 0;
+
+            if (hasPlot)
+            {
+                m_Host.Runtime.SelectPlot(plotId);
+                m_TopDownClickPanel.OnPlotClicked(plotId);
+            }
         }
 
         private void InitImpl(List<GvgPlotRuntimeData> plots)
         {
-            m_Controller.TryInitialize(plots);
+            Runtime.TryInitializeMap(plots);
         }
 
         private void RandomCamp(List<GvgPlotRuntimeData> plots)
@@ -105,21 +158,16 @@ namespace HexMap.Sample
 
         public bool SetPlotCampId(int plotId, int campId)
         {
-            return m_Controller.TrySetPlotOwnerFactionId(plotId, campId);
+            return Runtime.TrySetPlotOwnerFactionId(plotId, campId);
         }
 
         private void SelectPlotAtMousePosition()
         {
-            if (m_Controller == null)
-            {
-                return;
-            }
-
-            var result = m_Controller.PickPlotAtScreenPosition(Input.mousePosition);
+            var result = Runtime.PickPlotAtScreenPosition(Input.mousePosition);
             if (result.HasPlot)
             {
-                m_Controller.Select(result.PlotId);
-                if (m_Controller.TryGetPlotWorldAnchor(result.PlotId, out var anchor))
+                Runtime.SelectPlot(result.PlotId);
+                if (Runtime.TryGetPlotWorldAnchor(result.PlotId, out var anchor))
                 {
                     if(null != m_Go)
                         m_Go.transform.position = anchor;
@@ -129,12 +177,7 @@ namespace HexMap.Sample
 
         private void SetCampAtMousePosition()
         {
-            if (m_Controller == null)
-            {
-                return;
-            }
-
-            var result = m_Controller.PickPlotAtScreenPosition(Input.mousePosition);
+            var result = Runtime.PickPlotAtScreenPosition(Input.mousePosition);
             if (result.HasPlot)
             {
                 SetPlotCampId(result.PlotId, m_CampId);
@@ -148,17 +191,17 @@ namespace HexMap.Sample
 
         public void SelectPlot()
         {
-            m_Controller.Select(m_SelectPlotId);
+            Runtime.SelectPlot(m_SelectPlotId);
         }
 
         public void DeselectAllPlot()
         {
-            m_Controller.DeselectAll();
+            Runtime.DeselectAllPlots();
         }
 
         public void SetSelectPosition()
         {
-            if (m_Controller.TryGetPlotWorldAnchor(m_SelectPlotId, out var center))
+            if (Runtime.TryGetPlotWorldAnchor(m_SelectPlotId, out var center))
             {
                 m_Go.transform.position = center;
             }
@@ -166,7 +209,7 @@ namespace HexMap.Sample
 
         public void FindPath()
         {
-            var r = m_Controller.TryFindPlotPath(m_FromPlotId, m_ToPlotId, m_Faction);
+            var r = Runtime.TryFindPlotPath(m_FromPlotId, m_ToPlotId, m_Faction);
 
             if (r.IsSuccess)
             {
@@ -175,6 +218,19 @@ namespace HexMap.Sample
             else
             {
                 Debug.LogError(r.Reason);
+            }
+        }
+
+        private MapViewRuntimeFacade Runtime
+        {
+            get
+            {
+                if (m_Host == null || m_Host.Runtime == null)
+                {
+                    throw new InvalidOperationException("Facade requires an initialized SampleMapViewRuntimeHost.");
+                }
+
+                return m_Host.Runtime;
             }
         }
     }

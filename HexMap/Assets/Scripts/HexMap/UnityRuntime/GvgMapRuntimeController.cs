@@ -51,6 +51,21 @@ namespace HexMap.UnityRuntime
         {
             return new PlotScreenPickResult(status, -1);
         }
+
+        /// <summary>Returns the stable result used before a map snapshot has been initialized.</summary>
+        public static PlotScreenPickResult MapNotInitialized()
+        {
+            return Failure(PlotScreenPickStatus.MapNotInitialized);
+        }
+    }
+
+    /// <summary>
+    /// Resolves a screen position to a map Plot. Input routing depends on this narrow interface rather
+    /// than on the Unity composition component that implements it.
+    /// </summary>
+    public interface IMapPlotPicker
+    {
+        PlotScreenPickResult PickPlotAtScreenPosition(Vector2 screenPosition, Camera cam = null);
     }
     [Serializable]
     public struct IdToColor
@@ -62,7 +77,7 @@ namespace HexMap.UnityRuntime
     /// <summary>
     /// Composes scene topology with external GVG Plot snapshots into the runtime map API.
     /// </summary>
-    public sealed class GvgMapRuntimeController : MonoBehaviour
+    public sealed class GvgMapRuntimeController : MonoBehaviour, IMapPlotPicker
     {
         [SerializeField]
         private HexMapView m_HexMapView;
@@ -119,7 +134,7 @@ namespace HexMap.UnityRuntime
         {
             if (!IsInitialized || m_HexMapView == null)
             {
-                return PlotScreenPickResult.Failure(PlotScreenPickStatus.MapNotInitialized);
+                return PlotScreenPickResult.MapNotInitialized();
             }
 
             var targetCamera = cam != null ? cam : Camera.main;
@@ -441,6 +456,11 @@ namespace HexMap.UnityRuntime
 
             if (m_PlotPathService == null)
             {
+                if (m_PathResult == null)
+                {
+                    m_PathResult = new PathResult(new List<int>());
+                }
+
                 m_PathResult.SetFailure(PathResultStatus.InvalidInput, PathFailureReason.MapNotInitialized);
                 return m_PathResult;
             }

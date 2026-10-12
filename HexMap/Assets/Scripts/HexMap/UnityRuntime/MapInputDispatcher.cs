@@ -25,6 +25,8 @@ namespace HexMap.UnityRuntime
         [SerializeField]
         private GvgMapRuntimeController m_Controller;
 
+        private IMapPlotPicker m_PlotPicker;
+
         private readonly Dictionary<int, IMapInputHandler> m_Handlers = new Dictionary<int, IMapInputHandler>();
         private readonly HashSet<string> m_ReportedProblems = new HashSet<string>();
 
@@ -36,7 +38,28 @@ namespace HexMap.UnityRuntime
         public GvgMapRuntimeController Controller
         {
             get { return m_Controller; }
-            set { m_Controller = value; }
+            set
+            {
+                m_Controller = value;
+                m_PlotPicker = value;
+            }
+        }
+
+        /// <summary>
+        /// Sets the picker used to resolve clicks. The runtime facade owns this wiring; the serialized
+        /// controller remains as a scene-migration fallback for existing scenes.
+        /// </summary>
+        public void SetPlotPicker(IMapPlotPicker picker)
+        {
+            m_PlotPicker = picker;
+        }
+
+        private void Awake()
+        {
+            if (m_PlotPicker == null)
+            {
+                m_PlotPicker = m_Controller;
+            }
         }
 
         /// <summary>
@@ -190,9 +213,10 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            if (m_Controller == null)
+            var picker = m_PlotPicker ?? m_Controller;
+            if (picker == null)
             {
-                ReportProblem("no-controller", "MapInputDispatcher has no GvgMapRuntimeController, so clicks cannot be resolved.");
+                ReportProblem("no-picker", "MapInputDispatcher has no map Plot picker, so clicks cannot be resolved.");
                 return false;
             }
 
@@ -202,7 +226,7 @@ namespace HexMap.UnityRuntime
                 return false;
             }
 
-            var pick = m_Controller.PickPlotAtScreenPosition(screenPosition, m_ActiveCamera);
+            var pick = picker.PickPlotAtScreenPosition(screenPosition, m_ActiveCamera);
             m_LastContext = pick.HasPlot
                 ? MapClickContext.Hit(screenPosition, pick.PlotId)
                 : MapClickContext.Miss(screenPosition, pick.Status);

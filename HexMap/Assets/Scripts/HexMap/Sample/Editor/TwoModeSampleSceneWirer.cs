@@ -52,6 +52,15 @@ namespace HexMap.Sample.Editor
                 return;
             }
 
+            var mapController = host.MapController != null
+                ? host.MapController
+                : FindSingle<GvgMapRuntimeController>();
+            if (mapController == null)
+            {
+                Debug.LogError("Wire Two-Mode Scene: the open scene has no GvgMapRuntimeController.");
+                return;
+            }
+
             var mapCamera = host.MapCamera != null ? host.MapCamera : FindSingle<OrthographicMapCamera>();
             var presenter = FindSingle<SampleMapViewModeUiPresenter>();
             if (presenter == null)
@@ -68,7 +77,7 @@ namespace HexMap.Sample.Editor
                 notes.Add("no OrthographicMapCamera in the scene, so TopDown camera input cannot be consumed");
             }
 
-            WireHost(host, mapCamera, dispatcher, changes);
+            WireHost(host, mapCamera, dispatcher, mapController, changes);
 
             var gameplayHandler = FindSingle<GameplayMapInputHandler>();
             var topDownHandler = FindSingle<TopDownMapInputHandler>();
@@ -113,10 +122,12 @@ namespace HexMap.Sample.Editor
             SampleMapViewRuntimeHost host,
             OrthographicMapCamera mapCamera,
             MapInputDispatcher dispatcher,
+            GvgMapRuntimeController mapController,
             List<string> changes)
         {
             if (host.MapCamera == mapCamera
-                && host.Dispatcher == dispatcher)
+                && host.Dispatcher == dispatcher
+                && host.MapController == mapController)
             {
                 return;
             }
@@ -126,6 +137,7 @@ namespace HexMap.Sample.Editor
                 host.GameplayCamera,
                 mapCamera,
                 dispatcher,
+                mapController,
                 host.GameplayHandler,
                 host.TopDownHandler,
                 host.InitialMode,
@@ -157,6 +169,7 @@ namespace HexMap.Sample.Editor
                 host.GameplayCamera,
                 host.MapCamera,
                 host.Dispatcher,
+                host.MapController,
                 gameplayHandler,
                 topDownHandler,
                 host.InitialMode,

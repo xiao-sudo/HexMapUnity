@@ -624,7 +624,7 @@ namespace HexMap.UnityRuntime.Tests
 
         private static string NoControllerMessage()
         {
-            return "MapInputDispatcher has no GvgMapRuntimeController, so clicks cannot be resolved.";
+            return "MapInputDispatcher has no map Plot picker, so clicks cannot be resolved.";
         }
 
         private static string DuplicateHandlerMessage(int channel)

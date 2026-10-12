@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using HexMap.Gvg;
+using HexMap.Runtime;
 using HexMap.UnityRuntime;
+using UnityEngine;
 
 namespace HexMap.Sample
 {
@@ -11,6 +15,8 @@ namespace HexMap.Sample
     {
         private MapViewRuntimeModeController m_ModeController;
         private EasyTouchMapInputSource m_InputSource;
+        private MapInputDispatcher m_Dispatcher;
+        private GvgMapRuntimeController m_MapController;
         private MapViewMode m_CurrentMode;
         private MapViewMode m_InitialMode;
         private bool m_IsInitialized;
@@ -18,6 +24,7 @@ namespace HexMap.Sample
         private bool m_IsDisposed;
         private readonly RuntimeObserverSet<MapViewMode> m_ModeChangedObservers = new RuntimeObserverSet<MapViewMode>();
         private readonly RuntimeObserverSet<bool> m_RuntimeStoppedObservers = new RuntimeObserverSet<bool>();
+        private readonly PathResult m_MapNotInitializedPathResult = new PathResult(new List<int>());
 
         public MapViewMode CurrentMode
         {
@@ -36,6 +43,12 @@ namespace HexMap.Sample
         public bool IsRunning
         {
             get { return m_IsRunning; }
+        }
+
+        /// <summary>Whether the scene-backed GVG map has accepted a Plot snapshot.</summary>
+        public bool IsMapInitialized
+        {
+            get { return m_MapController != null && m_MapController.IsInitialized; }
         }
 
         /// <summary>
@@ -74,6 +87,13 @@ namespace HexMap.Sample
 
             m_ModeController = modeController;
             m_InputSource = new EasyTouchMapInputSource(wiring.Dispatcher, pinchDeadZoneNormalized);
+            m_Dispatcher = wiring.Dispatcher;
+            m_MapController = wiring.MapController;
+            if (m_MapController != null)
+            {
+                m_Dispatcher.SetPlotPicker(m_MapController);
+            }
+
             m_InitialMode = initialMode;
             m_CurrentMode = initialMode;
             m_IsInitialized = true;
@@ -133,6 +153,110 @@ namespace HexMap.Sample
             m_RuntimeStoppedObservers.Publish(true);
         }
 
+        /// <summary>
+        /// Applies a GVG Plot snapshot to the configured map. The facade owns the externally visible
+        /// map lifetime; callers never need to address the scene controller directly.
+        /// </summary>
+        public bool TryInitializeMap(IReadOnlyList<GvgPlotRuntimeData> plots)
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            return m_MapController != null && m_MapController.TryInitialize(plots);
+        }
+
+        public PlotScreenPickResult PickPlotAtScreenPosition(Vector2 screenPosition)
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            if (m_MapController == null)
+            {
+                return PlotScreenPickResult.MapNotInitialized();
+            }
+
+            return m_MapController.PickPlotAtScreenPosition(screenPosition, m_Dispatcher.ActiveCamera);
+        }
+
+        public bool SelectPlot(int plotId)
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            return m_MapController != null && m_MapController.Select(plotId);
+        }
+
+        public bool DeselectPlot(int plotId)
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            return m_MapController != null && m_MapController.Deselect(plotId);
+        }
+
+        public bool DeselectAllPlots()
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            return m_MapController != null && m_MapController.DeselectAll();
+        }
+
+        public bool TrySetPlotOwnerFactionId(int plotId, int factionId)
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            return m_MapController != null && m_MapController.TrySetPlotOwnerFactionId(plotId, factionId);
+        }
+
+        public bool TryGetPlotWorldAnchor(int plotId, out Vector3 worldAnchor)
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            if (m_MapController == null)
+            {
+                worldAnchor = Vector3.zero;
+                return false;
+            }
+
+            return m_MapController.TryGetPlotWorldAnchor(plotId, out worldAnchor);
+        }
+
+        public PathResult TryFindPlotPath(int startPlotId, int targetPlotId, int movingFactionId)
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            if (m_MapController != null)
+            {
+                return m_MapController.TryFindPlotPath(startPlotId, targetPlotId, movingFactionId);
+            }
+
+            m_MapNotInitializedPathResult.SetFailure(PathResultStatus.InvalidInput, PathFailureReason.MapNotInitialized);
+            return m_MapNotInitializedPathResult;
+        }
+
+        /// <summary>
+        /// Copies the scene map's cell IDs for callers that need to construct a one-cell-per-Plot sample
+        /// snapshot without exposing the scene controller.
+        /// </summary>
+        public bool TryCopyMapCellIds(List<int> cellIds)
+        {
+            EnsureNotDisposed();
+            EnsureInitialized();
+            if (cellIds == null)
+            {
+                throw new ArgumentNullException(nameof(cellIds));
+            }
+
+            if (m_MapController == null || m_MapController.HexMapView == null || m_MapController.HexMapView.Map == null)
+            {
+                return false;
+            }
+
+            cellIds.Clear();
+            foreach (var cell in m_MapController.HexMapView.Map.Cells)
+            {
+                cellIds.Add(cell.Id);
+            }
+
+            return true;
+        }
+
         public void Dispose()
         {
             if (m_IsDisposed)
@@ -152,6 +276,14 @@ namespace HexMap.Sample
                 m_ModeController.Dispose();
                 m_ModeController = null;
             }
+
+            if (m_Dispatcher != null)
+            {
+                m_Dispatcher.SetPlotPicker(null);
+                m_Dispatcher = null;
+            }
+
+            m_MapController = null;
 
             m_ModeChangedObservers.Clear();
             m_RuntimeStoppedObservers.Clear();

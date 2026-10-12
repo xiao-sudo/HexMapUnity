@@ -15,20 +15,12 @@ namespace HexMap.Sample
     /// </summary>
     public sealed class GameplayMapInputHandler : MonoBehaviour, IMapInputHandler
     {
-        [SerializeField]
-        private GvgMapRuntimeController m_Controller;
-
         /// <summary>
         /// Raised for every delivered click. PlotId is -1 when the click hit nothing, which is how the
         /// UI learns to close.
         /// </summary>
         public event Action<int> PlotClicked;
 
-        public GvgMapRuntimeController Controller
-        {
-            get { return m_Controller; }
-            set { m_Controller = value; }
-        }
 
         public bool OnMapClicked(in MapClickContext context)
         {
@@ -37,12 +29,6 @@ namespace HexMap.Sample
                 // A click on empty space is the dismiss gesture; it is still handed on so the UI can close.
                 PlotClicked?.Invoke(-1);
                 return true;
-            }
-
-            // Gameplay is where selection lives; the preview mode deliberately does not touch it.
-            if (m_Controller != null)
-            {
-                m_Controller.Select(context.PlotId);
             }
 
             PlotClicked?.Invoke(context.PlotId);

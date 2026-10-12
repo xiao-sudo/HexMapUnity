@@ -13,6 +13,7 @@ namespace HexMap.Sample
         [SerializeField] private Camera m_GameplayCamera;
         [SerializeField] private OrthographicMapCamera m_MapCamera;
         [SerializeField] private MapInputDispatcher m_Dispatcher;
+        [SerializeField] private GvgMapRuntimeController m_MapController;
         [SerializeField] private GameplayMapInputHandler m_GameplayHandler;
         [SerializeField] private TopDownMapInputHandler m_TopDownHandler;
         [SerializeField] private MapViewMode m_InitialMode = MapViewMode.Gameplay;
@@ -25,6 +26,7 @@ namespace HexMap.Sample
         public Camera GameplayCamera { get { return m_GameplayCamera; } }
         public OrthographicMapCamera MapCamera { get { return m_MapCamera; } }
         public MapInputDispatcher Dispatcher { get { return m_Dispatcher; } }
+        public GvgMapRuntimeController MapController { get { return m_MapController; } }
         public GameplayMapInputHandler GameplayHandler { get { return m_GameplayHandler; } }
         public TopDownMapInputHandler TopDownHandler { get { return m_TopDownHandler; } }
         public MapViewMode InitialMode { get { return m_InitialMode; } }
@@ -35,6 +37,7 @@ namespace HexMap.Sample
             Camera gameplayCamera,
             OrthographicMapCamera mapCamera,
             MapInputDispatcher dispatcher,
+            GvgMapRuntimeController mapController,
             GameplayMapInputHandler gameplayHandler,
             TopDownMapInputHandler topDownHandler,
             MapViewMode initialMode,
@@ -43,6 +46,7 @@ namespace HexMap.Sample
             m_GameplayCamera = gameplayCamera;
             m_MapCamera = mapCamera;
             m_Dispatcher = dispatcher;
+            m_MapController = mapController;
             m_GameplayHandler = gameplayHandler;
             m_TopDownHandler = topDownHandler;
             m_InitialMode = initialMode;
@@ -63,21 +67,22 @@ namespace HexMap.Sample
         private void Awake()
         {
             m_Runtime = new MapViewRuntimeFacade();
+
             m_IsInitialized = m_Runtime.Initialize(
                 m_InitialMode,
                 new MapViewModeWiring(
                     m_GameplayCamera,
                     m_MapCamera,
-                    m_Dispatcher),
+                    m_Dispatcher,
+                    m_MapController),
                 m_GameplayHandler,
                 m_TopDownHandler,
                 m_PinchDeadZoneNormalized);
+
             if (!m_IsInitialized)
             {
                 enabled = false;
-                return;
             }
-
         }
 
         private void OnEnable()
