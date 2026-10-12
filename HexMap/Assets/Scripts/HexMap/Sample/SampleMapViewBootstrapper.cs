@@ -38,6 +38,10 @@ namespace HexMap.Sample
         [SerializeField]
         private MapViewMode m_InitialMode = MapViewMode.Gameplay;
 
+        [SerializeField]
+        [Tooltip("Pinch 起始标记之后，小于此归一化值的距离变化会被忽略。")]
+        private float m_PinchDeadZoneNormalized = 0.003f;
+
         private MapViewRuntimeFacade m_Runtime;
 
         public MapViewRuntimeFacade Runtime
@@ -103,7 +107,8 @@ namespace HexMap.Sample
                 m_TopDownUiRoot,
                 m_Dispatcher),
                 m_GameplayHandler,
-                m_TopDownHandler))
+                m_TopDownHandler,
+                m_PinchDeadZoneNormalized))
             {
                 return;
             }
@@ -120,6 +125,16 @@ namespace HexMap.Sample
 
             m_Runtime.Start();
         }
+
+#if UNITY_EDITOR
+        private void Update()
+        {
+            if (enabled && m_Runtime != null)
+            {
+                m_Runtime.Tick();
+            }
+        }
+#endif
 
         private void OnDestroy()
         {

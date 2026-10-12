@@ -12,7 +12,8 @@ namespace HexMap.Sample.Editor
 {
     /// <summary>
     /// Fills in the parts of a two-mode sample scene that no runtime component can create for itself: the
-    /// one panel per mode, the map gestures, and the references that tie them together.
+    /// one panel per mode and the references that tie them together. Map gestures are created privately by
+    /// <see cref="MapViewRuntimeFacade"/> rather than attached to a scene object.
     /// <para>
     /// It works on whatever scene is open and finds its targets by component rather than by name, so it can
     /// be run again after the scene changes: anything already there is reused, and it reports what it
@@ -52,17 +53,6 @@ namespace HexMap.Sample.Editor
             }
 
             var mapCamera = bootstrapper.MapCamera != null ? bootstrapper.MapCamera : FindSingle<OrthographicMapCamera>();
-
-            // The only device-input entry point: it translates EasyTouch tap and swipe events into the
-            // dispatcher vocabulary without knowing a mode or camera implementation.
-            var input = EnsureComponent<EasyTouchMapInputAdapter>(dispatcher.gameObject, changes);
-            if (input.Dispatcher != dispatcher)
-            {
-                Undo.RecordObject(input, ChangeLabel);
-                input.Dispatcher = dispatcher;
-                EditorUtility.SetDirty(input);
-                changes.Add("pointed EasyTouchMapInputAdapter at '" + dispatcher.name + "'");
-            }
 
             // Camera input is routed by the dispatcher and consumed only by the active TopDown handler.
             // The scene still needs a camera for mode wiring, but no longer needs direct Unity Input

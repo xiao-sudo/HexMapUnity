@@ -10,6 +10,7 @@ namespace HexMap.Sample
     public sealed class MapViewRuntimeFacade : IDisposable
     {
         private MapViewRuntimeModeController m_ModeController;
+        private EasyTouchMapInputSource m_InputSource;
         private MapViewMode m_CurrentMode;
         private MapViewMode m_InitialMode;
         private bool m_IsInitialized;
@@ -44,7 +45,8 @@ namespace HexMap.Sample
             MapViewMode initialMode,
             in MapViewModeWiring wiring,
             IMapInputHandler gameplayHandler,
-            IMapInputHandler topDownHandler)
+            IMapInputHandler topDownHandler,
+            float pinchDeadZoneNormalized = 0.003f)
         {
             if (m_IsDisposed)
             {
@@ -71,6 +73,7 @@ namespace HexMap.Sample
             }
 
             m_ModeController = modeController;
+            m_InputSource = new EasyTouchMapInputSource(wiring.Dispatcher, pinchDeadZoneNormalized);
             m_InitialMode = initialMode;
             m_CurrentMode = initialMode;
             m_IsInitialized = true;
@@ -87,6 +90,7 @@ namespace HexMap.Sample
             }
 
             m_ModeController.SetMode(m_InitialMode);
+            m_InputSource.Start();
             m_CurrentMode = m_InitialMode;
             m_IsRunning = true;
             m_ModeChangedObservers.Publish(m_CurrentMode);
@@ -123,6 +127,7 @@ namespace HexMap.Sample
                 return;
             }
 
+            m_InputSource.Stop();
             m_ModeController.Stop();
             m_IsRunning = false;
             m_RuntimeStoppedObservers.Publish(true);
@@ -136,6 +141,12 @@ namespace HexMap.Sample
             }
 
             Stop();
+            if (m_InputSource != null)
+            {
+                m_InputSource.Dispose();
+                m_InputSource = null;
+            }
+
             if (m_ModeController != null)
             {
                 m_ModeController.Dispose();
@@ -146,6 +157,20 @@ namespace HexMap.Sample
             m_RuntimeStoppedObservers.Clear();
             m_IsDisposed = true;
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Drives editor-only input polling for the private physical input source.
+        /// </summary>
+        internal void Tick()
+        {
+            EnsureNotDisposed();
+            if (m_IsRunning)
+            {
+                m_InputSource.Tick();
+            }
+        }
+#endif
 
         public IDisposable SubscribeModeChanged(Action<MapViewMode> observer)
         {
